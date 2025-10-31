@@ -4,35 +4,22 @@ import { emailsTable } from './emails';
 import { organizationTable } from './organization';
 import { peopleTable } from './people';
 import { peopleEmailsTable } from './people-emails';
+import { taskBoardTable } from '../tasks-schemas/task-board';
 
 // Organization relations
-export const organizationRelations = relations(organizationTable, ({ many }) => ({
+export const organizationRelations = relations(organizationTable, ({ one, many }) => ({
   companies: many(companiesTable),
   emails: many(emailsTable),
   people: many(peopleTable),
+  taskBoard: one(taskBoardTable, {
+    fields: [organizationTable.id],
+    references: [taskBoardTable.organizationId],
+  }),
 }));
 
-// Companies relations
-export const companiesRelations = relations(companiesTable, ({ one, many }) => ({
-  organization: one(organizationTable, {
-    fields: [companiesTable.organizationId],
-    references: [organizationTable.id],
-  }),
-  people: many(peopleTable),
-}));
+// Companies relations - moved to companies.tsx for many-to-many setup
 
-// People relations
-export const peopleRelations = relations(peopleTable, ({ one, many }) => ({
-  company: one(companiesTable, {
-    fields: [peopleTable.companyId],
-    references: [companiesTable.id],
-  }),
-  organization: one(organizationTable, {
-    fields: [peopleTable.organizationId],
-    references: [organizationTable.id],
-  }),
-  peopleEmails: many(peopleEmailsTable),
-}));
+// People relations - moved to people.tsx for many-to-many setup
 
 // Emails relations
 export const emailsRelations = relations(emailsTable, ({ one, many }) => ({

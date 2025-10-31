@@ -39,7 +39,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Links />
       </head>
       <body className="min-h-screen h-screen flex flex-col">
-        <div className="flex-1 flex flex-col">
+        <div className="flex-1 flex flex-col max-h-screen overflow-hidden">
           <ToastProvider>
             <Toaster />
             <NuqsAdapter>{children}</NuqsAdapter>

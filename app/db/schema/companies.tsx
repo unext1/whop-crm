@@ -1,6 +1,7 @@
-import { sql } from 'drizzle-orm';
+import { relations, sql } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { organizationTable } from './organization';
+import { companiesPeopleTable } from './companies-poeple';
 
 export const companiesTable = sqliteTable('companies', {
   id: text('id').primaryKey().default(sql`(uuid4())`).notNull(),
@@ -20,5 +21,13 @@ export const companiesTable = sqliteTable('companies', {
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const companiesRelations = relations(companiesTable, ({ one, many }) => ({
+  organization: one(organizationTable, {
+    fields: [companiesTable.organizationId],
+    references: [organizationTable.id],
+  }),
+  companiesPeople: many(companiesPeopleTable),
+}));
 
 export type CompanyType = typeof companiesTable.$inferSelect;

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import {
   Building2,
   Calendar,
@@ -18,13 +18,15 @@ import {
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { useLoaderData, useNavigate } from 'react-router';
+import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { db } from '~/db';
-import { companiesTable } from '~/db/schema';
+import { companiesPeopleTable, companiesTable, peopleTable } from '~/db/schema';
+import { putToast } from '~/services/cookie.server';
 import { verifyWhopToken, whopSdk } from '~/services/whop.server';
 import type { Route } from './+types';
 
@@ -33,16 +35,97 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { userId } = await verifyWhopToken(request);
   const { access_level } = await whopSdk.users.checkAccess(organizationId, { id: userId });
 
-  // Fetch the specific company with organization isolation
+  // Fetch the specific company with organization isolation and people relationships
   const company = await db.query.companiesTable.findFirst({
     where: and(eq(companiesTable.id, companyId), eq(companiesTable.organizationId, organizationId)),
+    with: {
+      companiesPeople: {
+        with: {
+          person: true,
+        },
+      },
+    },
   });
 
   if (!company) {
     throw new Response('Company not found', { status: 404 });
   }
 
-  return { userId, access_level, organizationId, company };
+  // Fetch all people in the organization for the combobox
+  const allPeople = await db.query.peopleTable.findMany({
+    where: eq(peopleTable.organizationId, organizationId),
+    orderBy: peopleTable.name,
+  });
+
+  return { userId, access_level, organizationId, company, allPeople };
+};
+
+export const action = async ({ params, request }: Route.ActionArgs) => {
+  const { companyId: organizationId, id: companyId } = params;
+  const { userId } = await verifyWhopToken(request);
+  await whopSdk.users.checkAccess(organizationId, { id: userId });
+
+  const formData = await request.formData();
+  const intent = formData.get('intent');
+
+  if (intent === 'update-people') {
+    const peopleIds = formData.getAll('peopleIds') as string[];
+
+    // Get current people relationships
+    const currentRelationships = await db.query.companiesPeopleTable.findMany({
+      where: eq(companiesPeopleTable.companyId, companyId),
+    });
+
+    const currentPeopleIds = currentRelationships.map((r) => r.personId);
+    const newPeopleIds = peopleIds.filter(Boolean);
+
+    // Find people to add (in new but not in current)
+    const toAdd = newPeopleIds.filter((id) => !currentPeopleIds.includes(id));
+
+    // Find people to remove (in current but not in new)
+    const toRemove = currentPeopleIds.filter((id) => !newPeopleIds.includes(id));
+
+    try {
+      // Add new relationships
+      if (toAdd.length > 0) {
+        await db.insert(companiesPeopleTable).values(
+          toAdd.map((personId) => ({
+            companyId,
+            personId,
+          })),
+        );
+      }
+
+      // Remove old relationships
+      if (toRemove.length > 0) {
+        await db
+          .delete(companiesPeopleTable)
+          .where(
+            and(
+              eq(companiesPeopleTable.companyId, companyId),
+              or(...toRemove.map((personId) => eq(companiesPeopleTable.personId, personId))),
+            ),
+          );
+      }
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'People updated successfully',
+        variant: 'default',
+      });
+
+      return redirect(`/dashboard/${organizationId}/company/${companyId}`, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to update people',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to update people' }, { headers, status: 500 });
+    }
+  }
+
+  return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
 const tabs = [
@@ -59,10 +142,30 @@ function cn(...classes: (string | boolean | undefined)[]) {
 }
 
 const CompanyPage = () => {
-  const { company } = useLoaderData<typeof loader>();
+  const { company, allPeople } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState('timeline');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
+  const submit = useSubmit();
+
+  // Get currently selected people IDs
+  const selectedPeopleIds = company.companiesPeople.map((cp) => cp.person.id);
+
+  // Prepare options for the combobox
+  const peopleOptions = allPeople.map((person) => ({
+    id: person.id,
+    name: person.name,
+    email: undefined, // You can add email if you fetch it
+  }));
+
+  const handlePeopleChange = (ids: string[]) => {
+    const formData = new FormData();
+    formData.append('intent', 'update-people');
+    ids.forEach((id) => {
+      formData.append('peopleIds', id);
+    });
+    submit(formData, { method: 'post' });
+  };
 
   // Company sidebar content
   const CompanySidebar = () => (
@@ -154,6 +257,23 @@ const CompanyPage = () => {
                 </div>
               )}
             </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-medium text-muted-foreground">People</h3>
+            </div>
+            <ComboboxMultiple
+              options={peopleOptions}
+              selectedIds={selectedPeopleIds}
+              onSelectionChange={handlePeopleChange}
+              placeholder="Select people..."
+              searchPlaceholder="Search people..."
+              emptyText="No people found."
+              className="w-full"
+            />
           </div>
 
           <Separator />

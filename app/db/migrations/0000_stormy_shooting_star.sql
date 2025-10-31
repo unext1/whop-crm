@@ -1,3 +1,10 @@
+CREATE TABLE `companies_people` (
+	`company_id` text NOT NULL,
+	`person_id` text NOT NULL,
+	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
 CREATE TABLE `companies` (
 	`id` text PRIMARY KEY DEFAULT (uuid4()) NOT NULL,
 	`name` text NOT NULL,
@@ -26,42 +33,6 @@ CREATE TABLE `emails` (
 	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
-CREATE TABLE `organizations` (
-	`id` text PRIMARY KEY NOT NULL,
-	`name` text,
-	`owner_id` text,
-	`plan` text DEFAULT 'free',
-	`created_at` text DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP
-);
---> statement-breakpoint
-CREATE TABLE `people` (
-	`id` text PRIMARY KEY DEFAULT (uuid4()) NOT NULL,
-	`name` text NOT NULL,
-	`description` text,
-	`job_title` text,
-	`phone` text,
-	`linkedin` text,
-	`twitter` text,
-	`website` text,
-	`address` text,
-	`notes` text,
-	`company_id` text NOT NULL,
-	`organization_id` text NOT NULL,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (`company_id`) REFERENCES `companies`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE no action
-);
---> statement-breakpoint
-CREATE TABLE `people_emails` (
-	`person_id` text NOT NULL,
-	`email_id` text NOT NULL,
-	PRIMARY KEY(`person_id`, `email_id`),
-	FOREIGN KEY (`person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade,
-	FOREIGN KEY (`email_id`) REFERENCES `emails`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
 CREATE TABLE `user` (
 	`id` text PRIMARY KEY NOT NULL,
 	`whop_user_id` text NOT NULL,
@@ -70,15 +41,6 @@ CREATE TABLE `user` (
 	`last_name` text,
 	`username` text,
 	`profile_picture_url` text,
-	`organization_id` text,
-	`created_at` text DEFAULT CURRENT_TIMESTAMP,
-	`updated_at` text DEFAULT CURRENT_TIMESTAMP,
-	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE cascade
-);
---> statement-breakpoint
-CREATE TABLE `organization_invites` (
-	`id` text PRIMARY KEY NOT NULL,
-	`authorized_whop_user_id` text NOT NULL,
 	`organization_id` text,
 	`created_at` text DEFAULT CURRENT_TIMESTAMP,
 	`updated_at` text DEFAULT CURRENT_TIMESTAMP,
@@ -150,4 +112,38 @@ CREATE TABLE `task_comment` (
 	`task_id` text NOT NULL,
 	FOREIGN KEY (`user_id`) REFERENCES `user`(`id`) ON UPDATE no action ON DELETE set null,
 	FOREIGN KEY (`task_id`) REFERENCES `board_task`(`id`) ON UPDATE no action ON DELETE cascade
+);
+--> statement-breakpoint
+CREATE TABLE `organizations` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text,
+	`owner_id` text,
+	`plan` text DEFAULT 'free',
+	`created_at` text DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP
+);
+--> statement-breakpoint
+CREATE TABLE `people` (
+	`id` text PRIMARY KEY DEFAULT (uuid4()) NOT NULL,
+	`name` text NOT NULL,
+	`description` text,
+	`job_title` text,
+	`phone` text,
+	`linkedin` text,
+	`twitter` text,
+	`website` text,
+	`address` text,
+	`notes` text,
+	`organization_id` text NOT NULL,
+	`created_at` text DEFAULT CURRENT_TIMESTAMP,
+	`updated_at` text DEFAULT CURRENT_TIMESTAMP,
+	FOREIGN KEY (`organization_id`) REFERENCES `organizations`(`id`) ON UPDATE no action ON DELETE no action
+);
+--> statement-breakpoint
+CREATE TABLE `people_emails` (
+	`person_id` text NOT NULL,
+	`email_id` text NOT NULL,
+	PRIMARY KEY(`person_id`, `email_id`),
+	FOREIGN KEY (`person_id`) REFERENCES `people`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`email_id`) REFERENCES `emails`(`id`) ON UPDATE no action ON DELETE cascade
 );

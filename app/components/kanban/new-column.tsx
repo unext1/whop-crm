@@ -43,7 +43,7 @@ export function NewColumn({
         }
       }}
     >
-      <Card className="p-6 shrink-0 flex flex-col gap-4 overflow-hidden max-h-full w-80">
+      <Card className="p-4 shrink-0 flex flex-col gap-3 overflow-hidden max-h-full w-80 bg-muted/30 backdrop-blur-md border-none shadow-sm">
         <input type="hidden" name="intent" value={'createColumn'} />
         <input type="hidden" name="projectId" value={projectId} />
         <Input
@@ -52,15 +52,19 @@ export function NewColumn({
           ref={inputRef}
           type="text"
           name="name"
+          placeholder="Set Column name..."
+          className="h-8 text-xs"
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               setEditing(false);
             }
           }}
         />
-        <div className="flex justify-between">
-          <SaveButton>Save Column</SaveButton>
-          <CancelButton onClick={() => setEditing(false)}>Cancel</CancelButton>
+        <div className="flex justify-end gap-2">
+          <CancelButton onClick={() => setEditing(false)} className="h-8 text-xs">
+            Cancel
+          </CancelButton>
+          <SaveButton className="h-8 text-xs">Save</SaveButton>
         </div>
       </Card>
     </Form>
@@ -74,10 +78,10 @@ export function NewColumn({
       }}
       aria-label="Add new column"
       variant="outline"
-      size="default"
-      className="py-6"
+      size="sm"
+      className="h-10 w-10 text-xs shrink-0 bg-muted text-center backdrop-blur-md border border-border shadow-sm shadow-s"
     >
-      <PlusIcon className="w-6" />
+      <PlusIcon className="h-4 w-4" />
     </Button>
   );
 }

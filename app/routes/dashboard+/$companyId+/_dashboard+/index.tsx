@@ -3,7 +3,7 @@ import { useLoaderData } from 'react-router';
 import { db } from '~/db/index';
 import { companiesTable } from '~/db/schema';
 import { verifyWhopToken, whopSdk } from '~/services/whop.server';
-import type { Route } from '../+types';
+import type { Route } from './+types/';
 import { parseAsInteger, useQueryStates } from 'nuqs';
 import { useTransition } from 'react';
 

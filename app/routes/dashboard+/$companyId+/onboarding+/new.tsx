@@ -1,23 +1,16 @@
 import { eq } from 'drizzle-orm';
-import { ChevronLeft, Sparkles, Upload, Users } from 'lucide-react';
+import { Sparkles, Upload } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigation } from 'react-router';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
-import { Checkbox } from '~/components/ui/checkbox';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { db } from '~/db';
 import { organizationTable, userTable } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
-import {
-  requireUser,
-  getTeamMembers,
-  getAuthorizedUserId,
-  verifyWhopToken,
-  getPublicUser,
-} from '~/services/whop.server';
+import { getAuthorizedUserId, getPublicUser, getTeamMembers, verifyWhopToken } from '~/services/whop.server';
 import type { Route } from './+types/new';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
@@ -63,11 +56,13 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { companyId } = params;
-  await requireUser(request, companyId);
   const { userId } = await verifyWhopToken(request);
+  console.log('userId', userId);
 
   const authorizedUser = await getAuthorizedUserId({ companyId, regularUserId: userId });
+  console.log('authorizedUser', authorizedUser);
   const publicWhopUser = await getPublicUser(userId);
+  console.log('publicWhopUser', publicWhopUser);
 
   const formData = await request.formData();
   const intent = formData.get('intent')?.toString();
@@ -161,7 +156,6 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [username, setUsername] = useState('');
-  const [selectedTeamMembers, setSelectedTeamMembers] = useState<string[]>([]);
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -365,113 +359,6 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
           )}
 
           {step === 3 && (
-            <motion.div
-              key="step3"
-              custom={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="space-y-8"
-            >
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold text-foreground">Collaborate with your team</h1>
-                <p className="text-muted-foreground">
-                  The more your teammates use your workspace, the more powerful it becomes.
-                </p>
-              </div>
-
-              <div className="space-y-6">
-                {/* Select Team Members */}
-                {loaderData.teamMembers.length > 0 && (
-                  <div className="space-y-4">
-                    <Label className="text-muted-foreground text-sm">
-                      Add existing team members ({loaderData.teamMembers.length} available)
-                    </Label>
-                    <p className="text-sm text-muted-foreground">
-                      Select team members to add them to your workspace instantly.
-                    </p>
-                    <div className="space-y-2 max-h-60 overflow-y-auto">
-                      {loaderData.teamMembers.map((member) => (
-                        <div
-                          key={member.id}
-                          className="flex items-center justify-between p-3 bg-muted/30 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                        >
-                          <div className="flex items-center gap-3">
-                            <Checkbox
-                              id={`member-${member.id}`}
-                              checked={selectedTeamMembers.includes(member.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedTeamMembers([...selectedTeamMembers, member.id]);
-                                } else {
-                                  setSelectedTeamMembers(selectedTeamMembers.filter((id) => id !== member.id));
-                                }
-                              }}
-                            />
-                            <Avatar className="w-8 h-8">
-                              <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                                {member.name?.[0]?.toUpperCase() || member.name?.[0]?.toUpperCase() || '?'}
-                              </AvatarFallback>
-                            </Avatar>
-                            <label htmlFor={`member-${member.id}`} className="cursor-pointer flex-1">
-                              <div>
-                                <p className="text-sm font-medium text-foreground">{member.name}</p>
-                                <p className="text-xs text-muted-foreground">{member.email}</p>
-                              </div>
-                            </label>
-                          </div>
-                          <div className="text-xs text-muted-foreground capitalize">{member.role}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 3 && (
-                  <p className="text-sm text-destructive">{actionData.error}</p>
-                )}
-
-                <div className="flex flex-col gap-3">
-                  <Form method="post" className="w-full">
-                    <input type="hidden" name="intent" value="addTeamMembers" />
-                    {selectedTeamMembers.map((memberId) => (
-                      <input key={memberId} type="hidden" name="selectedMembers" value={memberId} />
-                    ))}
-                    <Button
-                      type="submit"
-                      disabled={selectedTeamMembers.length === 0 || isSubmitting}
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-lg"
-                    >
-                      <Users className="w-4 h-4 mr-2" />
-                      {isSubmitting
-                        ? 'Adding members...'
-                        : `Add ${selectedTeamMembers.length} member${selectedTeamMembers.length === 1 ? '' : 's'}`}
-                    </Button>
-                  </Form>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setStep(4)}
-                    className="w-full text-muted-foreground hover:text-foreground"
-                  >
-                    Skip for now
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {step === 4 && (
             <motion.div
               key="step4"
               custom={step}

@@ -14,6 +14,12 @@ export interface TaskType {
   content: string | null;
   columnId: string;
   ownerId: string | null;
+  assignees?: Array<{
+    user: {
+      id: string;
+      name: string | null;
+    };
+  }>;
 }
 
 interface ColumnProps {
@@ -21,9 +27,26 @@ interface ColumnProps {
   columnId: string;
   tasks: TaskType[];
   order: number;
+  color?: string;
 }
 
-const Column = ({ name, columnId, tasks }: ColumnProps) => {
+const COLUMN_COLORS = [
+  { name: 'blue', value: 'bg-blue-500' },
+  { name: 'pink', value: 'bg-pink-500' },
+  { name: 'green', value: 'bg-green-500' },
+  { name: 'red', value: 'bg-red-500' },
+  { name: 'yellow', value: 'bg-yellow-500' },
+  { name: 'purple', value: 'bg-purple-500' },
+  { name: 'orange', value: 'bg-orange-500' },
+  { name: 'cyan', value: 'bg-cyan-500' },
+];
+
+const getColumnColor = (order: number) => {
+  return COLUMN_COLORS[order % COLUMN_COLORS.length];
+};
+
+const Column = ({ name, columnId, tasks, order }: ColumnProps) => {
+  const colorConfig = getColumnColor(order);
   const submit = useSubmit();
 
   const listRef = useRef<HTMLUListElement>(null);
@@ -37,7 +60,7 @@ const Column = ({ name, columnId, tasks }: ColumnProps) => {
 
   return (
     <Card
-      className={`shrink-0 flex flex-col max-h-full w-80 p-4 py-6 ${acceptDrop ? 'border border-primary' : ''}`}
+      className={`shrink-0 flex flex-col max-h-full w-72  bg-muted/30 backdrop-blur-md border border-border/50 shadow-sm ${acceptDrop ? 'ring-2 ring-primary' : ''}`}
       onDragOver={(event) => {
         if (tasks.length === 0 && event.dataTransfer.types.includes('application/remix-card')) {
           event.preventDefault();
@@ -70,26 +93,29 @@ const Column = ({ name, columnId, tasks }: ColumnProps) => {
         setAcceptDrop(false);
       }}
     >
-      <div className="flex items-center space-x-2 bg-background">
-        <EditableText
-          fieldName="name"
-          value={name}
-          inputLabel="Edit column name"
-          buttonLabel={`Edit column "${name}" name`}
-        >
-          <input type="hidden" name="intent" value="updateColumn" />
-          <input type="hidden" name="columnId" value={columnId} />
-        </EditableText>
-
-        {/* <RemoveColumn columnId={columnId} /> */}
-        <div
-          className="text-xs px-1 py-0.5 bg-se              boardId={task.boardId}
-condary rounded"
-        >
-          {tasks.length}
+      <div className="flex items-center justify-between p-4">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          <div className={`h-2 w-2 rounded-full shrink-0 ${colorConfig.value}`} />
+          <EditableText
+            fieldName="name"
+            value={name}
+            inputLabel="Edit column name"
+            buttonLabel={`Edit column "${name}" name`}
+          >
+            <input type="hidden" name="intent" value="updateColumn" />
+            <input type="hidden" name="columnId" value={columnId} />
+          </EditableText>
         </div>
+        {tasks.length > 0 && (
+          <div className="text-xs px-1.5 py-0.5 bg-secondary/50 rounded font-medium text-muted-foreground shrink-0 ml-2">
+            {tasks.length}
+          </div>
+        )}
       </div>
-      <ul ref={listRef} className="grow mb-4 mt-6">
+      <ul
+        ref={listRef}
+        className="grow mb-3 space-y-2.5 min-h-[100px] px-4 overflow-y-scroll overflow-x-hidden scrollbar-thin"
+      >
         {tasks
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
           .map((task, index, tasks) => (
@@ -102,6 +128,7 @@ condary rounded"
               order={task.order ?? 0}
               columnId={columnId}
               ownerId={task.ownerId}
+              assignees={task.assignees}
               previousOrder={tasks[index - 1] ? (tasks[index - 1].order ?? 0) : 0}
               nextOrder={tasks[index + 1] ? (tasks[index + 1].order ?? 0) : (task.order ?? 0) + 1}
             />

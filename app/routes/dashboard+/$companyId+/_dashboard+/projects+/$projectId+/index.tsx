@@ -1,19 +1,19 @@
 import { eq, sql } from 'drizzle-orm';
-import { useRef, useState, useEffect } from 'react';
-import { Link, useFetchers, useFetcher, useNavigate, href } from 'react-router';
+import { ArrowUpDown, KanbanSquareIcon, ListFilter } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
 import type { Route } from './+types/index';
 
 import Column from '~/components/kanban/column';
 import { NewColumn } from '~/components/kanban/new-column';
-import { buttonVariants } from '~/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectSeparator } from '~/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '~/components/ui/dialog';
-import { Button } from '~/components/ui/button';
+import { Button, buttonVariants } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
+import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Checkbox } from '~/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { db } from '~/db';
-import { boardTable, boardColumnTable, boardTaskTable, taskAssigneesTable } from '~/db/schema';
+import { boardColumnTable, boardTable, boardTaskTable, taskAssigneesTable } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
 
@@ -141,7 +141,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const project = await db.query.boardTable.findMany({
     with: {
-      tasks: true,
+      tasks: {
+        with: {
+          assignees: {
+            with: {
+              user: true,
+            },
+          },
+        },
+      },
       columns: {
         orderBy: (boardColumnTable, { asc }) => [asc(boardColumnTable.order)],
       },
@@ -195,6 +203,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
         status: 'open',
         dueDate: null,
         priority: null,
+        assignees: [],
       };
     }
 
@@ -203,7 +212,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
 
   const optAddingColumns = usePendingColumns();
   type Column = (typeof project.columns)[number] | (typeof optAddingColumns)[number];
-  type TaskWithOrderAndColumn = TaskRecord & { order: number; columnId: string };
+  type TaskWithOrderAndColumn = TaskRecord & { order: number; columnId: string; assignees?: TaskRecord['assignees'] };
   type ColumnWithTasks = Column & { tasks: TaskWithOrderAndColumn[] };
   const columns = new Map<string, ColumnWithTasks>();
   for (const column of [...project.columns, ...optAddingColumns]) {
@@ -221,11 +230,12 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
     if (!columnId) continue; // Skip items with null columnId
     const column = columns.get(columnId);
     if (!column) throw Error('missing column');
-    // Ensure order is not null for UI components
+    // Ensure order is not null for UI components and assignees exist
     const taskWithValidOrder: TaskWithOrderAndColumn = {
       ...item,
       order: item.order ?? 0,
       columnId, // We know this is not null because of the check above
+      assignees: item.assignees || [],
     };
     column.tasks.push(taskWithValidOrder);
   }
@@ -241,39 +251,57 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
       {/* Header */}
-
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
-          <Select
-            value={selectedProjectId}
-            onValueChange={(value) => {
-              setSelectedProjectId(value);
-              navigate(`/dashboard/${companyId}/projects/${value}`);
-            }}
-          >
-            <SelectTrigger className="h-8 w-56 text-xs">
-              <SelectValue placeholder="Select project" />
-            </SelectTrigger>
-            <SelectContent>
-              {projects.map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {p.name}
-                </SelectItem>
-              ))}
-              <SelectSeparator />
-              <div className="p-1">
-                <Button type="button" size="sm" className="h-8 w-full text-xs" onClick={() => setCreateOpen(true)}>
-                  + Create new project
-                </Button>
-              </div>
-            </SelectContent>
-          </Select>
+          <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+            <KanbanSquareIcon className="h-3.5 w-3.5" />
+          </div>
+          <div className="flex items-center gap-3">
+            <Select
+              value={selectedProjectId}
+              onValueChange={(value) => {
+                setSelectedProjectId(value);
+                navigate(`/dashboard/${companyId}/projects/${value}`);
+              }}
+            >
+              <SelectTrigger className="h-8 w-56 text-xs">
+                <SelectValue placeholder="Select project" />
+              </SelectTrigger>
+              <SelectContent className="bg-muted/30 backdrop-blur-md border-none shadow-lg">
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id} className="text-xs">
+                    {p.name}
+                  </SelectItem>
+                ))}
+                <SelectSeparator />
+                <div className="p-1">
+                  <Button type="button" size="sm" className="h-8 w-full text-xs" onClick={() => setCreateOpen(true)}>
+                    + Create new project
+                  </Button>
+                </div>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      {/* Secondary Action Bar */}
+      <div className="flex h-10 items-center justify-between border-b border-border px-4 bg-muted/20">
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" className="h-7 text-xs">
+            <ListFilter className="h-3.5 w-3.5 mr-1.5" />
+            Filter
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 text-xs">
+            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5" />
+            Sort
+          </Button>
         </div>
         <div className="flex items-center gap-2">
           {project.ownerId === user.id ? (
             <Link
               to={`/dashboard/${companyId}/projects/${projectId}/settings`}
-              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), '')}
+              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 text-xs')}
             >
               Project Settings
             </Link>
@@ -283,43 +311,50 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
 
       {/* Create Project Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Create Project</DialogTitle>
-            <DialogDescription>
-              Create a new project to organize your tasks and collaborate with your team.
-            </DialogDescription>
-          </DialogHeader>
-          <createFetcher.Form
-            method="post"
-            action={href('/dashboard/:companyId/projects', { companyId })}
-            className="grid gap-4 py-4"
-            onSubmit={() => setCreateOpen(false)}
-          >
-            <div className="grid grid-cols-6 items-center gap-x-4 gap-y-2">
+        <DialogContent className="sm:max-w-[425px] shadow-s p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg">
+          {/* Header */}
+          <div className="flex h-14 items-center justify-between border-b border-border px-6 bg-muted/40">
+            <DialogTitle className="text-sm font-semibold m-0">Create Project</DialogTitle>
+          </div>
+
+          {/* Form Content */}
+          <div className="overflow-auto max-h-[calc(100vh-180px)]">
+            <createFetcher.Form
+              method="post"
+              action={href('/dashboard/:companyId/projects', { companyId })}
+              id="create-project-form"
+              className="p-6 space-y-4"
+              onSubmit={() => setCreateOpen(false)}
+            >
               <Input name="ownerId" type="hidden" value={user.id} />
-              <Label htmlFor="name" className="text-right col-span-2 text-sm whitespace-nowrap w-fit">
-                Project Name
-              </Label>
-              <Input name="name" type="text" placeholder="My awesome project" className="col-span-4" />
-              <Label htmlFor="defaultColumns" className="text-right col-span-2 text-sm whitespace-nowrap w-fit">
-                Default Columns
-              </Label>
-              <div className="col-span-4">
-                <Checkbox name="defaultColumns" />
+              <div className="space-y-2">
+                <Label htmlFor="name" className="text-sm text-muted-foreground">
+                  Project name <span className="text-muted-foreground">(required)</span>
+                </Label>
+                <Input name="name" type="text" placeholder="Set Project name..." className="h-9" required />
               </div>
-            </div>
-            <Button type="submit" className="w-full">
-              {createFetcher.state === 'submitting' ? 'Creating...' : 'Create Project'}
+              <div className="flex items-center gap-2">
+                <Checkbox name="defaultColumns" id="defaultColumns" />
+                <Label htmlFor="defaultColumns" className="text-sm text-muted-foreground cursor-pointer">
+                  Default Columns
+                </Label>
+              </div>
+            </createFetcher.Form>
+          </div>
+
+          {/* Footer */}
+          <div className="flex h-14 items-center justify-end gap-2 border-t border-border px-6 bg-muted/40">
+            <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs">
+              {createFetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
             </Button>
-          </createFetcher.Form>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Board */}
-      <div className="flex-1 overflow-hidden">
-        <div className="h-full flex flex-col overflow-x-scroll" ref={scrollContainerRef}>
-          <div className="flex grow h-full items-start gap-4 pb-4">
+      <div className="flex-1 min-h-0">
+        <div className="h-full overflow-x-auto scrollbar" ref={scrollContainerRef}>
+          <div className="flex items-start gap-4 p-4 h-full">
             {[...columns.values()].map((col) => {
               return <Column key={col.id} name={col.name} columnId={col.id} tasks={col.tasks} order={col.order} />;
             })}

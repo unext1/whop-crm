@@ -57,7 +57,7 @@ export function AppSidebar({ user, ...props }: { user: UserType } & React.Compon
   const { state } = useSidebar();
   return (
     <Sidebar collapsible="icon" variant="sidebar" {...props}>
-      <SidebarHeader className="border-b flex  items-start justify-center overflow-hidden ">
+      <SidebarHeader className="border-b flex items-start justify-center overflow-hidden ">
         <div className="w-full py-1.5">
           <Link
             to={href('/dashboard/:companyId', { companyId: params.companyId as string })}
