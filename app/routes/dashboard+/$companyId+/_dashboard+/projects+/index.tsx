@@ -19,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/comp
 import { db } from '~/db';
 import { boardColumnTable, boardMemberTable, boardTable, type UserType } from '~/db/schema';
 
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
 import { requireUser } from '~/services/whop.server';
 
@@ -48,6 +48,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       name: submission.value.name,
       ownerId: submission.value.ownerId,
       companyId: companyId,
+      type: 'pipeline',
     })
     .returning();
 
@@ -87,7 +88,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { companyId } = params;
 
   const projects = await db.query.boardTable.findMany({
-    where: eq(boardTable.companyId, companyId),
+    where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
   });
 
   // If projects exist, default to the first one

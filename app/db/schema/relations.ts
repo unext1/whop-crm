@@ -4,16 +4,16 @@ import { emailsTable } from './emails';
 import { organizationTable } from './organization';
 import { peopleTable } from './people';
 import { peopleEmailsTable } from './people-emails';
-import { taskBoardTable } from '../tasks-schemas/task-board';
+import { boardTable } from '../kanban-schemas/board';
 
 // Organization relations
 export const organizationRelations = relations(organizationTable, ({ one, many }) => ({
   companies: many(companiesTable),
   emails: many(emailsTable),
   people: many(peopleTable),
-  taskBoard: one(taskBoardTable, {
+  boards: one(boardTable, {
     fields: [organizationTable.id],
-    references: [taskBoardTable.organizationId],
+    references: [boardTable.companyId],
   }),
 }));
 

@@ -132,7 +132,7 @@ const Task = ({
           {assignees && assignees.length > 0 && assignees[0]?.user && (
             <div className="flex items-center gap-1.5">
               <Avatar className="h-5 w-5 shrink-0">
-                <AvatarImage src={assignees[0].user.name || ''} alt={assignees[0].user.name || ''} />
+                <AvatarImage src={assignees[0].user.profilePictureUrl || ''} alt={assignees[0].user.name || ''} />
                 <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
                   {assignees[0].user.name ? assignees[0].user.name[0].toUpperCase() : 'U'}
                 </AvatarFallback>

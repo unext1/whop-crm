@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, and } from 'drizzle-orm';
 import { ArrowUpDown, KanbanSquareIcon, ListFilter } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
@@ -84,6 +84,7 @@ export async function action({ request, params }: Route.ActionArgs) {
             ownerId: user.id,
             boardId: projectId,
             content,
+            type: 'pipeline',
           })
           .returning();
 
@@ -142,6 +143,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const project = await db.query.boardTable.findMany({
     with: {
       tasks: {
+        where: eq(boardTaskTable.type, 'pipeline'),
         with: {
           assignees: {
             with: {
@@ -154,11 +156,11 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         orderBy: (boardColumnTable, { asc }) => [asc(boardColumnTable.order)],
       },
     },
-    where: eq(boardTable.id, projectId),
+    where: and(eq(boardTable.id, projectId), eq(boardTable.type, 'pipeline')),
   });
 
   const projects = await db.query.boardTable.findMany({
-    where: eq(boardTable.companyId, companyId),
+    where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
   });
 
   return { project: project[0], companyId, projectId, user, projects };
@@ -204,6 +206,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
         dueDate: null,
         priority: null,
         assignees: [],
+        type: 'pipeline',
       };
     }
 

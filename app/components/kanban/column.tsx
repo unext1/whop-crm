@@ -18,6 +18,7 @@ export interface TaskType {
     user: {
       id: string;
       name: string | null;
+      profilePictureUrl: string | null;
     };
   }>;
 }
@@ -28,6 +29,7 @@ interface ColumnProps {
   tasks: TaskType[];
   order: number;
   color?: string;
+  disableEdit?: boolean;
 }
 
 const COLUMN_COLORS = [
@@ -45,7 +47,7 @@ const getColumnColor = (order: number) => {
   return COLUMN_COLORS[order % COLUMN_COLORS.length];
 };
 
-const Column = ({ name, columnId, tasks, order }: ColumnProps) => {
+const Column = ({ name, columnId, tasks, order, disableEdit = false }: ColumnProps) => {
   const colorConfig = getColumnColor(order);
   const submit = useSubmit();
 
@@ -96,15 +98,19 @@ const Column = ({ name, columnId, tasks, order }: ColumnProps) => {
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-2 flex-1 min-w-0">
           <div className={`h-2 w-2 rounded-full shrink-0 ${colorConfig.value}`} />
-          <EditableText
-            fieldName="name"
-            value={name}
-            inputLabel="Edit column name"
-            buttonLabel={`Edit column "${name}" name`}
-          >
-            <input type="hidden" name="intent" value="updateColumn" />
-            <input type="hidden" name="columnId" value={columnId} />
-          </EditableText>
+          {disableEdit ? (
+            <h3 className="text-sm font-semibold truncate">{name}</h3>
+          ) : (
+            <EditableText
+              fieldName="name"
+              value={name}
+              inputLabel="Edit column name"
+              buttonLabel={`Edit column "${name}" name`}
+            >
+              <input type="hidden" name="intent" value="updateColumn" />
+              <input type="hidden" name="columnId" value={columnId} />
+            </EditableText>
+          )}
         </div>
         {tasks.length > 0 && (
           <div className="text-xs px-1.5 py-0.5 bg-secondary/50 rounded font-medium text-muted-foreground shrink-0 ml-2">

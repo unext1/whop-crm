@@ -9,6 +9,9 @@ import { organizationTable } from '../schema';
 export const boardTable = sqliteTable('board', {
   id: text('id').primaryKey().default(sql`(uuid4())`),
   name: text('name').notNull(),
+  type: text('type', { enum: ['tasks', 'pipeline'] })
+    .default('pipeline')
+    .notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
   ownerId: text('owner_id').references(() => userTable.id, { onDelete: 'set null' }),
   companyId: text('company_id')

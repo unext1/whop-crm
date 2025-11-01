@@ -15,6 +15,9 @@ export const boardTaskTable = sqliteTable('board_task', {
   name: text('name').notNull(),
   content: text('content'),
   order: integer('order'),
+  type: text('type', { enum: ['tasks', 'pipeline'] })
+    .default('pipeline')
+    .notNull(),
 
   ownerId: text('owner_id').references(() => userTable.id, { onDelete: 'set null' }),
   boardId: text('board_id').references(() => boardTable.id, { onDelete: 'cascade' }),
