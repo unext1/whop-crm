@@ -1,6 +1,6 @@
 import { eq, sql, and, inArray } from 'drizzle-orm';
 import { ArrowUpDown, KanbanSquareIcon, ListFilter } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
 import type { Route } from './+types/index';
 
@@ -238,100 +238,107 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
     setSelectedProjectId(project.id);
   }, [project.id]);
 
-  type TaskRecord = (typeof project.tasks)[number];
-  const tasksById = new Map<string, TaskRecord>(project.tasks.map((item) => [item.id, item]));
-
+  // Call hooks at top level
   const pendingItems = usePendingTasks();
-  for (const pendingItem of pendingItems) {
-    const item = tasksById.get(pendingItem.id);
-    let merged: TaskRecord;
-    if (item) {
-      // For existing items, only update the fields that are actually present in pendingItem
-      merged = { ...item };
-      // Always update columnId and order from pending item
-      if (pendingItem.columnId !== 'null') merged.columnId = pendingItem.columnId;
-      if (!Number.isNaN(pendingItem.order)) merged.order = pendingItem.order;
-      // Only update other fields if they're not null/empty
-      if (pendingItem.name && pendingItem.name !== 'null') merged.name = pendingItem.name;
-      if (pendingItem.content !== undefined && pendingItem.content !== 'null') merged.content = pendingItem.content;
-      if (pendingItem.relatedCompanyId && pendingItem.relatedCompanyId !== 'null') {
-        merged.companyId = pendingItem.relatedCompanyId;
-        if (pendingItem.companyName) {
+  const optAddingColumns = usePendingColumns();
+  const optRemovingColumns = usePendingRemovedColumns();
+
+  // Memoize expensive computations to prevent unnecessary re-renders
+  const { columns } = useMemo(() => {
+    type TaskRecord = (typeof project.tasks)[number];
+    const tasksById = new Map<string, TaskRecord>(project.tasks.map((item) => [item.id, item]));
+
+    for (const pendingItem of pendingItems) {
+      const item = tasksById.get(pendingItem.id);
+      let merged: TaskRecord;
+      if (item) {
+        // For existing items, only update the fields that are actually present in pendingItem
+        merged = { ...item };
+        // Always update columnId and order from pending item
+        if (pendingItem.columnId !== 'null') merged.columnId = pendingItem.columnId;
+        if (!Number.isNaN(pendingItem.order)) merged.order = pendingItem.order;
+        // Only update other fields if they're not null/empty
+        if (pendingItem.name && pendingItem.name !== 'null') merged.name = pendingItem.name;
+        if (pendingItem.content !== undefined && pendingItem.content !== 'null') merged.content = pendingItem.content;
+        if (pendingItem.relatedCompanyId && pendingItem.relatedCompanyId !== 'null') {
+          merged.companyId = pendingItem.relatedCompanyId;
+          if (pendingItem.companyName) {
+            Object.assign(merged, {
+              company: { id: pendingItem.relatedCompanyId, name: pendingItem.companyName },
+            });
+          }
+        }
+        if (pendingItem.relatedPersonId && pendingItem.relatedPersonId !== 'null') {
+          merged.personId = pendingItem.relatedPersonId;
+          if (pendingItem.personName) {
+            Object.assign(merged, {
+              person: { id: pendingItem.relatedPersonId, name: pendingItem.personName },
+            });
+          }
+        }
+      } else {
+        // For new items, use the pending item data
+        merged = {
+          ...pendingItem,
+          amount: pendingItem.amount && pendingItem.amount > 0 ? pendingItem.amount : null, // Don't show 0 in optimistic UI
+          boardId: project.id,
+          updatedAt: new Date().toISOString(),
+          personId: pendingItem.relatedPersonId || null,
+          companyId: pendingItem.relatedCompanyId || null,
+          status: 'open',
+          dueDate: null,
+          priority: null,
+          assignees: [], // Start with empty assignees - owner is not auto-assigned
+          owner: user, // Add owner for "Created By" display
+          ownerId: user.id,
+          type: 'pipeline',
+        } as TaskRecord;
+        // Add company/person objects for optimistic UI
+        if (pendingItem.companyName && pendingItem.relatedCompanyId) {
           Object.assign(merged, {
             company: { id: pendingItem.relatedCompanyId, name: pendingItem.companyName },
           });
         }
-      }
-      if (pendingItem.relatedPersonId && pendingItem.relatedPersonId !== 'null') {
-        merged.personId = pendingItem.relatedPersonId;
-        if (pendingItem.personName) {
+        if (pendingItem.personName && pendingItem.relatedPersonId) {
           Object.assign(merged, {
             person: { id: pendingItem.relatedPersonId, name: pendingItem.personName },
           });
         }
       }
-    } else {
-      // For new items, use the pending item data
-      merged = {
-        ...pendingItem,
-        amount: pendingItem.amount && pendingItem.amount > 0 ? pendingItem.amount : null, // Don't show 0 in optimistic UI
-        boardId: project.id,
-        updatedAt: new Date().toISOString(),
-        personId: pendingItem.relatedPersonId || null,
-        companyId: pendingItem.relatedCompanyId || null,
-        status: 'open',
-        dueDate: null,
-        priority: null,
-        assignees: [], // Start with empty assignees - owner is not auto-assigned
-        owner: user, // Add owner for "Created By" display
-        ownerId: user.id,
-        type: 'pipeline',
-      } as TaskRecord;
-      // Add company/person objects for optimistic UI
-      if (pendingItem.companyName && pendingItem.relatedCompanyId) {
-        Object.assign(merged, {
-          company: { id: pendingItem.relatedCompanyId, name: pendingItem.companyName },
-        });
-      }
-      if (pendingItem.personName && pendingItem.relatedPersonId) {
-        Object.assign(merged, {
-          person: { id: pendingItem.relatedPersonId, name: pendingItem.personName },
-        });
-      }
+
+      tasksById.set(pendingItem.id, merged);
     }
 
-    tasksById.set(pendingItem.id, merged);
-  }
+    type Column = (typeof project.columns)[number] | (typeof optAddingColumns)[number];
+    type TaskWithOrderAndColumn = TaskRecord & { order: number; columnId: string; assignees?: TaskRecord['assignees'] };
+    type ColumnWithTasks = Column & { tasks: TaskWithOrderAndColumn[] };
+    const columns = new Map<string, ColumnWithTasks>();
+    for (const column of [...project.columns, ...optAddingColumns]) {
+      columns.set(column.id, { ...column, tasks: [] });
+    }
 
-  const optAddingColumns = usePendingColumns();
-  type Column = (typeof project.columns)[number] | (typeof optAddingColumns)[number];
-  type TaskWithOrderAndColumn = TaskRecord & { order: number; columnId: string; assignees?: TaskRecord['assignees'] };
-  type ColumnWithTasks = Column & { tasks: TaskWithOrderAndColumn[] };
-  const columns = new Map<string, ColumnWithTasks>();
-  for (const column of [...project.columns, ...optAddingColumns]) {
-    columns.set(column.id, { ...column, tasks: [] });
-  }
+    for (const columnToRemove of optRemovingColumns) {
+      const removedColumnId = columnToRemove.id;
+      columns.delete(removedColumnId);
+    }
 
-  const optRemovingColumns = usePendingRemovedColumns();
-  for (const columnToRemove of optRemovingColumns) {
-    const removedColumnId = columnToRemove.id;
-    columns.delete(removedColumnId);
-  }
+    for (const item of tasksById.values()) {
+      const columnId = item.columnId;
+      if (!columnId) continue; // Skip items with null columnId
+      const column = columns.get(columnId);
+      if (!column) throw Error('missing column');
+      // Ensure order is not null for UI components and assignees exist
+      const taskWithValidOrder: TaskWithOrderAndColumn = {
+        ...item,
+        order: item.order ?? 0,
+        columnId, // We know this is not null because of the check above
+        assignees: item.assignees || [],
+      };
+      column.tasks.push(taskWithValidOrder);
+    }
 
-  for (const item of tasksById.values()) {
-    const columnId = item.columnId;
-    if (!columnId) continue; // Skip items with null columnId
-    const column = columns.get(columnId);
-    if (!column) throw Error('missing column');
-    // Ensure order is not null for UI components and assignees exist
-    const taskWithValidOrder: TaskWithOrderAndColumn = {
-      ...item,
-      order: item.order ?? 0,
-      columnId, // We know this is not null because of the check above
-      assignees: item.assignees || [],
-    };
-    column.tasks.push(taskWithValidOrder);
-  }
+    return { tasksById, columns };
+  }, [project.tasks, project.columns, project.id, user, pendingItems, optAddingColumns, optRemovingColumns]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -472,7 +479,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
   );
 };
 
-export default ProjectPage;
+export default memo(ProjectPage);
 
 function usePendingColumns() {
   type CreateColumnFetcher = ReturnType<typeof useFetchers>[number] & {
