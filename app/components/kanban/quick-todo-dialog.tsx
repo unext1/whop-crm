@@ -15,24 +15,47 @@ interface QuickTodoDialogProps {
   parentTaskId?: string;
   userId?: string;
   trigger?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function QuickTodoDialog({ companyId, personId, parentTaskId, userId, trigger }: QuickTodoDialogProps) {
+export function QuickTodoDialog({ 
+  companyId, 
+  personId, 
+  parentTaskId, 
+  userId, 
+  trigger,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+}: QuickTodoDialogProps) {
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const submit = useSubmit();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  
+  // Use controlled state if provided, otherwise use internal state
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isControlled && controlledOnOpenChange) {
+      controlledOnOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="outline" size="sm" className="h-8 text-xs">
-            <CheckSquare className="mr-1.5 h-3.5 w-3.5" />
-            New Todo
-          </Button>
-        )}
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          {trigger || (
+            <Button variant="outline" size="sm" className="h-8 text-xs">
+              <CheckSquare className="mr-1.5 h-3.5 w-3.5" />
+              New Todo
+            </Button>
+          )}
+        </DialogTrigger>
+      )}
       <DialogContent
         className="sm:max-w-[500px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
         showCloseButton={false}

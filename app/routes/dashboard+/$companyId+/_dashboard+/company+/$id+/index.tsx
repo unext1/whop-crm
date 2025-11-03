@@ -6,7 +6,6 @@ import {
   CheckSquare,
   Circle,
   Clock,
-  Edit,
   FileText,
   Globe,
   Linkedin,
@@ -22,8 +21,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
+import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -352,6 +353,39 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     }
   }
 
+  // Update Company Field
+  if (intent === 'updateCompanyField') {
+    const fieldName = formData.get('fieldName')?.toString();
+    const fieldValue = formData.get('fieldValue')?.toString();
+
+    if (!fieldName) {
+      return data({ error: 'Field name required' }, { status: 400 });
+    }
+
+    const allowedFields = ['description', 'industry', 'phone', 'address', 'website', 'domain', 'linkedin', 'twitter'];
+    if (!allowedFields.includes(fieldName)) {
+      return data({ error: 'Invalid field' }, { status: 400 });
+    }
+
+    try {
+      await db
+        .update(companiesTable)
+        .set({ [fieldName]: fieldValue || null })
+        .where(and(eq(companiesTable.id, companyId), eq(companiesTable.organizationId, organizationId)));
+
+      await logCompanyActivity({
+        companyId,
+        userId,
+        activityType: 'updated',
+        description: `Updated ${fieldName}`,
+      });
+
+      return data({ success: true });
+    } catch {
+      return data({ error: 'Failed to update field' }, { status: 500 });
+    }
+  }
+
   // Complete task
   if (intent === 'completeTask') {
     const taskId = formData.get('taskId')?.toString();
@@ -430,8 +464,8 @@ const CompanyPage = () => {
     submit(formData, { method: 'post' });
   };
 
-  // Company sidebar content
-  const CompanySidebar = () => (
+  // Sidebar JSX
+  const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <Button
@@ -489,43 +523,51 @@ const CompanyPage = () => {
 
         {/* Details Section */}
         <div className="space-y-4">
-          {company.description && (
-            <>
-              <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Description</h3>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{company.description}</p>
-              </div>
-              <Separator />
-            </>
-          )}
+          <div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Description</h3>
+            <EditableField
+              value={company.description}
+              fieldName="fieldValue"
+              intent="updateCompanyField"
+              fieldNameParam="description"
+              placeholder="Add description..."
+            />
+          </div>
+          <Separator />
 
           <div>
             <h3 className="mb-2 text-xs font-medium text-muted-foreground">Contact</h3>
             <div className="space-y-2">
-              {company.domain && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Mail className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <p className="truncate text-foreground">{company.domain}</p>
-                  </div>
-                </div>
-              )}
-              {company.phone && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Phone className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{company.phone}</p>
-                  </div>
-                </div>
-              )}
-              {company.address && (
-                <div className="flex items-start gap-2 text-sm">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{company.address}</p>
-                  </div>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.domain}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="domain"
+                  placeholder="Add domain..."
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Phone className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.phone}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="phone"
+                  placeholder="Add phone..."
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <MapPin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.address}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="address"
+                  placeholder="Add address..."
+                />
+              </div>
             </div>
           </div>
 
@@ -534,31 +576,26 @@ const CompanyPage = () => {
           <div>
             <h3 className="mb-2 text-xs font-medium text-muted-foreground">Organization</h3>
             <div className="space-y-2">
-              {company.website && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Globe className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={company.website.startsWith('http') ? company.website : `https://${company.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      {company.website}
-                    </a>
-                  </div>
-                </div>
-              )}
-              {company.industry && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Building2 className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <Badge variant="secondary" className="text-xs capitalize">
-                      {company.industry}
-                    </Badge>
-                  </div>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm">
+                <Globe className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.website}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="website"
+                  placeholder="Add website..."
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Building2 className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.industry}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="industry"
+                  placeholder="Add industry..."
+                />
+              </div>
             </div>
           </div>
 
@@ -582,43 +619,28 @@ const CompanyPage = () => {
           <Separator />
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-medium text-muted-foreground">Social</h3>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <Edit className="h-3 w-3" />
-              </Button>
-            </div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Social</h3>
             <div className="space-y-2">
-              {company.linkedin && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Linkedin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={company.linkedin}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      LinkedIn
-                    </a>
-                  </div>
-                </div>
-              )}
-              {company.twitter && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Twitter className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={`https://twitter.com/${company.twitter.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      {company.twitter}
-                    </a>
-                  </div>
-                </div>
-              )}
+              <div className="flex items-center gap-2 text-sm">
+                <Linkedin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.linkedin}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="linkedin"
+                  placeholder="Add LinkedIn..."
+                />
+              </div>
+              <div className="flex items-center gap-2 text-sm">
+                <Twitter className=" h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={company.twitter}
+                  fieldName="fieldValue"
+                  intent="updateCompanyField"
+                  fieldNameParam="twitter"
+                  placeholder="Add Twitter..."
+                />
+              </div>
             </div>
           </div>
 
@@ -664,7 +686,7 @@ const CompanyPage = () => {
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        <CompanySidebar />
+        {sidebarContent}
       </div>
 
       {/* Mobile Sheet */}
@@ -673,7 +695,7 @@ const CompanyPage = () => {
           <SheetHeader className="sr-only">
             <SheetTitle>Company Details</SheetTitle>
           </SheetHeader>
-          <CompanySidebar />
+          {sidebarContent}
         </SheetContent>
       </Sheet>
 
@@ -700,10 +722,18 @@ const CompanyPage = () => {
             </Badge>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs bg-transparent">
-              <Mail className="mr-1.5 h-3.5 w-3.5" />
-              Compose email
-            </Button>
+            <QuickActionsMenu
+              type="company"
+              entityId={company.id}
+              entityName={company.name || 'Unnamed Company'}
+              userId={userId}
+              organizationId={organizationId}
+              onDelete={() => {
+                const formData = new FormData();
+                formData.append('intent', 'delete');
+                submit(formData, { method: 'post' });
+              }}
+            />
           </div>
         </div>
 

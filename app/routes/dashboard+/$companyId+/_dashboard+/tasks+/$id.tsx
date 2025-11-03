@@ -1,42 +1,36 @@
 import { parseWithZod } from '@conform-to/zod';
 import { and, eq } from 'drizzle-orm';
-import { Building2, Edit, FileText, Menu, MoreHorizontal, Paperclip, Plus, Trash2, User, X } from 'lucide-react';
+import { Building2, Edit, FileText, Menu, MoreHorizontal, Paperclip, Plus, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
 import { z } from 'zod';
+import { EditableDateField } from '~/components/editable-date-field';
+import { EditableSelectField } from '~/components/editable-select-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { EditableText } from '~/components/kanban/editible-text';
+import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '~/components/ui/dialog';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '~/components/ui/dropdown-menu';
 import { Label } from '~/components/ui/label';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Textarea } from '~/components/ui/textarea';
 import { db } from '~/db/index';
 import {
-  boardTaskTable,
-  taskAssigneesTable,
-  taskCommentTable,
   activitiesTable,
+  boardTaskTable,
   companiesTable,
   peopleTable,
+  taskAssigneesTable,
+  taskCommentTable,
   userTable,
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
-import { logTaskActivity } from '~/utils/activity.server';
 import { cn } from '~/utils';
+import { logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types/$id';
 
 const removeUserSchema = z.object({
@@ -264,6 +258,42 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return {};
   }
 
+  if (intent === 'updateTaskField') {
+    const fieldName = formData.get('fieldName')?.toString();
+    const fieldValue = formData.get('fieldValue')?.toString();
+
+    if (!fieldName) {
+      return data({ error: 'Field name required' }, { status: 400 });
+    }
+
+    const allowedFields = ['priority', 'dueDate'];
+    if (!allowedFields.includes(fieldName)) {
+      return data({ error: 'Invalid field' }, { status: 400 });
+    }
+
+    try {
+      const updateData: Record<string, string | null> = {};
+      if (fieldName === 'dueDate') {
+        updateData.dueDate = fieldValue || null;
+      } else if (fieldName === 'priority') {
+        updateData.priority = fieldValue || null;
+      }
+
+      await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
+
+      await logTaskActivity({
+        taskId,
+        userId: user.id,
+        activityType: 'updated',
+        description: `Updated ${fieldName}`,
+      });
+
+      return data({ success: true });
+    } catch {
+      return data({ error: 'Failed to update field' }, { status: 500 });
+    }
+  }
+
   if (intent === 'removeTask') {
     // Get the task to check ownership
     const task = await db.query.boardTaskTable.findFirst({
@@ -372,8 +402,8 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
   // Filter out already assigned users
   const availableUsers = users.filter((u) => !assignedUserIds.has(u.id));
 
-  // Task sidebar content
-  const TaskSidebar = () => (
+  // Sidebar JSX
+  const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <Button
@@ -531,24 +561,31 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   </p>
                 </div>
               )}
-              {task.dueDate && (
-                <div>
-                  <p className="text-muted-foreground">Due Date</p>
-                  <p className="text-foreground">
-                    {new Date(task.dueDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
-              )}
-              {task.priority && (
-                <div>
-                  <p className="text-muted-foreground">Priority</p>
-                  <p className="text-foreground capitalize">{task.priority}</p>
-                </div>
-              )}
+              <div>
+                <p className="text-muted-foreground mb-1">Due Date</p>
+                <EditableDateField
+                  value={task.dueDate}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="dueDate"
+                  placeholder="Set due date..."
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground mb-1">Priority</p>
+                <EditableSelectField
+                  value={task.priority}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="priority"
+                  placeholder="Set priority..."
+                  options={[
+                    { value: 'low', label: 'Low' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'high', label: 'High' },
+                  ]}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -560,7 +597,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        <TaskSidebar />
+        {sidebarContent}
       </div>
 
       {/* Mobile Sheet */}
@@ -569,7 +606,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           <SheetHeader className="sr-only">
             <SheetTitle>Task Details</SheetTitle>
           </SheetHeader>
-          <TaskSidebar />
+          {sidebarContent}
         </SheetContent>
       </Sheet>
 
@@ -606,40 +643,28 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           </div>
           <div className="flex items-center gap-2">
             {task.ownerId === user.id && (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 text-xs bg-transparent"
-                  onClick={() => setManageUsersOpen(true)}
-                >
-                  <User className="mr-1.5 h-3.5 w-3.5" />
-                  Manage Users
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon" className="h-8 w-8">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-32 bg-muted/30 backdrop-blur-md border-none shadow-lg">
-                    <DropdownMenuLabel className="text-xs">Task Control</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuGroup>
-                      <fetcher.Form method="post" className="my-auto">
-                        <input type="hidden" name="intent" value="removeTask" />
-                        <button aria-label="Delete Task" type="submit" className="w-full">
-                          <DropdownMenuItem className="text-xs text-destructive">
-                            <Trash2 className="h-3.5 w-3.5 mr-2" />
-                            Delete
-                          </DropdownMenuItem>
-                        </button>
-                      </fetcher.Form>
-                    </DropdownMenuGroup>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs bg-transparent"
+                onClick={() => setManageUsersOpen(true)}
+              >
+                <User className="mr-1.5 h-3.5 w-3.5" />
+                Manage Users
+              </Button>
             )}
+            <QuickActionsMenu
+              type="task"
+              entityId={task.id}
+              entityName={task.name || 'Unnamed Task'}
+              userId={user.id}
+              organizationId={task.board?.companyId || ''}
+              onDelete={() => {
+                const formData = new FormData();
+                formData.append('intent', 'removeTask');
+                fetcher.submit(formData, { method: 'post' });
+              }}
+            />
           </div>
         </div>
 

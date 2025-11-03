@@ -130,7 +130,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
             column: true,
           },
           orderBy: (boardTaskTable, { desc }) => [desc(boardTaskTable.createdAt)],
-          limit: 10,
+          limit: 3,
         })
       : [];
 

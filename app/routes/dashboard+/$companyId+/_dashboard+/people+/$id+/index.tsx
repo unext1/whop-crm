@@ -5,7 +5,6 @@ import {
   CheckSquare,
   Circle,
   Clock,
-  Edit,
   FileText,
   Globe,
   Linkedin,
@@ -21,8 +20,10 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
+import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -365,6 +366,248 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     }
   }
 
+  // Send DM
+  if (intent === 'sendDM') {
+    const personId = formData.get('personId')?.toString();
+    const message = formData.get('message')?.toString();
+
+    if (!personId || !message) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Person ID and message are required',
+        variant: 'destructive',
+      });
+      return data({ error: 'Missing required fields' }, { headers, status: 400 });
+    }
+
+    try {
+      // TODO: Integrate with Whop Messages API
+
+      // For now, just log the activity
+      await logPersonActivity({
+        personId,
+        userId,
+        activityType: 'updated',
+        description: `DM sent: ${message.substring(0, 50)}${message.length > 50 ? '...' : ''}`,
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'DM will be sent (integration pending)',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to send DM',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to send DM' }, { headers, status: 500 });
+    }
+  }
+
+  // Create Deal
+  if (intent === 'createDeal') {
+    const name = formData.get('name')?.toString();
+    const content = formData.get('content')?.toString();
+    const amount = formData.get('amount')?.toString();
+    const relatedPersonId = formData.get('personId')?.toString();
+
+    if (!name) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Deal name is required',
+        variant: 'destructive',
+      });
+      return data({ error: 'Deal name required' }, { headers, status: 400 });
+    }
+
+    try {
+      // Helper to ensure pipeline board exists
+      const ensurePipelineBoard = async (orgId: string) => {
+        const existingBoard = await db.query.boardTable.findFirst({
+          where: and(eq(boardTable.companyId, orgId), eq(boardTable.type, 'pipeline')),
+        });
+
+        if (existingBoard) {
+          return existingBoard;
+        }
+
+        const newBoard = await db
+          .insert(boardTable)
+          .values({
+            name: 'Pipeline',
+            type: 'pipeline',
+            companyId: orgId,
+            ownerId: userId,
+          })
+          .returning();
+
+        await db.insert(boardColumnTable).values([
+          { name: 'Lead', order: 1, boardId: newBoard[0].id },
+          { name: 'Qualified', order: 2, boardId: newBoard[0].id },
+          { name: 'Proposal', order: 3, boardId: newBoard[0].id },
+          { name: 'Negotiation', order: 4, boardId: newBoard[0].id },
+          { name: 'Won', order: 5, boardId: newBoard[0].id },
+        ]);
+
+        return newBoard[0];
+      };
+
+      const pipelineBoard = await ensurePipelineBoard(organizationId);
+
+      // Find the first column (Lead)
+      const firstColumn = await db.query.boardColumnTable.findFirst({
+        where: eq(boardColumnTable.boardId, pipelineBoard.id),
+        orderBy: (columns, { asc }) => [asc(columns.order)],
+      });
+
+      if (!firstColumn) {
+        return data({ error: 'No columns found' }, { status: 500 });
+      }
+
+      // Get the highest order in the first column
+      const maxOrderTask = await db.query.boardTaskTable.findFirst({
+        where: eq(boardTaskTable.columnId, firstColumn.id),
+        orderBy: (tasks, { desc }) => [desc(tasks.order)],
+      });
+
+      const nextOrder = maxOrderTask?.order ? maxOrderTask.order + 1 : 1;
+
+      await db.transaction(async (tx) => {
+        const task = await tx
+          .insert(boardTaskTable)
+          .values({
+            columnId: firstColumn.id,
+            name,
+            order: nextOrder,
+            ownerId: userId,
+            boardId: pipelineBoard.id,
+            content,
+            type: 'pipeline',
+            status: 'open',
+            personId: relatedPersonId || personId,
+            amount: amount ? Number.parseInt(amount, 10) : null,
+          })
+          .returning();
+
+        await logTaskActivity({
+          taskId: task[0].id,
+          userId,
+          activityType: 'created',
+          description: `Deal "${name}" was created`,
+          tx,
+        });
+
+        if (relatedPersonId || personId) {
+          await logPersonActivity({
+            personId: relatedPersonId || personId,
+            userId,
+            activityType: 'task_created',
+            description: `Created deal "${name}"`,
+            relatedEntityId: task[0].id,
+            relatedEntityType: 'task',
+            tx,
+          });
+        }
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'Deal created successfully',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to create deal',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to create deal' }, { headers, status: 500 });
+    }
+  }
+
+  // Update Person Field
+  if (intent === 'updatePersonField') {
+    const fieldName = formData.get('fieldName')?.toString();
+    const fieldValue = formData.get('fieldValue')?.toString();
+
+    if (!fieldName) {
+      return data({ error: 'Field name required' }, { status: 400 });
+    }
+
+    const allowedFields = ['description', 'jobTitle', 'phone', 'address', 'website', 'linkedin', 'twitter', 'notes'];
+    if (!allowedFields.includes(fieldName)) {
+      return data({ error: 'Invalid field' }, { status: 400 });
+    }
+
+    try {
+      await db
+        .update(peopleTable)
+        .set({ [fieldName]: fieldValue || null })
+        .where(and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)));
+
+      await logPersonActivity({
+        personId,
+        userId,
+        activityType: 'updated',
+        description: `Updated ${fieldName}`,
+      });
+
+      return data({ success: true });
+    } catch {
+      return data({ error: 'Failed to update field' }, { status: 500 });
+    }
+  }
+
+  // Update Notes
+  if (intent === 'updateNotes') {
+    const notes = formData.get('notes')?.toString();
+    const targetPersonId = formData.get('personId')?.toString();
+
+    if (!targetPersonId) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Person ID is required',
+        variant: 'destructive',
+      });
+      return data({ error: 'Person ID required' }, { headers, status: 400 });
+    }
+
+    try {
+      await db
+        .update(peopleTable)
+        .set({ notes: notes || null })
+        .where(and(eq(peopleTable.id, targetPersonId), eq(peopleTable.organizationId, organizationId)));
+
+      await logPersonActivity({
+        personId: targetPersonId,
+        userId,
+        activityType: 'updated',
+        description: 'Notes updated',
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'Notes updated successfully',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to update notes',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to update notes' }, { headers, status: 500 });
+    }
+  }
+
   // Complete task
   if (intent === 'completeTask') {
     const taskId = formData.get('taskId')?.toString();
@@ -445,8 +688,8 @@ const PersonPage = () => {
     submit(formData, { method: 'post' });
   };
 
-  // Person sidebar content
-  const PersonSidebar = () => (
+  // Sidebar JSX
+  const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <Button
@@ -501,7 +744,7 @@ const PersonPage = () => {
           <div className="flex items-center gap-2 mb-1">
             <h2 className="text-lg font-semibold">{person.name || 'Unnamed Person'}</h2>
             {person.whopUserId && (
-              <Badge variant="outline" className="h-4 text-[10px] px-1 bg-purple-50 border-purple-200 text-purple-700">
+              <Badge variant="outline" className="h-5 text-[10px] px-2 bg-primary">
                 Whop
               </Badge>
             )}
@@ -511,15 +754,17 @@ const PersonPage = () => {
 
         {/* Details Section */}
         <div className="space-y-4">
-          {person.description && (
-            <>
-              <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Description</h3>
-                <p className="text-sm text-foreground whitespace-pre-wrap">{person.description}</p>
-              </div>
-              <Separator />
-            </>
-          )}
+          <div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Description</h3>
+            <EditableField
+              value={person.description}
+              fieldName="fieldValue"
+              intent="updatePersonField"
+              fieldNameParam="description"
+              placeholder="Add description..."
+            />
+          </div>
+          <Separator />
 
           <div>
             <h3 className="mb-2 text-xs font-medium text-muted-foreground">Contact</h3>
@@ -534,7 +779,7 @@ const PersonPage = () => {
                           {email.email}
                         </a>
                         {email.isPrimary && (
-                          <Badge variant="secondary" className="h-4 text-[10px] px-1">
+                          <Badge variant="secondary" className="h-5 text-[10px] px-1">
                             Primary
                           </Badge>
                         )}
@@ -543,37 +788,36 @@ const PersonPage = () => {
                   </div>
                 </div>
               )}
-              {person.phone && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Phone className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{person.phone}</p>
-                  </div>
-                </div>
-              )}
-              {person.address && (
-                <div className="flex items-start gap-2 text-sm">
-                  <MapPin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{person.address}</p>
-                  </div>
-                </div>
-              )}
-              {person.website && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Globe className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={person.website.startsWith('http') ? person.website : `https://${person.website}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      {person.website}
-                    </a>
-                  </div>
-                </div>
-              )}
+              <div className="flex items-start gap-2 text-sm">
+                <Phone className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={person.phone}
+                  fieldName="fieldValue"
+                  intent="updatePersonField"
+                  fieldNameParam="phone"
+                  placeholder="Add phone..."
+                />
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <MapPin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={person.address}
+                  fieldName="fieldValue"
+                  intent="updatePersonField"
+                  fieldNameParam="address"
+                  placeholder="Add address..."
+                />
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <Globe className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={person.website}
+                  fieldName="fieldValue"
+                  intent="updatePersonField"
+                  fieldNameParam="website"
+                  placeholder="Add website..."
+                />
+              </div>
             </div>
           </div>
 
@@ -597,43 +841,28 @@ const PersonPage = () => {
           <Separator />
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-medium text-muted-foreground">Social</h3>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <Edit className="h-3 w-3" />
-              </Button>
-            </div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Social</h3>
             <div className="space-y-2">
-              {person.linkedin && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Linkedin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={person.linkedin}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      LinkedIn
-                    </a>
-                  </div>
-                </div>
-              )}
-              {person.twitter && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Twitter className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 overflow-hidden">
-                    <a
-                      href={`https://twitter.com/${person.twitter.replace('@', '')}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-primary truncate"
-                    >
-                      {person.twitter}
-                    </a>
-                  </div>
-                </div>
-              )}
+              <div className="flex items-start gap-2 text-sm">
+                <Linkedin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={person.linkedin}
+                  fieldName="fieldValue"
+                  intent="updatePersonField"
+                  fieldNameParam="linkedin"
+                  placeholder="Add LinkedIn..."
+                />
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <Twitter className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <EditableField
+                  value={person.twitter}
+                  fieldName="fieldValue"
+                  intent="updatePersonField"
+                  fieldNameParam="twitter"
+                  placeholder="Add Twitter..."
+                />
+              </div>
             </div>
           </div>
 
@@ -679,7 +908,7 @@ const PersonPage = () => {
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
       <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        <PersonSidebar />
+        {sidebarContent}
       </div>
 
       {/* Mobile Sheet */}
@@ -688,7 +917,7 @@ const PersonPage = () => {
           <SheetHeader className="sr-only">
             <SheetTitle>Person Details</SheetTitle>
           </SheetHeader>
-          <PersonSidebar />
+          {sidebarContent}
         </SheetContent>
       </Sheet>
 
@@ -712,10 +941,7 @@ const PersonPage = () => {
             <div className="flex items-center gap-2">
               <h1 className="text-base font-semibold">{person.name || 'Unnamed Person'}</h1>
               {person.whopUserId && (
-                <Badge
-                  variant="outline"
-                  className="h-4 text-[10px] px-1 bg-purple-50 border-purple-200 text-purple-700"
-                >
+                <Badge variant="outline" className="h-5 text-[10px] px-2 bg-primary">
                   Whop
                 </Badge>
               )}
@@ -727,10 +953,23 @@ const PersonPage = () => {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-8 text-xs bg-transparent">
-              <Mail className="mr-1.5 h-3.5 w-3.5" />
-              Compose email
-            </Button>
+            <QuickActionsMenu
+              type="person"
+              entityId={person.id}
+              entityName={person.name || 'Unnamed Person'}
+              hasWhopId={!!person.whopUserId}
+              primaryEmail={
+                person.peopleEmails?.find((pe) => pe.email.isPrimary)?.email.email ||
+                person.peopleEmails?.[0]?.email.email
+              }
+              userId={userId}
+              organizationId={organizationId}
+              onDelete={() => {
+                const formData = new FormData();
+                formData.append('intent', 'delete');
+                submit(formData, { method: 'post' });
+              }}
+            />
           </div>
         </div>
 
