@@ -21,24 +21,35 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   if (!access) {
     throw new Response('Access denied', { status: 403 });
   }
+
   // Check if organization exists
   const organization = await db.query.organizationTable.findFirst({
     where: eq(organizationTable.id, companyId),
   });
 
-  const url = new URL(request.url);
-  if (!organization && url.pathname !== href('/dashboard/:companyId/onboarding/new', { companyId })) {
-    return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
-  }
-
+  // Check if user exists
   const user = await db.query.userTable.findFirst({
     where: eq(userTable.whopUserId, userId),
   });
 
-  if (!user) {
-    return redirect(href('/dashboard/:companyId/onboarding/invited', { companyId }));
+  const url = new URL(request.url);
+  const onboardingNewPath = href('/dashboard/:companyId/onboarding/new', { companyId });
+
+  // Smart redirect logic:
+  // 1. If no org exists -> redirect to onboarding/new (step 1: create org)
+  // 2. If org exists but no user -> redirect to onboarding/new (step 2: create user)
+  // 3. If both exist -> continue to dashboard
+  if (!organization) {
+    if (url.pathname !== onboardingNewPath) {
+      return redirect(onboardingNewPath);
+    }
+  } else if (!user) {
+    if (url.pathname !== onboardingNewPath) {
+      return redirect(onboardingNewPath);
+    }
   }
 
+  // If both org and user exist, or we're already on onboarding, continue
   const { toast: toastData, headers } = await popToast(request);
 
   return data(

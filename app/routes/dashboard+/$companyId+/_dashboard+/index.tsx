@@ -1,13 +1,13 @@
-import { and, eq, gte, sql, inArray } from 'drizzle-orm';
-import { Building2, CheckSquare, User, ArrowUp, ArrowDown } from 'lucide-react';
-import { Link, useLoaderData, href } from 'react-router';
-import { db } from '~/db/index';
-import { boardTaskTable, boardTable, companiesTable, peopleTable } from '~/db/schema';
-import { verifyWhopToken, whopSdk } from '~/services/whop.server';
-import type { Route } from './+types/';
+import { and, eq, gte, inArray, sql } from 'drizzle-orm';
+import { ArrowDown, ArrowUp, Building2, CheckSquare, User } from 'lucide-react';
+import { href, Link, useLoaderData } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
+import { db } from '~/db/index';
+import { boardTable, boardTaskTable, companiesTable, peopleTable } from '~/db/schema';
+import { requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
+import type { Route } from './+types/';
 
 function formatNumber(n: number) {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
@@ -17,6 +17,7 @@ function formatNumber(n: number) {
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
+  await requireUser(request, companyId);
   const { userId } = await verifyWhopToken(request);
   const { access_level } = await whopSdk.users.checkAccess(companyId, { id: userId });
 

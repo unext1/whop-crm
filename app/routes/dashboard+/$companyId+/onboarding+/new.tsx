@@ -57,12 +57,8 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { companyId } = params;
   const { userId } = await verifyWhopToken(request);
-  console.log('userId', userId);
-
   const authorizedUser = await getAuthorizedUserId({ companyId, regularUserId: userId });
-  console.log('authorizedUser', authorizedUser);
   const publicWhopUser = await getPublicUser(userId);
-  console.log('publicWhopUser', publicWhopUser);
 
   const formData = await request.formData();
   const intent = formData.get('intent')?.toString();
