@@ -223,11 +223,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
   }
 
-  const isMember = task.board.members.find((i) => i.userId === user.id);
-  if (!isMember) {
-    throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
-  }
-
   // Fetch activities for this task
   const activities = await db.query.activitiesTable.findMany({
     where: and(eq(activitiesTable.entityType, 'task'), eq(activitiesTable.entityId, taskId)),

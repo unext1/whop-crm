@@ -58,7 +58,7 @@ export function ComboboxMultiple({
             className="w-full p-1 relative"
             disabled={disabled}
           >
-            <div className="flex flex-wrap items-center gap-1 pe-2.5">
+            <div className="flex flex-wrap w-full justify-start gap-1 pe-2.5">
               {selectedIds.length > 0 ? (
                 selectedIds.map((val) => {
                   const option = options.find((o) => o.id === val);
