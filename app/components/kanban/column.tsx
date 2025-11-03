@@ -3,8 +3,10 @@ import { useRef, useState } from 'react';
 
 import { Card } from '../ui/card';
 import { EditableText } from './editible-text';
-import { NewTask } from './new-task';
-import Task from './task';
+import { NewTaskTodo } from './new-task-todo';
+import { NewTaskDeal } from './new-task-deal';
+import TaskTodo from './task-todo';
+import TaskDeal from './task-deal';
 
 export interface TaskType {
   id: string;
@@ -14,6 +16,12 @@ export interface TaskType {
   content: string | null;
   columnId: string;
   ownerId: string | null;
+  type?: 'tasks' | 'pipeline';
+  dueDate?: string | null;
+  priority?: string | null;
+  amount?: number | null;
+  company?: { id: string; name: string | null } | null;
+  person?: { id: string; name: string | null } | null;
   assignees?: Array<{
     user: {
       id: string;
@@ -21,7 +29,23 @@ export interface TaskType {
       profilePictureUrl: string | null;
     };
   }>;
+  owner?: {
+    id: string;
+    name: string | null;
+    profilePictureUrl: string | null;
+  } | null;
+  commentsCount?: number;
 }
+
+type Company = {
+  id: string;
+  name: string | null;
+};
+
+type Person = {
+  id: string;
+  name: string | null;
+};
 
 interface ColumnProps {
   name: string;
@@ -30,6 +54,11 @@ interface ColumnProps {
   order: number;
   color?: string;
   disableEdit?: boolean;
+  taskType?: 'tasks' | 'pipeline';
+  companies?: Company[];
+  people?: Person[];
+  boardId?: string;
+  userId?: string;
 }
 
 const COLUMN_COLORS = [
@@ -47,7 +76,18 @@ const getColumnColor = (order: number) => {
   return COLUMN_COLORS[order % COLUMN_COLORS.length];
 };
 
-const Column = ({ name, columnId, tasks, order, disableEdit = false }: ColumnProps) => {
+const Column = ({
+  name,
+  columnId,
+  tasks,
+  order,
+  disableEdit = false,
+  taskType = 'pipeline',
+  companies = [],
+  people = [],
+  boardId,
+  userId,
+}: ColumnProps) => {
   const colorConfig = getColumnColor(order);
   const submit = useSubmit();
 
@@ -120,34 +160,75 @@ const Column = ({ name, columnId, tasks, order, disableEdit = false }: ColumnPro
       </div>
       <ul
         ref={listRef}
-        className="grow mb-3 space-y-2.5 min-h-[100px] px-4 overflow-y-scroll overflow-x-hidden scrollbar-thin"
+        className="grow mb-3 space-y-2.5 px-4 scrollbar-thin overflow-y-auto min-h-0 overscroll-contain overflow-x-hidden"
       >
         {tasks
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-          .map((task, index, tasks) => (
-            <Task
-              key={task.id}
-              name={task.name}
-              content={task.content}
-              id={task.id}
-              createdAt={task.createdAt}
-              order={task.order ?? 0}
-              columnId={columnId}
-              ownerId={task.ownerId}
-              assignees={task.assignees}
-              previousOrder={tasks[index - 1] ? (tasks[index - 1].order ?? 0) : 0}
-              nextOrder={tasks[index + 1] ? (tasks[index + 1].order ?? 0) : (task.order ?? 0) + 1}
-            />
-          ))}
+          .map((task, index, tasks) => {
+            const commonProps = {
+              name: task.name,
+              content: task.content,
+              id: task.id,
+              createdAt: task.createdAt,
+              order: task.order ?? 0,
+              columnId,
+              ownerId: task.ownerId,
+              owner: task.owner,
+              assignees: task.assignees,
+              previousOrder: tasks[index - 1] ? (tasks[index - 1].order ?? 0) : 0,
+              nextOrder: tasks[index + 1] ? (tasks[index + 1].order ?? 0) : (task.order ?? 0) + 1,
+              commentsCount: task.commentsCount ?? 0,
+            };
+
+            if (taskType === 'tasks') {
+              return (
+                <TaskTodo
+                  key={task.id}
+                  {...commonProps}
+                  dueDate={task.dueDate}
+                  priority={task.priority}
+                  company={task.company}
+                  person={task.person}
+                />
+              );
+            }
+            return (
+              <TaskDeal
+                key={task.id}
+                {...commonProps}
+                company={task.company}
+                person={task.person}
+                amount={task.amount}
+              />
+            );
+          })}
       </ul>
 
-      <NewTask
-        columnId={columnId}
-        columnName={name}
-        nextOrder={tasks.length === 0 ? 1 : (tasks[tasks.length - 1].order ?? 0) + 1}
-        onAddCard={() => scrollList()}
-        onComplete={() => setEdit(false)}
-      />
+      {taskType === 'tasks' ? (
+        <NewTaskTodo
+          columnId={columnId}
+          columnName={name}
+          nextOrder={tasks.length === 0 ? 1 : (tasks[tasks.length - 1].order ?? 0) + 1}
+          onAddCard={() => scrollList()}
+          onComplete={() => setEdit(false)}
+          companies={companies}
+          people={people}
+          boardId={boardId}
+          userId={userId}
+        />
+      ) : (
+        <NewTaskDeal
+          columnId={columnId}
+          columnName={name}
+          nextOrder={tasks.length === 0 ? 1 : (tasks[tasks.length - 1].order ?? 0) + 1}
+          onAddCard={() => scrollList()}
+          onComplete={() => setEdit(false)}
+          companies={companies}
+          people={people}
+          boardId={boardId}
+          userId={userId}
+        />
+      )}
     </Card>
   );
 };

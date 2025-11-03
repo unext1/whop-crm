@@ -17,7 +17,7 @@ import { hasAccess, verifyWhopToken } from '~/services/whop.server';
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
   const { userId } = await verifyWhopToken(request);
-  const access = await hasAccess({ userId, companyId });
+  const access = await hasAccess({ request, companyId });
   if (!access) {
     throw new Response('Access denied', { status: 403 });
   }
@@ -72,7 +72,7 @@ const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
         id="content"
         className={cn(
           'ml-auto w-full max-w-full pb-2',
-          'peer-data-[state=collapsed]:w-[calc(100%-var(--sidebar-width-icon)-1rem)]',
+          'peer-data-[state=collapsed]:w-[calc(100%-var(--sidebar-width-icon)-0rem)]',
           'peer-data-[state=expanded]:w-[calc(100%-var(--sidebar-width))]',
           'transition-[width] duration-200 ease-linear',
           'flex h-svh flex-col',

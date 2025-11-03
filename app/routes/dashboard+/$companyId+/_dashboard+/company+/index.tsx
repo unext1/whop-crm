@@ -15,6 +15,7 @@ import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import { logCompanyActivity } from '~/utils/activity.server';
 import { db } from '~/db';
 import { companiesTable, type CompanyType } from '~/db/schema';
 import { useDataTable } from '~/hooks/use-data-table';
@@ -221,6 +222,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
+  const { userId } = await verifyWhopToken(request);
   const formData = await request.formData();
   const intent = formData.get('intent');
 
@@ -245,17 +247,28 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
 
     try {
-      await db.insert(companiesTable).values({
-        name,
-        description,
-        domain,
-        website,
-        industry,
-        address,
-        phone,
-        linkedin,
-        twitter,
-        organizationId: params.companyId,
+      const [newCompany] = await db
+        .insert(companiesTable)
+        .values({
+          name,
+          description,
+          domain,
+          website,
+          industry,
+          address,
+          phone,
+          linkedin,
+          twitter,
+          organizationId: params.companyId,
+        })
+        .returning();
+
+      // Log activity for company creation
+      await logCompanyActivity({
+        companyId: newCompany.id,
+        userId,
+        activityType: 'created',
+        description: `Company "${name}" was created`,
       });
 
       const headers = await putToast({

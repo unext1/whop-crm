@@ -22,6 +22,18 @@ export const parseCookies = (cookieHeader: string): Record<string, string> => {
       }
       return acc;
     },
-    {} as Record<string, string>
+    {} as Record<string, string>,
   );
 };
+
+export function formatCurrency(amount: number | null | undefined): string {
+  if (!amount || amount === 0) return '';
+
+  if (amount >= 1000000) {
+    return `${(amount / 1000000).toFixed(1).replace(/\.0$/, '')}m`;
+  }
+  if (amount >= 1000) {
+    return `${(amount / 1000).toFixed(1).replace(/\.0$/, '')}k`;
+  }
+  return amount.toLocaleString('en-US');
+}

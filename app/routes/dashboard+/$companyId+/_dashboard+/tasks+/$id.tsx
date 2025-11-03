@@ -1,18 +1,6 @@
 import { parseWithZod } from '@conform-to/zod';
 import { and, eq } from 'drizzle-orm';
-import {
-  CheckSquare,
-  Clock,
-  Edit,
-  FileText,
-  Menu,
-  MoreHorizontal,
-  Paperclip,
-  Plus,
-  Trash2,
-  User,
-  X,
-} from 'lucide-react';
+import { Building2, Edit, FileText, Menu, MoreHorizontal, Paperclip, Plus, Trash2, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
 import { z } from 'zod';
@@ -37,14 +25,22 @@ import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Textarea } from '~/components/ui/textarea';
 import { db } from '~/db/index';
+import {
+  boardTaskTable,
+  taskAssigneesTable,
+  taskCommentTable,
+  activitiesTable,
+  companiesTable,
+  peopleTable,
+  userTable,
+} from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { logTaskActivity } from '~/utils/activity.server';
 import { cn } from '~/utils';
-import type { Route } from './+types/$taskId';
-import { boardTaskTable, taskAssigneesTable, taskCommentTable, activitiesTable } from '~/db/schema';
+import type { Route } from './+types/$id';
 
 const removeUserSchema = z.object({
-  invitedUser: z.string(),
+  userId: z.string(),
 });
 
 const updateTaskSchema = z.object({
@@ -52,16 +48,22 @@ const updateTaskSchema = z.object({
   name: z.string(),
 });
 
+const updateContentSchema = z.object({
+  taskId: z.string(),
+  content: z.string(),
+});
+
 const insertCommentSchema = z.object({
   description: z.string(),
 });
+
 const removeCommentSchema = z.object({
   commentId: z.string(),
 });
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { user } = await requireUser(request, params.companyId);
-  const { taskId } = params;
+  const { id: taskId, companyId } = params;
 
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -75,18 +77,14 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
+    // Get old task name for activity log
     const oldTask = await db.query.boardTaskTable.findFirst({
       where: eq(boardTaskTable.id, taskId),
     });
 
-    await db
-      .update(boardTaskTable)
-      .set({
-        name: submission.value.name,
-      })
-      .where(and(eq(boardTaskTable.id, taskId)));
+    await db.update(boardTaskTable).set({ name: submission.value.name }).where(eq(boardTaskTable.id, taskId));
 
-    // Log activity if name changed
+    // Log activity
     if (oldTask && oldTask.name !== submission.value.name) {
       await logTaskActivity({
         taskId,
@@ -99,6 +97,40 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         },
       });
     }
+
+    return {};
+  }
+
+  if (intent === 'updateContent') {
+    const submission = parseWithZod(formData, { schema: updateContentSchema });
+
+    if (submission.status !== 'success') {
+      return data(submission.reply(), {
+        status: submission.status === 'error' ? 400 : 200,
+      });
+    }
+
+    // Get old content for activity log
+    const oldTask = await db.query.boardTaskTable.findFirst({
+      where: eq(boardTaskTable.id, taskId),
+    });
+
+    await db
+      .update(boardTaskTable)
+      .set({ content: submission.value.content || null })
+      .where(eq(boardTaskTable.id, taskId));
+
+    // Log activity
+    await logTaskActivity({
+      taskId,
+      userId: user.id,
+      activityType: 'content_changed',
+      metadata: {
+        field: 'content',
+        oldValue: oldTask?.content || null,
+        newValue: submission.value.content || null,
+      },
+    });
 
     return {};
   }
@@ -118,15 +150,14 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       userId: user.id,
     });
 
-    // Log comment activity
+    // Log activity
     await logTaskActivity({
       taskId,
       userId: user.id,
       activityType: 'updated',
-      description: 'Added a comment',
+      description: 'Comment added',
       metadata: {
         field: 'comment',
-        action: 'added',
       },
     });
 
@@ -142,56 +173,117 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
-    await db
+    return await db
       .delete(taskCommentTable)
       .where(and(eq(taskCommentTable.id, submission.value.commentId), eq(taskCommentTable.userId, user.id)));
+  }
 
-    // Log comment removal activity
+  if (intent === 'removeUser') {
+    const submission = parseWithZod(formData, { schema: removeUserSchema });
+
+    if (submission.status !== 'success') {
+      return data(submission.reply(), { status: 400 });
+    }
+
+    // Get the task to check ownership
+    const task = await db.query.boardTaskTable.findFirst({
+      where: eq(boardTaskTable.id, taskId),
+    });
+
+    if (!task || task.ownerId !== user.id) {
+      return data({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    // Get user info before removing for activity log
+    const removedUser = await db.query.userTable.findFirst({
+      where: eq(userTable.id, submission.value.userId),
+    });
+
+    await db
+      .delete(taskAssigneesTable)
+      .where(and(eq(taskAssigneesTable.taskId, taskId), eq(taskAssigneesTable.userId, submission.value.userId)));
+
+    // Log activity
     await logTaskActivity({
       taskId,
       userId: user.id,
-      activityType: 'updated',
-      description: 'Removed a comment',
-      metadata: {
-        field: 'comment',
-        action: 'removed',
-      },
+      activityType: 'assignee_removed',
+      relatedEntityId: submission.value.userId,
+      relatedEntityType: 'user',
+      description: removedUser ? `${removedUser.name} was unassigned` : 'User was unassigned',
     });
 
     return {};
   }
 
-  const submission = parseWithZod(formData, { schema: removeUserSchema });
+  if (intent === 'addUser') {
+    const userId = formData.get('userId')?.toString();
 
-  if (submission.status !== 'success') {
-    return data(submission.reply(), {
-      status: submission.status === 'error' ? 400 : 200,
+    if (!userId) {
+      return data({ error: 'User ID required' }, { status: 400 });
+    }
+
+    // Get the task to check ownership
+    const task = await db.query.boardTaskTable.findFirst({
+      where: eq(boardTaskTable.id, taskId),
     });
+
+    if (!task || task.ownerId !== user.id) {
+      return data({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    // Check if user is already assigned
+    const existing = await db.query.taskAssigneesTable.findFirst({
+      where: and(eq(taskAssigneesTable.taskId, taskId), eq(taskAssigneesTable.userId, userId)),
+    });
+
+    if (existing) {
+      return data({ error: 'User already assigned' }, { status: 400 });
+    }
+
+    await db.insert(taskAssigneesTable).values({
+      taskId: taskId,
+      userId: userId,
+    });
+
+    // Get user info for activity log
+    const addedUser = await db.query.userTable.findFirst({
+      where: eq(userTable.id, userId),
+    });
+
+    // Log activity
+    await logTaskActivity({
+      taskId,
+      userId: user.id,
+      activityType: 'assignee_added',
+      relatedEntityId: userId,
+      relatedEntityType: 'user',
+      description: addedUser ? `${addedUser.name} was assigned` : 'User was assigned',
+    });
+
+    return {};
   }
 
-  const invitedUser = JSON.parse(submission.value.invitedUser);
+  if (intent === 'removeTask') {
+    // Get the task to check ownership
+    const task = await db.query.boardTaskTable.findFirst({
+      where: eq(boardTaskTable.id, taskId),
+    });
 
-  await db.insert(taskAssigneesTable).values({
-    taskId: taskId,
-    userId: invitedUser.id,
-  });
+    if (!task || task.ownerId !== user.id) {
+      return data({ error: 'Unauthorized' }, { status: 403 });
+    }
 
-  // Log user assignment activity
-  await logTaskActivity({
-    taskId,
-    userId: user.id,
-    activityType: 'assignee_added',
-    description: `Assigned ${invitedUser.name || 'a user'}`,
-    relatedEntityId: invitedUser.id,
-    relatedEntityType: 'user',
-  });
+    await db.delete(boardTaskTable).where(eq(boardTaskTable.id, taskId));
+    return redirect(`/dashboard/${companyId}/tasks`);
+  }
 
-  return data(submission.reply());
+  return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { user } = await requireUser(request, params.companyId);
-  const { projectId, companyId, taskId } = params;
+  const { id: taskId, companyId } = params;
 
   const task = await db.query.boardTaskTable.findFirst({
     with: {
@@ -209,24 +301,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
       // Note: Activities are now stored in the unified activities table
       // We'll fetch them separately with a filter
       column: true,
-      board: {
-        with: {
-          members: true,
-        },
-      },
+      board: true,
       owner: true,
     },
     where: eq(boardTaskTable.id, taskId),
   });
 
-  if (!task || !task.board) {
-    throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
+  if (!task) {
+    throw redirect(`/dashboard/${companyId}/tasks`);
   }
 
-  const isMember = task.board.members.find((i) => i.userId === user.id);
-  if (!isMember) {
-    throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
+  // Verify task belongs to this organization's tasks board
+  if (task.type !== 'tasks' || !task.board || task.board.companyId !== companyId) {
+    throw redirect(`/dashboard/${companyId}/tasks`);
   }
+
+  // Fetch company and person if associated
+  let company = null;
+  let person = null;
+
+  if (task.companyId) {
+    company = await db.query.companiesTable.findFirst({
+      where: eq(companiesTable.id, task.companyId),
+    });
+  }
+
+  if (task.personId) {
+    person = await db.query.peopleTable.findFirst({
+      where: eq(peopleTable.id, task.personId),
+    });
+  }
+
+  // Fetch all users in the organization for assigning
+  const users = await db.query.userTable.findMany({
+    where: eq(userTable.organizationId, companyId),
+    orderBy: userTable.name,
+  });
 
   // Fetch activities for this task
   const activities = await db.query.activitiesTable.findMany({
@@ -237,23 +347,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { task: { ...task, activities }, user, projectId, companyId, taskId };
+  return { task: { ...task, company, person, activities }, user, users };
 }
 
 const tabs = [
-  { id: 'timeline', label: 'Timeline', icon: Clock },
+  { id: 'overview', label: 'Overview', icon: FileText },
   { id: 'comments', label: 'Comments', icon: FileText },
-  { id: 'tasks', label: 'Sub-tasks', icon: CheckSquare },
   { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
-const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
-  const { task, user, projectId, companyId } = loaderData;
+const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
+  const { task, user, users } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [manageUsersOpen, setManageUsersOpen] = useState(false);
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const [contentValue, setContentValue] = useState(task.content || '');
+
+  // Get assigned user IDs
+  const assignedUserIds = new Set(task.assignees?.map((a) => a.userId) || []);
+
+  // Filter out already assigned users
+  const availableUsers = users.filter((u) => !assignedUserIds.has(u.id));
 
   // Task sidebar content
   const TaskSidebar = () => (
@@ -272,7 +389,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
         </Button>
       </div>
 
-      <div className=" p-4">
+      <div className="p-4">
         {/* Avatar and Name */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
@@ -304,6 +421,32 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
           <Separator />
 
+          {task.company && (
+            <>
+              <div>
+                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Company</h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <Building2 className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-foreground">{task.company.name || 'Unnamed Company'}</span>
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
+          {task.person && (
+            <>
+              <div>
+                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Person</h3>
+                <div className="flex items-center gap-2 text-sm">
+                  <User className="h-4 w-4 text-muted-foreground" />
+                  <span className="text-foreground">{task.person.name || 'Unnamed Person'}</span>
+                </div>
+              </div>
+              <Separator />
+            </>
+          )}
+
           <div>
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-xs font-medium text-muted-foreground">Assignees</h3>
@@ -318,7 +461,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 task.assignees.map((assignee) => (
                   <div key={assignee.userId} className="flex items-center gap-2 text-sm">
                     <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarImage src={assignee.user.name || ''} alt="avatar" />
+                      <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
                         {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
                       </AvatarFallback>
@@ -342,7 +485,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               {task.owner ? (
                 <div className="flex items-center gap-2 text-sm">
                   <Avatar className="h-6 w-6 shrink-0">
-                    <AvatarImage src={task.owner.name || ''} alt="avatar" />
+                    <AvatarImage src={task.owner.profilePictureUrl || ''} alt="avatar" />
                     <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
                       {task.owner.name ? task.owner.name[0].toUpperCase() : 'O'}
                     </AvatarFallback>
@@ -386,6 +529,24 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                       day: 'numeric',
                     })}
                   </p>
+                </div>
+              )}
+              {task.dueDate && (
+                <div>
+                  <p className="text-muted-foreground">Due Date</p>
+                  <p className="text-foreground">
+                    {new Date(task.dueDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
+                  </p>
+                </div>
+              )}
+              {task.priority && (
+                <div>
+                  <p className="text-muted-foreground">Priority</p>
+                  <p className="text-foreground capitalize">{task.priority}</p>
                 </div>
               )}
             </div>
@@ -465,13 +626,8 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <DropdownMenuLabel className="text-xs">Task Control</DropdownMenuLabel>
                     <DropdownMenuSeparator />
                     <DropdownMenuGroup>
-                      <fetcher.Form
-                        method="post"
-                        action={`/dashboard/${companyId}/projects/${projectId}/removeTask`}
-                        className="my-auto"
-                      >
+                      <fetcher.Form method="post" className="my-auto">
                         <input type="hidden" name="intent" value="removeTask" />
-                        <input type="hidden" name="taskId" value={task.id} />
                         <button aria-label="Delete Task" type="submit" className="w-full">
                           <DropdownMenuItem className="text-xs text-destructive">
                             <Trash2 className="h-3.5 w-3.5 mr-2" />
@@ -511,18 +667,77 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4">
-          {activeTab === 'timeline' && (
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                {new Date(task.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Content/Description */}
+              <div>
+                <div className="mb-3 flex items-center justify-between">
+                  <h2 className="text-sm font-semibold">Description</h2>
+                  {!isEditingContent && task.ownerId === user.id && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setIsEditingContent(true);
+                        setContentValue(task.content || '');
+                      }}
+                    >
+                      <Edit className="mr-1.5 h-3.5 w-3.5" />
+                      Edit
+                    </Button>
+                  )}
+                </div>
+                {isEditingContent ? (
+                  <Form method="post" onSubmit={() => setIsEditingContent(false)} className="space-y-3">
+                    <Textarea
+                      name="content"
+                      rows={6}
+                      value={contentValue}
+                      onChange={(e) => setContentValue(e.target.value)}
+                      placeholder="Add task description..."
+                      className="resize-none"
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => {
+                          setIsEditingContent(false);
+                          setContentValue(task.content || '');
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" size="sm" className="h-8 text-xs">
+                        Save
+                      </Button>
+                    </div>
+                    <input type="hidden" name="intent" value="updateContent" />
+                    <input type="hidden" name="taskId" value={task.id} />
+                  </Form>
+                ) : (
+                  <Card className="p-4 bg-card shadow-sm">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">
+                      {task.content || <span className="text-muted-foreground">No description</span>}
+                    </p>
+                  </Card>
+                )}
               </div>
-              <ActivityTimeline
-                activities={task.activities}
-                fallbackCreatedAt={task.createdAt}
-                fallbackUpdatedAt={task.updatedAt}
-                fallbackName={task.name}
-                fallbackType="Task"
-              />
+
+              {/* Timeline */}
+              <div>
+                <h2 className="mb-3 text-sm font-semibold">Activity Timeline</h2>
+                <ActivityTimeline
+                  activities={task.activities}
+                  fallbackCreatedAt={task.createdAt}
+                  fallbackUpdatedAt={task.updatedAt}
+                  fallbackName={task.name}
+                  fallbackType="Task"
+                />
+              </div>
             </div>
           )}
 
@@ -534,7 +749,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   <Label className="text-xs font-semibold text-muted-foreground">Add Comment</Label>
                   <div className="flex gap-2 mt-4">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={user.name || ''} alt="avatar" />
+                      <AvatarImage src={user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                         {user.name ? user.name[0].toUpperCase() : 'U'}
                       </AvatarFallback>
@@ -564,7 +779,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <Card key={comment.id} className="p-4 bg-card shadow-sm">
                       <div className="flex items-start gap-3">
                         <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarImage src={comment.user?.name || ''} alt="avatar" />
+                          <AvatarImage src={comment.user?.profilePictureUrl || ''} alt="avatar" />
                           <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                             {comment.user?.name ? comment.user.name[0].toUpperCase() : 'U'}
                           </AvatarFallback>
@@ -605,26 +820,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <p className="mt-2 text-sm text-muted-foreground">No comments yet</p>
                   </div>
                 )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'tasks' && (
-            <div>
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Sub-tasks</h2>
-                <Button size="sm" className="h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New Sub-task
-                </Button>
-              </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
-                <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">No sub-tasks yet</p>
-                <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Create first sub-task
-                </Button>
               </div>
             </div>
           )}
@@ -674,22 +869,22 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 task.assignees.map((assignee) => {
                   return (
                     <div
-                      key={assignee.taskId}
+                      key={assignee.userId}
                       className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
                     >
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarImage src={assignee.user.name || ''} alt="avatar" />
+                          <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
                           <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                             {assignee.user.name ? assignee.user.name[0].toUpperCase() : ''}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm font-medium">{assignee.user.name}</span>
+                        <span className="text-sm font-medium">{assignee.user.name || 'Unknown'}</span>
                       </div>
                       {task.ownerId === user.id ? (
-                        <fetcher.Form method="post" action={`/dashboard/${companyId}/projects/${projectId}/removeUser`}>
-                          <input type="hidden" value={assignee.userId} name="userId" />
-                          <input type="hidden" value={task.id} name="taskId" />
+                        <fetcher.Form method="post">
+                          <input type="hidden" name="intent" value="removeUser" />
+                          <input type="hidden" name="userId" value={assignee.userId} />
                           <Button type="submit" variant="ghost" size="sm" className="h-7 w-7 text-xs">
                             ×
                           </Button>
@@ -701,6 +896,40 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">No users assigned</p>
               )}
+
+              {/* Add User Section */}
+              {task.ownerId === user.id && availableUsers.length > 0 && (
+                <>
+                  <Separator className="my-4" />
+                  <div>
+                    <h3 className="mb-3 text-sm font-medium">Add User</h3>
+                    <div className="space-y-2">
+                      {availableUsers.map((availableUser) => (
+                        <fetcher.Form
+                          key={availableUser.id}
+                          method="post"
+                          className="flex items-center justify-between"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={availableUser.profilePictureUrl || ''} alt="avatar" />
+                              <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                                {availableUser.name ? availableUser.name[0].toUpperCase() : 'U'}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span className="text-sm font-medium">{availableUser.name || 'Unknown'}</span>
+                          </div>
+                          <input type="hidden" name="intent" value="addUser" />
+                          <input type="hidden" name="userId" value={availableUser.id} />
+                          <Button type="submit" variant="outline" size="sm" className="h-7 text-xs">
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </fetcher.Form>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </DialogContent>
@@ -709,4 +938,4 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
   );
 };
 
-export default TaskRoute;
+export default TaskDetailPage;

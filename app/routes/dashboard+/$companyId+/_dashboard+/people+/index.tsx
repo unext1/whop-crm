@@ -1,25 +1,42 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { and, eq, sql } from 'drizzle-orm';
-import { CalendarIcon, MapPin, Phone, Plus, User, X } from 'lucide-react';
+import { CalendarIcon, Download, Mail, MapPin, Phone, Plus, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { data, Form, Link, useActionData, useLoaderData, useNavigation } from 'react-router';
+import { data, Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
 import { DataTable } from '~/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '~/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '~/components/data-table/data-table-column-header';
 import { DataTableFilterList } from '~/components/data-table/data-table-filter-list';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
+import { Checkbox } from '~/components/ui/checkbox';
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
+import { Skeleton } from '~/components/ui/skeleton';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import { logPersonActivity } from '~/utils/activity.server';
 import { db } from '~/db';
-import { companiesTable, companiesPeopleTable, peopleTable, type PeopleType } from '~/db/schema';
+import {
+  companiesPeopleTable,
+  companiesTable,
+  emailsTable,
+  peopleEmailsTable,
+  peopleTable,
+  type PeopleType,
+} from '~/db/schema';
 import { useDataTable } from '~/hooks/use-data-table';
 import { putToast } from '~/services/cookie.server';
-import { verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { getWhopCompanyMembers, verifyWhopToken, whopSdk } from '~/services/whop.server';
 import {
   buildOrderByClause,
   buildWhereClause,
@@ -34,6 +51,23 @@ type PeopleWithCompany = PeopleType & {
     id: string;
     name: string;
   };
+  emails?: Array<{
+    id: string;
+    email: string;
+    type: string | null;
+    isPrimary: boolean | null;
+  }>;
+};
+
+type WhopMember = {
+  id: string;
+  user: {
+    id: string;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  phone?: string | null;
 };
 
 const columns: ColumnDef<PeopleWithCompany>[] = [
@@ -50,9 +84,16 @@ const columns: ColumnDef<PeopleWithCompany>[] = [
             {name?.charAt(0) || 'P'}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="font-medium text-sm group-hover:text-primary transition-colors truncate">
-              {name || 'Unnamed Person'}
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="font-medium text-sm group-hover:text-primary transition-colors truncate">
+                {name || 'Unnamed Person'}
+              </span>
+              {person.whopUserId && (
+                <Badge variant="outline" className="h-4 text-[10px] px-2 mt-0.5 bg-primary">
+                  Whop
+                </Badge>
+              )}
+            </div>
             {person.jobTitle && <span className="text-xs text-muted-foreground truncate">{person.jobTitle}</span>}
           </div>
         </Link>
@@ -91,6 +132,44 @@ const columns: ColumnDef<PeopleWithCompany>[] = [
       icon: User,
     },
     enableColumnFilter: false,
+  },
+  {
+    id: 'emails',
+    accessorFn: (row) => {
+      const personWithCompany = row as PeopleWithCompany;
+      return personWithCompany.emails?.map((e) => e.email).join(', ') || '';
+    },
+    header: ({ column }) => <DataTableColumnHeader column={column} label="Emails" />,
+    cell: ({ row }) => {
+      const personWithCompany = row.original as PeopleWithCompany;
+      const emails = personWithCompany.emails || [];
+
+      if (emails.length === 0) {
+        return <span className="text-sm text-muted-foreground">—</span>;
+      }
+
+      return (
+        <div className="flex flex-wrap gap-1.5 max-w-[300px]">
+          {emails.map((email) => (
+            <Badge
+              key={email.id}
+              variant={email.isPrimary ? 'default' : 'secondary'}
+              className="text-xs font-normal max-w-full"
+            >
+              <Mail className="h-2.5 w-2.5 mr-1 shrink-0" />
+              <span className="truncate">{email.email}</span>
+            </Badge>
+          ))}
+        </div>
+      );
+    },
+    meta: {
+      label: 'Emails',
+      placeholder: 'Search emails...',
+      variant: 'text',
+      icon: Mail,
+    },
+    enableColumnFilter: true,
   },
   {
     id: 'phone',
@@ -199,7 +278,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const baseWhere = eq(peopleTable.organizationId, companyId);
   const where = filterWhere ? and(baseWhere, filterWhere) : baseWhere;
 
-  // Fetch data with many-to-many company relationships
+  // Fetch data with many-to-many company relationships and emails
   const peopleData = await db.query.peopleTable.findMany({
     where: where,
     orderBy: orderBy.length > 0 ? orderBy : [peopleTable.createdAt],
@@ -211,15 +290,23 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
           company: true,
         },
       },
+      peopleEmails: {
+        with: {
+          email: true,
+        },
+      },
     },
   });
 
-  // Transform data to include companies array
+  // Transform data to include companies and emails arrays
   const people = peopleData.map((person) => ({
     ...person,
     companies: person.companiesPeople.map((cp) => cp.company),
     // For backward compatibility, include the first company as 'company'
     company: person.companiesPeople[0]?.company,
+    emails: person.peopleEmails.map((pe) => pe.email),
+    // Include the primary email for quick access
+    primaryEmail: person.peopleEmails.find((pe) => pe.email.isPrimary)?.email || person.peopleEmails[0]?.email,
   }));
 
   // Get total count
@@ -243,8 +330,108 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
+  const { userId } = await verifyWhopToken(request);
   const formData = await request.formData();
   const intent = formData.get('intent');
+
+  // Load Whop members for import
+  if (intent === 'loadWhopMembers') {
+    try {
+      const allPeople = await db.query.peopleTable.findMany({
+        where: eq(peopleTable.organizationId, params.companyId),
+      });
+      const allWhopCompanyMembers = await getWhopCompanyMembers({ request, companyId: params.companyId });
+
+      // Filter out members without user or user.email
+      const validMembers = allWhopCompanyMembers.filter(
+        (member) => member.user?.email && !allPeople.some((p) => p.whopUserId === member.id),
+      );
+
+      return data({ members: validMembers });
+    } catch {
+      return data({ members: [], error: 'Failed to load members' }, { status: 500 });
+    }
+  }
+
+  // Import selected Whop members
+  if (intent === 'importWhopMembers') {
+    const selectedMemberIds = formData.getAll('memberIds');
+    const membersData = formData.get('membersData');
+
+    if (!membersData || !selectedMemberIds.length) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'No members selected for import',
+        variant: 'destructive',
+      });
+      return data({ error: 'No members selected', close: false }, { headers, status: 400 });
+    }
+
+    try {
+      const members = JSON.parse(membersData.toString()) as WhopMember[];
+      const selectedMembers = members.filter((m) => selectedMemberIds.includes(m.id));
+
+      // Batch insert the selected members with their emails
+      const insertedPeople = await Promise.all(
+        selectedMembers.map(async (member) => {
+          // Create the person
+          const [newPerson] = await db
+            .insert(peopleTable)
+            .values({
+              name: member.user?.name || member.user?.username || 'Unknown',
+              organizationId: params.companyId,
+              phone: member.phone || undefined,
+              whopUserId: member.id,
+            })
+            .returning();
+
+          // Create email if member has one
+          if (member.user?.email) {
+            const [newEmail] = await db
+              .insert(emailsTable)
+              .values({
+                email: member.user.email,
+                type: 'work',
+                isPrimary: true,
+                organizationId: params.companyId,
+              })
+              .returning();
+
+            // Link person to email
+            await db.insert(peopleEmailsTable).values({
+              personId: newPerson.id,
+              emailId: newEmail.id,
+            });
+          }
+
+          // Log activity for imported person
+          await logPersonActivity({
+            personId: newPerson.id,
+            userId,
+            activityType: 'created',
+            description: 'Imported from Whop',
+          });
+
+          return newPerson;
+        }),
+      );
+
+      const headers = await putToast({
+        title: 'Success',
+        message: `Successfully imported ${insertedPeople.length} ${insertedPeople.length === 1 ? 'person' : 'people'}`,
+        variant: 'default',
+      });
+
+      return data({ error: null, close: true, imported: insertedPeople.length }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to import members',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to import members', close: false }, { headers, status: 500 });
+    }
+  }
 
   if (intent === 'createPerson') {
     const name = formData.get('name')?.toString();
@@ -290,7 +477,25 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           companyId: companyId,
           personId: newPerson.id,
         });
+
+        // Log activity for company association
+        await logPersonActivity({
+          personId: newPerson.id,
+          userId,
+          activityType: 'company_linked',
+          description: 'Linked to company',
+          relatedEntityId: companyId,
+          relatedEntityType: 'company',
+        });
       }
+
+      // Log activity for person creation
+      await logPersonActivity({
+        personId: newPerson.id,
+        userId,
+        activityType: 'created',
+        description: `Person "${name}" was created`,
+      });
 
       const headers = await putToast({
         title: 'Success',
@@ -316,6 +521,191 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   });
 
   return data({ error: null, close: true }, { headers });
+};
+
+// Import Whop Members Dialog Component
+const ImportWhopMembersDialog = () => {
+  const [open, setOpen] = useState(false);
+  const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const fetcher = useFetcher<typeof action>();
+  const importFetcher = useFetcher<typeof action>();
+
+  // Load members when dialog opens
+  useEffect(() => {
+    if (open && !fetcher.data && fetcher.state === 'idle') {
+      fetcher.submit({ intent: 'loadWhopMembers' }, { method: 'post' });
+    }
+  }, [open, fetcher.data, fetcher.state, fetcher.submit]);
+
+  // Close dialog after successful import
+  useEffect(() => {
+    if (importFetcher.data && 'close' in importFetcher.data && importFetcher.data.close) {
+      setOpen(false);
+      setSelectedMembers(new Set());
+    }
+  }, [importFetcher.data]);
+
+  const members: WhopMember[] = fetcher.data && 'members' in fetcher.data ? (fetcher.data.members as WhopMember[]) : [];
+  const isLoading = fetcher.state === 'loading' || fetcher.state === 'submitting';
+  const isImporting = importFetcher.state === 'submitting';
+
+  const handleToggleMember = (memberId: string) => {
+    const newSelected = new Set(selectedMembers);
+    if (newSelected.has(memberId)) {
+      newSelected.delete(memberId);
+    } else {
+      newSelected.add(memberId);
+    }
+    setSelectedMembers(newSelected);
+  };
+
+  const handleToggleAll = () => {
+    if (selectedMembers.size === members.length) {
+      setSelectedMembers(new Set());
+    } else {
+      setSelectedMembers(new Set(members.map((m) => m.id)));
+    }
+  };
+
+  const handleImport = () => {
+    if (selectedMembers.size === 0) return;
+
+    const formData = new FormData();
+    formData.append('intent', 'importWhopMembers');
+    formData.append('membersData', JSON.stringify(members));
+    Array.from(selectedMembers).forEach((id) => {
+      formData.append('memberIds', id);
+    });
+
+    importFetcher.submit(formData, { method: 'post' });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button size="sm" variant="outline" className="h-8 text-xs">
+          <Download className="mr-1.5 h-3.5 w-3.5" />
+          Import from Whop
+        </Button>
+      </DialogTrigger>
+      <DialogContent
+        className="sm:max-w-[700px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-s"
+        showCloseButton={false}
+      >
+        {/* Header */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+              <Download className="h-3.5 w-3.5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base font-semibold m-0">Import Whop Members</DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground m-0 p-0">
+                Already imported members are not shown here.
+              </DialogDescription>
+            </div>
+          </div>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogClose>
+        </div>
+
+        {/* Content */}
+        <div className="overflow-auto max-h-[calc(100vh-240px)] p-6">
+          {isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full bg-muted" />
+              <Skeleton className="h-12 w-full bg-muted" />
+              <Skeleton className="h-12 w-full bg-muted" />
+            </div>
+          ) : members.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <User className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No members found</h3>
+              <p className="text-sm text-muted-foreground">No Whop members with email addresses were found.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* Select All */}
+              <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/50">
+                <Checkbox
+                  checked={selectedMembers.size === members.length && members.length > 0}
+                  onCheckedChange={handleToggleAll}
+                />
+                <div className="flex-1">
+                  <p className="text-sm font-medium">Select All</p>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedMembers.size} of {members.length} selected
+                  </p>
+                </div>
+              </div>
+
+              {/* Member List */}
+              <div className="space-y-2">
+                {members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center gap-3 p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                  >
+                    <Checkbox
+                      checked={selectedMembers.has(member.id)}
+                      onCheckedChange={() => handleToggleMember(member.id)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                          {member.user?.name?.charAt(0) || member.user?.username?.charAt(0) || 'U'}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-medium text-sm truncate">
+                            {member.user?.name || member.user?.username || 'Unknown'}
+                          </span>
+                          <span className="text-xs text-muted-foreground truncate">{member.user?.email}</span>
+                        </div>
+                      </div>
+                    </div>
+                    {member.phone && (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Phone className="h-3 w-3" />
+                        <span className="text-xs">{member.phone}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+          <div className="text-sm text-muted-foreground">
+            {selectedMembers.size > 0 &&
+              `${selectedMembers.size} member${selectedMembers.size !== 1 ? 's' : ''} selected`}
+          </div>
+          <div className="flex items-center gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" disabled={isImporting}>
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button
+              type="button"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={handleImport}
+              disabled={selectedMembers.size === 0 || isImporting}
+            >
+              {isImporting ? 'Importing...' : `Import ${selectedMembers.size > 0 ? selectedMembers.size : ''}`}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 const DashboardPage = () => {
@@ -346,7 +736,7 @@ const DashboardPage = () => {
   const [createMore, setCreateMore] = useState(false);
 
   useEffect(() => {
-    if (actionData?.close) {
+    if (actionData && 'close' in actionData && actionData.close) {
       if (createMore) {
         setOpen(true);
       } else {
@@ -373,6 +763,7 @@ const DashboardPage = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <ImportWhopMembersDialog />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 text-xs shadow-s">

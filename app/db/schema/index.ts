@@ -1,4 +1,4 @@
-export * from '../kanban-schemas';
+export * from './activities';
 export * from './companies';
 export * from './companies-poeple';
 export * from './emails';
@@ -7,3 +7,10 @@ export * from './people';
 export * from './people-emails';
 export * from './relations';
 export * from './user';
+
+export * from '../kanban-schemas/board';
+export * from '../kanban-schemas/board-column';
+export * from '../kanban-schemas/board-member';
+export * from '../kanban-schemas/board-task';
+export * from '../kanban-schemas/task-assignees';
+export * from '../kanban-schemas/task-comments';

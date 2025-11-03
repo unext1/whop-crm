@@ -1,4 +1,4 @@
-import { eq, sql, and } from 'drizzle-orm';
+import { eq, sql, and, inArray } from 'drizzle-orm';
 import { ArrowUpDown, KanbanSquareIcon, ListFilter } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
@@ -13,7 +13,14 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { db } from '~/db';
-import { boardColumnTable, boardTable, boardTaskTable, taskAssigneesTable } from '~/db/schema';
+import {
+  boardColumnTable,
+  boardTable,
+  boardTaskTable,
+  taskCommentTable,
+  companiesTable,
+  peopleTable,
+} from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
 
@@ -73,26 +80,26 @@ export async function action({ request, params }: Route.ActionArgs) {
       const columnId = String(formData.get('columnId') || '');
       const content = String(formData.get('content') || '');
       const order = Number(formData.get('order') || 0);
+      const amount = formData.get('amount') ? Number(formData.get('amount')) : null;
+      const relatedCompanyId = formData.get('relatedCompanyId') ? String(formData.get('relatedCompanyId')) : null;
+      const relatedPersonId = formData.get('relatedPersonId') ? String(formData.get('relatedPersonId')) : null;
 
-      await db.transaction(async (tx) => {
-        const task = await tx
-          .insert(boardTaskTable)
-          .values({
-            columnId,
-            name,
-            order,
-            ownerId: user.id,
-            boardId: projectId,
-            content,
-            type: 'pipeline',
-          })
-          .returning();
+      await db
+        .insert(boardTaskTable)
+        .values({
+          columnId,
+          name,
+          order,
+          ownerId: user.id,
+          boardId: projectId,
+          content,
+          type: 'pipeline',
+          companyId: relatedCompanyId,
+          personId: relatedPersonId,
+          amount,
+        })
+        .returning();
 
-        await tx.insert(taskAssigneesTable).values({
-          userId: user.id,
-          taskId: task[0].id,
-        });
-      });
       return {};
     }
     case 'removeColumn': {
@@ -150,6 +157,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
               user: true,
             },
           },
+          owner: true,
         },
       },
       columns: {
@@ -159,15 +167,67 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     where: and(eq(boardTable.id, projectId), eq(boardTable.type, 'pipeline')),
   });
 
+  // Fetch company and person relations for tasks, and comment counts
+  if (project[0]?.tasks) {
+    const taskIds = project[0].tasks.map((t) => t.id);
+
+    // Fetch comment counts for all tasks in one query
+    const commentCounts =
+      taskIds.length > 0
+        ? await db
+            .select({
+              taskId: taskCommentTable.taskId,
+              count: sql<number>`count(*)`,
+            })
+            .from(taskCommentTable)
+            .where(inArray(taskCommentTable.taskId, taskIds))
+            .groupBy(taskCommentTable.taskId)
+        : [];
+
+    const countsMap = new Map(commentCounts.map((cc) => [cc.taskId, Number(cc.count)]));
+
+    for (const task of project[0].tasks) {
+      if (task.companyId) {
+        const company = await db.query.companiesTable.findFirst({
+          where: eq(companiesTable.id, task.companyId),
+        });
+        if (company) {
+          Object.assign(task, { company });
+        }
+      }
+      if (task.personId) {
+        const person = await db.query.peopleTable.findFirst({
+          where: eq(peopleTable.id, task.personId),
+        });
+        if (person) {
+          Object.assign(task, { person });
+        }
+      }
+      // Add comment count
+      Object.assign(task, { commentsCount: countsMap.get(task.id) ?? 0 });
+    }
+  }
+
   const projects = await db.query.boardTable.findMany({
     where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
   });
 
-  return { project: project[0], companyId, projectId, user, projects };
+  // Fetch companies and people for task creation dialogs
+  const companies = await db.query.companiesTable.findMany({
+    where: eq(companiesTable.organizationId, companyId),
+    orderBy: companiesTable.name,
+  });
+
+  const people = await db.query.peopleTable.findMany({
+    where: eq(peopleTable.organizationId, companyId),
+    orderBy: peopleTable.name,
+  });
+
+  return { project: project[0], companyId, projectId, user, projects, companies, people };
 }
 
 const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
-  const { project, companyId, projectId, user, projects } = loaderData;
+  const { project, companyId, projectId, user, projects, companies, people } = loaderData;
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(project.id);
@@ -194,20 +254,50 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
       // Only update other fields if they're not null/empty
       if (pendingItem.name && pendingItem.name !== 'null') merged.name = pendingItem.name;
       if (pendingItem.content !== undefined && pendingItem.content !== 'null') merged.content = pendingItem.content;
+      if (pendingItem.relatedCompanyId && pendingItem.relatedCompanyId !== 'null') {
+        merged.companyId = pendingItem.relatedCompanyId;
+        if (pendingItem.companyName) {
+          Object.assign(merged, {
+            company: { id: pendingItem.relatedCompanyId, name: pendingItem.companyName },
+          });
+        }
+      }
+      if (pendingItem.relatedPersonId && pendingItem.relatedPersonId !== 'null') {
+        merged.personId = pendingItem.relatedPersonId;
+        if (pendingItem.personName) {
+          Object.assign(merged, {
+            person: { id: pendingItem.relatedPersonId, name: pendingItem.personName },
+          });
+        }
+      }
     } else {
       // For new items, use the pending item data
       merged = {
         ...pendingItem,
+        amount: pendingItem.amount && pendingItem.amount > 0 ? pendingItem.amount : null, // Don't show 0 in optimistic UI
         boardId: project.id,
         updatedAt: new Date().toISOString(),
-        personId: null,
-        companyId: null,
+        personId: pendingItem.relatedPersonId || null,
+        companyId: pendingItem.relatedCompanyId || null,
         status: 'open',
         dueDate: null,
         priority: null,
-        assignees: [],
+        assignees: [], // Start with empty assignees - owner is not auto-assigned
+        owner: user, // Add owner for "Created By" display
+        ownerId: user.id,
         type: 'pipeline',
-      };
+      } as TaskRecord;
+      // Add company/person objects for optimistic UI
+      if (pendingItem.companyName && pendingItem.relatedCompanyId) {
+        Object.assign(merged, {
+          company: { id: pendingItem.relatedCompanyId, name: pendingItem.companyName },
+        });
+      }
+      if (pendingItem.personName && pendingItem.relatedPersonId) {
+        Object.assign(merged, {
+          person: { id: pendingItem.relatedPersonId, name: pendingItem.personName },
+        });
+      }
     }
 
     tasksById.set(pendingItem.id, merged);
@@ -359,7 +449,20 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
         <div className="h-full overflow-x-auto scrollbar" ref={scrollContainerRef}>
           <div className="flex items-start gap-4 p-4 h-full">
             {[...columns.values()].map((col) => {
-              return <Column key={col.id} name={col.name} columnId={col.id} tasks={col.tasks} order={col.order} />;
+              return (
+                <Column
+                  key={col.id}
+                  name={col.name}
+                  columnId={col.id}
+                  tasks={col.tasks}
+                  order={col.order}
+                  taskType="pipeline"
+                  companies={companies}
+                  people={people}
+                  boardId={project.id}
+                  userId={user.id}
+                />
+              );
             })}
             <NewColumn projectId={project.id} onAdd={scrollRight} editInitially={project.columns.length === 0} />
           </div>
@@ -423,7 +526,22 @@ function usePendingTasks() {
       const boardId = String(fetcher.formData.get('boardId'));
       const ownerId = String(fetcher.formData.get('ownerId'));
       const content = String(fetcher.formData.get('content'));
-      const item: RenderedItem = {
+      const relatedCompanyId = fetcher.formData.get('relatedCompanyId')
+        ? String(fetcher.formData.get('relatedCompanyId'))
+        : null;
+      const relatedPersonId = fetcher.formData.get('relatedPersonId')
+        ? String(fetcher.formData.get('relatedPersonId'))
+        : null;
+      const companyName = fetcher.formData.get('companyName') ? String(fetcher.formData.get('companyName')) : null;
+      const personName = fetcher.formData.get('personName') ? String(fetcher.formData.get('personName')) : null;
+      const amount = fetcher.formData.get('amount') ? Number(fetcher.formData.get('amount')) : 0;
+      const item: RenderedItem & {
+        relatedCompanyId?: string | null;
+        relatedPersonId?: string | null;
+        companyName?: string | null;
+        personName?: string | null;
+        amount?: number;
+      } = {
         name,
         id,
         order,
@@ -432,6 +550,11 @@ function usePendingTasks() {
         ownerId,
         boardId,
         createdAt,
+        relatedCompanyId,
+        relatedPersonId,
+        companyName,
+        personName,
+        amount,
       };
       return item;
     });

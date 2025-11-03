@@ -17,7 +17,8 @@ export const verifyWhopToken = async (request: Request) => {
   return { userId };
 };
 
-export const hasAccess = async ({ userId, companyId }: { userId: string; companyId: string }) => {
+export const hasAccess = async ({ request, companyId }: { request: Request; companyId: string }) => {
+  const { userId } = await verifyWhopToken(request);
   const { access_level, has_access } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
   return has_access && access_level === 'admin';
@@ -48,7 +49,7 @@ export const requireUser = async (request: Request, companyId: string) => {
   const { userId } = await verifyWhopToken(request);
 
   // Check if user has access to the company (bizz)
-  const access = await hasAccess({ userId, companyId });
+  const access = await hasAccess({ request, companyId });
   if (!access) {
     throw new Response('Access denied', { status: 403 });
   }
@@ -64,6 +65,16 @@ export const requireUser = async (request: Request, companyId: string) => {
   return {
     user: user,
   };
+};
+
+export const getWhopCompanyMembers = async ({ request, companyId }: { request: Request; companyId: string }) => {
+  const isAdmin = await hasAccess({ request, companyId });
+  if (!isAdmin) {
+    throw new Response('Access denied', { status: 403 });
+  }
+
+  const memberListResponse = await whopSdk.members.list({ company_id: companyId });
+  return memberListResponse.data;
 };
 
 export const getAuthorizedUsers = async (companyId: string, role?: 'admin' | 'moderator' | 'owner') => {
