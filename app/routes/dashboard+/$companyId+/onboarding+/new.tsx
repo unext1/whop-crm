@@ -1,9 +1,8 @@
 import { eq } from 'drizzle-orm';
-import { Sparkles, Upload } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigation } from 'react-router';
-import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -82,17 +81,15 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   if (intent === 'createUser') {
     const firstName = formData.get('firstName')?.toString();
     const lastName = formData.get('lastName')?.toString();
-    const username = formData.get('username')?.toString();
 
-    if (!firstName || !lastName || !username) {
-      return data({ error: 'All fields are required', step: 2 } as const, { status: 400 });
+    if (!firstName || !lastName) {
+      return data({ error: 'First name and last name are required', step: 2 } as const, { status: 400 });
     }
 
     await db.insert(userTable).values({
       id: authorizedUser.id,
       email: authorizedUser.email || 'user@example.com',
       name: firstName.trim(),
-      username: username.trim(),
       lastName: lastName.trim(),
       whopUserId: userId,
       organizationId: companyId,
@@ -123,7 +120,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           id: member.id,
           email: member.email || `${member.name?.toLowerCase().replace(/\s+/g, '') || 'user'}@example.com`,
           name: member.name || 'Team Member',
-          username: member.name?.toLowerCase().replace(/\s+/g, '') || `user${member.id.slice(0, 8)}`,
           organizationId: companyId,
           whopUserId: member.id,
         });
@@ -151,7 +147,6 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const [orgName, setOrgName] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [username, setUsername] = useState('');
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -254,88 +249,36 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               <Form method="post" className="space-y-6">
                 <input type="hidden" name="intent" value="createUser" />
 
-                <div className="space-y-6">
-                  {/* Profile Picture */}
-                  <div className="flex flex-col items-center space-y-4">
-                    <Label className="text-muted-foreground text-sm">Profile picture</Label>
-                    <div className="relative">
-                      <Avatar className="w-24 h-24 border-2 border-zinc-700">
-                        <AvatarImage src="" />
-                        <AvatarFallback className="bg-primary text-foreground text-2xl font-medium">
-                          {firstName?.[0]?.toUpperCase() || '?'}
-                        </AvatarFallback>
-                      </Avatar>
-                    </div>
-                    <div className="flex gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="bg-muted/50 border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <Upload className="w-4 h-4 mr-2" />
-                        Upload image
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground hover:text-foreground"
-                      >
-                        Remove
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      *.png, *.jpeg files up to 10MB at least 400px by 400px
-                    </p>
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="firstName" className="text-muted-foreground text-sm">
+                      First name
+                    </Label>
+                    <Input
+                      id="firstName"
+                      name="firstName"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      placeholder="Enter your first name..."
+                      required
+                      autoFocus
+                      className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
+                    />
                   </div>
 
-                  {/* Name Fields */}
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="firstName" className="text-muted-foreground text-sm">
-                        First name
-                      </Label>
-                      <Input
-                        id="firstName"
-                        name="firstName"
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
-                        placeholder="Enter your first name..."
-                        required
-                        className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="lastName" className="text-muted-foreground text-sm">
-                        Last name
-                      </Label>
-                      <Input
-                        id="lastName"
-                        name="lastName"
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
-                        placeholder="Enter your last name..."
-                        required
-                        className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="username" className="text-muted-foreground text-sm">
-                        Username
-                      </Label>
-                      <Input
-                        id="username"
-                        name="username"
-                        value={username}
-                        onChange={(e) => setUsername(e.target.value)}
-                        placeholder="Choose a username..."
-                        required
-                        className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                      />
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="lastName" className="text-muted-foreground text-sm">
+                      Last name
+                    </Label>
+                    <Input
+                      id="lastName"
+                      name="lastName"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      placeholder="Enter your last name..."
+                      required
+                      className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
+                    />
                   </div>
                 </div>
 
@@ -345,7 +288,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
 
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !firstName || !lastName || !username}
+                  disabled={isSubmitting || !firstName || !lastName}
                   className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                 >
                   {isSubmitting ? 'Saving...' : 'Continue'}
@@ -365,44 +308,26 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               transition={{ type: 'spring', stiffness: 300, damping: 30 }}
               className="space-y-8"
             >
-              <div className="text-center space-y-6">
+              <div className="text-center space-y-8">
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: 'spring', delay: 0.2 }}
-                  className="inline-flex items-center justify-center w-20 h-20 bg-primary/20 rounded-full"
+                  className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full"
                 >
-                  <Sparkles className="w-10 h-10 text-primary" />
+                  <Sparkles className="w-8 h-8 text-primary" />
                 </motion.div>
 
-                <div className="space-y-2">
-                  <h1 className="text-4xl font-bold text-foreground">Welcome to your workspace!</h1>
-                  <p className="text-xl text-muted-foreground">Everything is set up and ready to go.</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-8">
-                  <div className="p-6 bg-muted/50 border border-border rounded-lg space-y-2">
-                    <div className="text-3xl">📊</div>
-                    <h3 className="text-foreground font-medium">Track Projects</h3>
-                    <p className="text-sm text-muted-foreground">Manage your projects with powerful kanban boards</p>
-                  </div>
-                  <div className="p-6 bg-muted/50 border border-border rounded-lg space-y-2">
-                    <div className="text-3xl">👥</div>
-                    <h3 className="text-foreground font-medium">Collaborate</h3>
-                    <p className="text-sm text-muted-foreground">Work together with your team in real-time</p>
-                  </div>
-                  <div className="p-6 bg-muted/50 border border-border rounded-lg space-y-2">
-                    <div className="text-3xl">⚡</div>
-                    <h3 className="text-foreground font-medium">Stay Organized</h3>
-                    <p className="text-sm text-muted-foreground">Keep everything in one place and accessible</p>
-                  </div>
+                <div className="space-y-3">
+                  <h1 className="text-3xl font-semibold text-foreground">Welcome to your workspace!</h1>
+                  <p className="text-base text-muted-foreground">Everything is set up and ready to go.</p>
                 </div>
 
                 <Form method="post" className="pt-4">
                   <input type="hidden" name="intent" value="complete" />
                   <Button
                     type="submit"
-                    className="w-full h-12 bg-primary hover:bg-primary/90 text-foreground font-medium rounded-lg"
+                    className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                   >
                     Get started
                   </Button>
@@ -415,7 +340,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
 
       {/* Footer */}
       <div className="fixed bottom-8 left-1/2 -translate-x-1/2 text-center">
-        <p className="text-xs text-muted-foreground">© 2025 Your Company · Privacy Policy · Support · Sign out</p>
+        <p className="text-xs text-muted-foreground">© 2025 WHOP CRM · Privacy Policy · Support · Sign out</p>
       </div>
     </div>
   );
