@@ -138,11 +138,11 @@ importers:
         specifier: ^0.0.3
         version: 0.0.3
       '@whop/react':
-        specifier: ^0.2.46
-        version: 0.2.46(@auth/core@0.40.0)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
+        specifier: ^0.3.0
+        version: 0.3.0(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@whop/sdk':
-        specifier: ^0.0.2
-        version: 0.0.2
+        specifier: ^0.0.4
+        version: 0.0.4
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
@@ -2774,14 +2774,14 @@ packages:
     resolution: {integrity: sha512-Gb64GPKnFq0E/GRuKCEHbfxgB362ccAjEA7GHsEMDgRug7PCPCf0DmQRMA0//qV4XKzKKVyis5VGRQivwmnEJg==}
     engines: {node: 22.x, pnpm: 9.15.9}
 
-  '@whop/react@0.2.46':
-    resolution: {integrity: sha512-aQOFOndQup9p/Y2yz2je1+/FlBkESHQOQs63zxOHtB5eCTj5btY6al0Qr3278RX//BYiKaAezFDxcfQeJz2Ljw==}
+  '@whop/react@0.3.0':
+    resolution: {integrity: sha512-4MuBHaeVb+DAUpPns9xNl55oAetX8qWf9gvuSPoroS5muNtYQoIRlhueVQOE98m9tCoeyAC3sEidJfsfzHgj1g==}
     engines: {node: 22.x, pnpm: 9.15.9}
     peerDependencies:
       react: ^19.0.0
 
-  '@whop/sdk@0.0.2':
-    resolution: {integrity: sha512-Ro6RxDtKN9bzSCpg//2535LumvjnHanpmjVZvVApTuZDeUYmbTyeLcOyXL2a+n8pAZ/GZYDNzTon6pk0iFswAw==}
+  '@whop/sdk@0.0.4':
+    resolution: {integrity: sha512-ZLNpae2q2Ct+97tbUsh1k55S9ymmO2bOlQRj49ze6lxg5a6qW3zrjlsker1G6RjXrgdE4BItcBWrh1EzvY1Crg==}
 
   abbrev@2.0.0:
     resolution: {integrity: sha512-6/mh1E2u2YgEsCHdY0Yx5oW+61gZU+1vXaoiHHrpKeuRNNgFvS+/jrwHiQhB5apAf5oB7UB7E19ol2R2LKH8hQ==}
@@ -7742,20 +7742,18 @@ snapshots:
     dependencies:
       zod: 3.22.3
 
-  '@whop/react@0.2.46(@auth/core@0.40.0)(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
+  '@whop/react@0.3.0(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)':
     dependencies:
-      '@whop/api': 0.0.51(@auth/core@0.40.0)
       '@whop/iframe': 0.0.3
       frosted-ui: 0.0.1-canary.77(@types/react-dom@19.2.2(@types/react@19.2.2))(@types/react@19.2.2)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react: 19.2.0
       use-sync-external-store: 1.5.0(react@19.2.0)
     transitivePeerDependencies:
-      - '@auth/core'
       - '@types/react'
       - '@types/react-dom'
       - react-dom
 
-  '@whop/sdk@0.0.2':
+  '@whop/sdk@0.0.4':
     dependencies:
       jose: 6.1.0
       standardwebhooks: 1.0.0

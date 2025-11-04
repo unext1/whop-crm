@@ -5,28 +5,94 @@ import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 import type { Payment } from '@whop/sdk/resources/shared.mjs';
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+export async function action({ request }: ActionFunctionArgs) {
   const requestBodyText = await request.text();
   console.warn('Request body:', requestBodyText);
   const headers = Object.fromEntries(request.headers);
   console.warn('Headers:', headers);
-  const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-  console.warn('Webhook data:', webhookData);
+
+  let webhookData: any;
+
+  try {
+    // First try the standard unwrap method
+    webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+    console.warn('Successfully unwrapped with standard method');
+  } catch (unwrapError) {
+    console.warn('Standard unwrap failed, trying manual signature verification...');
+
+    // Manual signature verification for Whop's hybrid format
+    // They use Standard Webhooks headers but send JSON body instead of base64
+    try {
+      const webhookId = headers['webhook-id'];
+      const webhookSignature = headers['webhook-signature'];
+      const webhookTimestamp = headers['webhook-timestamp'];
+
+      if (!webhookId || !webhookSignature || !webhookTimestamp) {
+        throw new Error('Missing required webhook headers');
+      }
+
+      // For Whop's format, the signature is in format: "v1,signature"
+      const signatureParts = webhookSignature.split(',');
+      if (signatureParts.length !== 2 || signatureParts[0] !== 'v1') {
+        throw new Error('Invalid signature format');
+      }
+
+      const signature = signatureParts[1];
+
+      // Import crypto for verification
+      const crypto = await import('crypto');
+
+      // Get webhook secret (should be base64-encoded key from Whop)
+      const secret = process.env.WHOP_WEBHOOK_SECRET;
+      if (!secret) {
+        throw new Error('WHOP_WEBHOOK_SECRET not configured');
+      }
+
+      // Standard Webhooks expects the body to be base64-encoded for signature calculation
+      // So we need to base64-encode the JSON body first
+      const base64Body = Buffer.from(requestBodyText, 'utf8').toString('base64');
+
+      // Create the signed payload: webhook_id.webhook_timestamp.base64_body
+      const signedPayload = `${webhookId}.${webhookTimestamp}.${base64Body}`;
+
+      // Create HMAC signature
+      // The webhook secret from Whop is base64-encoded, so decode it first
+      const decodedSecret = Buffer.from(secret, 'base64');
+      const hmac = crypto.createHmac('sha256', decodedSecret);
+      hmac.update(signedPayload, 'utf8');
+      const expectedSignature = hmac.digest('base64');
+
+      // Compare signatures (constant time comparison)
+      if (!crypto.timingSafeEqual(Buffer.from(signature, 'base64'), Buffer.from(expectedSignature, 'base64'))) {
+        throw new Error('Invalid webhook signature');
+      }
+
+      console.warn('Manual signature verification successful');
+
+      // Parse the JSON body
+      webhookData = JSON.parse(requestBodyText);
+    } catch (manualError) {
+      console.error('Manual verification also failed:', manualError);
+      throw unwrapError; // Re-throw original error
+    }
+  }
+
+  console.warn('Final webhook data:', webhookData);
 
   // Handle the webhook event
   if (webhookData.type === 'payment.succeeded') {
-    await handlePaymentSucceeded(webhookData.data);
+    handlePaymentSucceeded(webhookData.data);
   }
 
   handleWebhookEvent(webhookData.type, webhookData.data);
   return new Response(JSON.stringify({ success: true }), { status: 200 });
-};
+}
 
-function handlePaymentSucceeded(invoice: Payment): Promise<void> {
+function handlePaymentSucceeded(invoice: Payment): void {
   // This is a placeholder for a potentially long running operation
   // In a real scenario, you might need to fetch user data, update a database, etc.
   console.warn('[PAYMENT SUCCEEDED]', invoice);
-  return Promise.resolve();
+  // Add actual payment processing logic here
 }
 /**
  * Handle webhook events (extracted for reuse in dev mode)
@@ -154,8 +220,10 @@ async function checkAndDowngradeOrganization(companyId: string) {
     // to re-activate premium when a new membership is created
     // In a production app, you might want to check the Whop API here
     console.log(`Membership deactivated for organization ${companyId} - keeping current plan status`);
+    return Promise.resolve();
   } catch (error) {
     console.error(`Error checking organization ${companyId}:`, error);
+    return Promise.resolve();
   }
 }
 
