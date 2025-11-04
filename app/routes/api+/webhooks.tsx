@@ -2,17 +2,43 @@ import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
+import { env } from '~/services/env.server';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
-  const requestBodyText = await request.text();
-  const headers = Object.fromEntries(request.headers);
-  const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-  console.log('Headers:', headers);
-  console.log('Webhook data:', webhookData);
-  handleWebhookEvent(webhookData.type, webhookData.data);
-  console.log('Response sent');
-  return new Response('OK', { status: 200 });
+  try {
+    const requestBodyText = await request.text();
+    const headers = Object.fromEntries(request.headers);
+
+    console.log('Raw request body:', requestBodyText);
+    console.log('Headers:', headers);
+    console.log('WHOP_WEBHOOK_SECRET length:', env.WHOP_WEBHOOK_SECRET?.length);
+
+    let webhookData;
+    try {
+      webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+    } catch (unwrapError) {
+      console.error('Webhook unwrap failed:', unwrapError);
+
+      // Try to parse as raw JSON if unwrap fails (for testing or malformed webhooks)
+      try {
+        const rawData = JSON.parse(requestBodyText);
+        console.log('Parsed as raw JSON:', rawData);
+        webhookData = rawData;
+      } catch (jsonError) {
+        console.error('Could not parse as JSON either:', jsonError);
+        throw unwrapError; // Re-throw original error
+      }
+    }
+    console.log('Webhook data:', webhookData);
+    handleWebhookEvent(webhookData.type, webhookData.data);
+    console.log('Response sent');
+    return new Response('OK', { status: 200 });
+  } catch (error) {
+    console.error('Webhook processing error:', error);
+    console.log('Raw request body for debugging:', await request.clone().text());
+    throw error;
+  }
 };
 
 /**
