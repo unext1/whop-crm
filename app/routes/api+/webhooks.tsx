@@ -1,3 +1,4 @@
+import type { Payment } from '@whop/sdk/resources/shared.mjs';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
@@ -34,13 +35,23 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
     }
 
     handleWebhookEvent(webhookData.type, webhookData.data);
-    return new Response('OK', { status: 200 });
+
+    console.log('Webhook data:', webhookData);
+   	// Handle the webhook event
+   	if (webhookData.type === "payment.succeeded") {
+  		handlePaymentSucceeded(webhookData.data)
+   	}
+    return new Response(JSON.stringify(webhookData), { status: 200 });
   } catch (error) {
     console.error('Webhook processing error:', error);
     throw error;
   }
 };
-
+async function handlePaymentSucceeded(invoice: Payment) {
+  // This is a placeholder for a potentially long running operation
+  // In a real scenario, you might need to fetch user data, update a database, etc.
+  console.log("[PAYMENT SUCCEEDED]", invoice);
+}
 /**
  * Handle webhook events (extracted for reuse in dev mode)
  */
