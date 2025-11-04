@@ -12,7 +12,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
 
     console.log('Raw request body:', requestBodyText);
     console.log('Headers:', headers);
-    console.log('WHOP_WEBHOOK_SECRET length:', env.WHOP_WEBHOOK_SECRET?.length);
+    console.log('WHOP_WEBHOOK_SECRET length:', "ws_ee0bb37b7d2e48538562f01dae2d8e4d2ebb3478c691b544d5139ad89982ae31".length);
 
     let webhookData;
     try {
