@@ -10,8 +10,7 @@ export const PREMIUM_PRODUCT_ID = 'prod_refsXJqTNDzUT';
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,
   apiKey: env.WHOP_API_KEY,
-  webhookKey: btoa(env.WHOP_WEBHOOK_SECRET),
-  
+  webhookKey: Buffer.from(env.WHOP_WEBHOOK_SECRET || '', 'utf8').toString('base64'),
 });
 
 import { WhopServerSdk } from '@whop/api';

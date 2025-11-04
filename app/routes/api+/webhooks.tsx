@@ -9,7 +9,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
   // Log webhook secret for debugging (mask sensitive info)
   const { env } = await import('~/services/env.server');
   const webhookSecret = env.WHOP_WEBHOOK_SECRET;
-  console.log('Webhook secret configured:', webhookSecret ? `${webhookSecret.substring(0, 8)}...` : 'NOT SET');
+  const base64Secret = Buffer.from(webhookSecret || '', 'utf8').toString('base64');
+  console.log('Raw webhook secret:', webhookSecret ? `${webhookSecret.substring(0, 12)}...` : 'NOT SET');
+  console.log('Base64 webhook secret:', base64Secret ? `${base64Secret.substring(0, 12)}...` : 'NOT SET');
+  console.log('Raw secret length:', webhookSecret?.length);
+  console.log('Raw secret prefix:', webhookSecret?.substring(0, 5));
 
   // Read the request body once
   const requestBodyText = await request.text();
@@ -18,6 +22,11 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
     // Validate the webhook to ensure it's from Whop (SDK handles signature validation internally)
     const headers = Object.fromEntries(request.headers);
     console.log('Attempting webhook validation with headers:', Object.keys(headers));
+  const signatureHeaders = ['svix-id', 'svix-timestamp', 'svix-signature'];
+  const presentHeaders = signatureHeaders.filter(h => headers[h.toLowerCase()]);
+  const missingHeaders = signatureHeaders.filter(h => !headers[h.toLowerCase()]);
+  console.log('✅ Present signature headers:', presentHeaders);
+  console.log('❌ Missing signature headers:', missingHeaders);
     const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
 
     // Handle the webhook event
