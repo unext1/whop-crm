@@ -21,6 +21,9 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { userId } = await verifyWhopToken(request);
   const { access_level } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
+  const accessToProduct = await whopSdk.users.checkAccess('prod_refsXJqTNDzUT', { id: userId });
+  console.log(accessToProduct);
+
   // Calculate date 30 days ago for growth comparison
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -184,7 +187,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 const DashboardPage = () => {
-  const { stats, recentPeople, recentCompanies, recentTasks, companyId } = useLoaderData<typeof loader>();
+  const { stats, recentPeople, recentCompanies, recentTasks, companyId, accessToProduct } =
+    useLoaderData<typeof loader>();
 
   const statsCards = [
     {
@@ -221,6 +225,7 @@ const DashboardPage = () => {
           <h1 className="text-base font-semibold">Dashboard</h1>
         </div>
       </div>
+      <pre>{JSON.stringify(accessToProduct, null, 2)}</pre>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">
