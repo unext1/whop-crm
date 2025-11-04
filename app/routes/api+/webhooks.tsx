@@ -15,6 +15,16 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
   console.log('Raw secret length:', webhookSecret?.length);
   console.log('Raw secret prefix:', webhookSecret?.substring(0, 5));
 
+  // Check if secret matches what user said they have
+  const userReportedSecret = 'ws_d6843d85b24bf8069f83e6b1a27e880d8ebbb003a5b7448b7b29fc3ff7a261f9';
+  const matchesReported = webhookSecret === userReportedSecret;
+  console.log('✅ Secret matches user reported value:', matchesReported);
+
+  if (!matchesReported) {
+    console.log('❌ Vercel secret:', webhookSecret?.substring(0, 20));
+    console.log('❌ User reported secret:', userReportedSecret.substring(0, 20));
+  }
+
   // Read the request body once
   const requestBodyText = await request.text();
 
