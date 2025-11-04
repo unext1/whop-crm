@@ -45,7 +45,6 @@ export function QuickActionsMenu({
   hasWhopId,
   primaryEmail,
   userId,
-  organizationId,
   onDelete,
 }: QuickActionsMenuProps) {
   const [dmOpen, setDmOpen] = useState(false);

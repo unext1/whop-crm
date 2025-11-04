@@ -1,7 +1,8 @@
+import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
 import { Check, Sparkles } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigation } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -15,10 +16,6 @@ import { env } from '~/services/env.server';
 import { putToast } from '~/services/cookie.server';
 import { getAuthorizedUserId, getPublicUser, verifyWhopToken } from '~/services/whop.server';
 import type { Route } from './+types/new';
-
-interface CheckoutSession {
-  checkoutUrl?: string;
-}
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -60,6 +57,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     hasUser,
     monthlyCheckout,
     annualCheckout,
+    whopAppId: env.WHOP_APP_ID,
   };
 };
 
@@ -109,15 +107,31 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return data({ success: true, step: 2, message: 'Profile created' } as const);
   }
 
-  if (intent === 'selectPlan') {
+  if (intent === 'processPayment') {
     const selectedPlan = formData.get('selectedPlan')?.toString();
 
     if (!selectedPlan || !['monthly', 'annual'].includes(selectedPlan)) {
       return data({ error: 'Please select a valid plan', step: 3 } as const, { status: 400 });
     }
 
-    // Mark plan selection as complete - user will be redirected to payment
-    return data({ success: true, step: 3, selectedPlan, message: `${selectedPlan} plan selected` } as const);
+    // Get the appropriate checkout session
+    const checkoutSession =
+      selectedPlan === 'monthly'
+        ? await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId)
+        : await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
+
+    if (!checkoutSession) {
+      return data({ error: 'Failed to create checkout session', step: 3 } as const, { status: 500 });
+    }
+
+    // Return checkout session data for client-side payment processing
+    return data({
+      success: true,
+      step: 3,
+      selectedPlan,
+      checkoutSession,
+      message: `Processing ${selectedPlan} payment`,
+    } as const);
   }
 
   if (intent === 'complete') {
@@ -139,22 +153,51 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === 'submitting';
 
-  // Auto-advance to next step on successful action
+  const handlePayment = useCallback(
+    async (checkoutSession: unknown) => {
+      setIsProcessingPayment(true);
+
+      try {
+        const iframeSdk = createSdk({ appId: loaderData.whopAppId });
+        const result = await iframeSdk.inAppPurchase(checkoutSession as { planId: string; id?: string });
+
+        if (result.status === 'ok') {
+          // Payment successful - advance to completion
+          setStep(5);
+        } else {
+          // Payment failed - stay on current step
+          // Error handled silently
+        }
+      } catch {
+        // Payment error - stay on current step
+      } finally {
+        setIsProcessingPayment(false);
+      }
+    },
+    [loaderData.whopAppId],
+  );
+
+  // Handle payment processing and step advancement
   useEffect(() => {
     if (actionData && 'success' in actionData && actionData.success && actionData.step === step && !isSubmitting) {
-      if (step === 3) {
-        setStep(5); // Skip directly to completion after plan selection
+      if (step === 3 && 'checkoutSession' in actionData) {
+        // Process payment with the checkout session
+        handlePayment(actionData.checkoutSession);
+      } else if (step === 3 && !('checkoutSession' in actionData)) {
+        // Plan selected but no checkout session - stay on step 3
       } else {
+        // Other steps - advance normally
         const timer = setTimeout(() => setStep(step + 1), 100);
         return () => clearTimeout(timer);
       }
     }
-  }, [actionData, step, isSubmitting]);
+  }, [actionData, step, isSubmitting, handlePayment]);
 
   const slideVariants = {
     enter: (direction: number) => ({
@@ -374,48 +417,24 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               <div className="flex justify-center">
                 <div className="w-full max-w-sm space-y-4">
                   <Form method="post">
-                    <input type="hidden" name="intent" value="selectPlan" />
+                    <input type="hidden" name="intent" value="processPayment" />
                     <input type="hidden" name="selectedPlan" value={selectedPlan} />
 
                     <Button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isProcessingPayment}
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                     >
-                      {isSubmitting ? 'Processing...' : 'Continue'}
+                      {isSubmitting
+                        ? 'Setting up payment...'
+                        : isProcessingPayment
+                          ? 'Processing payment...'
+                          : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
                     </Button>
                   </Form>
 
-                  <div className="text-center space-y-3">
+                  <div className="text-center">
                     <div className="text-xs text-muted-foreground">Secure payment powered by Whop</div>
-
-                    {selectedPlan === 'monthly' && loaderData.monthlyCheckout && (
-                      <Button
-                        onClick={() => {
-                          const url = (loaderData.monthlyCheckout as CheckoutSession)?.checkoutUrl;
-                          if (url) window.location.href = url;
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        Start Monthly → $19/month
-                      </Button>
-                    )}
-
-                    {selectedPlan === 'annual' && loaderData.annualCheckout && (
-                      <Button
-                        onClick={() => {
-                          const url = (loaderData.annualCheckout as CheckoutSession)?.checkoutUrl;
-                          if (url) window.location.href = url;
-                        }}
-                        variant="ghost"
-                        size="sm"
-                        className="text-xs"
-                      >
-                        Start Annual → $190/year (7-day trial)
-                      </Button>
-                    )}
                   </div>
                 </div>
               </div>

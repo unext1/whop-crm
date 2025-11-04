@@ -12,7 +12,7 @@ import { organizationTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
 import { env } from '~/services/env.server';
 import { hasOrganizationPremiumAccess, hasPremiumAccess, requireUser, whopSdk } from '~/services/whop.server';
-import type { Route } from '../_dashboard+/+types/billing';
+import type { Route } from './+types/index';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -84,13 +84,16 @@ const BillingPage = () => {
   };
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden bg-background">
+    <div className="flex flex-1 overflow-hidden bg-background">
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
+          <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
+            <CreditCard className="h-3.5 w-3.5" />
+          </div>
           <h1 className="text-base font-semibold">Billing & Subscriptions</h1>
           {premiumAccess.hasAccess && (
-            <Badge variant="default">
+            <Badge variant="secondary" className="h-5 text-xs">
               Premium {premiumAccess.accessLevel === 'organization' ? '(Organization-wide)' : '(Individual)'}
             </Badge>
           )}
@@ -105,7 +108,7 @@ const BillingPage = () => {
             <Card className="border-primary">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0">
+                  <div className="shrink-0">
                     <CreditCard className="h-5 w-5 text-primary" />
                   </div>
                   <div>
@@ -146,10 +149,10 @@ const BillingPage = () => {
 
               {purchaseResult && (
                 <div
-                  className={`p-4 rounded-md ${
+                  className={`p-4 rounded-md border ${
                     purchaseResult.status === 'ok'
-                      ? 'bg-green-50 border border-green-200 text-green-800'
-                      : 'bg-red-50 border border-red-200 text-red-800'
+                      ? 'bg-muted/50 border-border text-green-700'
+                      : 'bg-destructive/5 border-destructive/20 text-destructive'
                   }`}
                 >
                   <pre className="text-xs overflow-auto">{JSON.stringify(purchaseResult, null, 2)}</pre>
@@ -164,27 +167,25 @@ const BillingPage = () => {
               <CardHeader>
                 <CardTitle>Organization Status</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Plan:</span>
-                    <Badge variant={organization.plan === 'premium' ? 'default' : 'secondary'}>
-                      {organization.plan || 'free'}
-                    </Badge>
-                  </div>
-                  {organization.subscriptionStart && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Subscription Start:</span>
-                      <span className="text-sm">{new Date(organization.subscriptionStart).toLocaleDateString()}</span>
-                    </div>
-                  )}
-                  {organization.subscriptionEnd && (
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Subscription End:</span>
-                      <span className="text-sm">{new Date(organization.subscriptionEnd).toLocaleDateString()}</span>
-                    </div>
-                  )}
+              <CardContent className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-muted-foreground">Plan</span>
+                  <Badge variant={organization.plan === 'premium' ? 'default' : 'secondary'} className="h-5 text-xs">
+                    {organization.plan || 'free'}
+                  </Badge>
                 </div>
+                {organization.subscriptionStart && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Subscription Start</span>
+                    <span className="text-sm">{new Date(organization.subscriptionStart).toLocaleDateString()}</span>
+                  </div>
+                )}
+                {organization.subscriptionEnd && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Subscription End</span>
+                    <span className="text-sm">{new Date(organization.subscriptionEnd).toLocaleDateString()}</span>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -204,29 +205,25 @@ const BillingPage = () => {
                   <div className="flex items-start justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <h3 className="font-semibold">{(appMembership as any).product?.title || 'Premium'}</h3>
+                        <h3 className="font-semibold">{'Premium'}</h3>
                         <Badge
                           variant={
-                            (appMembership as any).status === 'active'
+                            appMembership.status === 'active'
                               ? 'default'
-                              : (appMembership as any).status === 'trialing'
+                              : appMembership.status === 'trialing'
                                 ? 'secondary'
                                 : 'outline'
                           }
+                          className="h-5 text-xs"
                         >
-                          {(appMembership as any).status}
+                          {appMembership.status}
                         </Badge>
                       </div>
                       <p className="text-xs text-muted-foreground">Membership ID: {appMembership.id}</p>
                     </div>
-                    {(appMembership as any).manage_url && (
+                    {appMembership.manage_url && (
                       <Button variant="default" size="sm" asChild>
-                        <a
-                          href={(appMembership as any).manage_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="gap-2"
-                        >
+                        <a href={appMembership.manage_url} target="_blank" rel="noopener noreferrer" className="gap-2">
                           <ExternalLink className="h-3 w-3" />
                           Manage Subscription
                         </a>
@@ -237,37 +234,39 @@ const BillingPage = () => {
                   <Separator />
 
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    {(appMembership as any).renewal_period_start && (
+                    {appMembership.renewal_period_start && (
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-xs text-muted-foreground">Period Start</p>
                           <p className="font-medium">
-                            {new Date((appMembership as any).renewal_period_start).toLocaleDateString()}
+                            {new Date(appMembership.renewal_period_start).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                     )}
-                    {(appMembership as any).renewal_period_end && (
+                    {appMembership.renewal_period_end && (
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
                           <p className="text-xs text-muted-foreground">Period End</p>
                           <p className="font-medium">
-                            {new Date((appMembership as any).renewal_period_end).toLocaleDateString()}
+                            {new Date(appMembership.renewal_period_end).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                     )}
-                    {(appMembership as any).currency && (
+                    {appMembership.currency && (
                       <div>
                         <p className="text-xs text-muted-foreground">Currency</p>
-                        <p className="font-medium uppercase">{(appMembership as any).currency}</p>
+                        <p className="font-medium uppercase">{appMembership.currency}</p>
                       </div>
                     )}
-                    {(appMembership as any).cancel_at_period_end && (
+                    {appMembership.cancel_at_period_end && (
                       <div>
-                        <Badge variant="destructive">Cancels at period end</Badge>
+                        <Badge variant="destructive" className="h-5 text-xs">
+                          Cancels at period end
+                        </Badge>
                       </div>
                     )}
                   </div>
@@ -283,35 +282,28 @@ const BillingPage = () => {
               <CardDescription>Complete membership and access data for debugging</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <h4 className="font-medium mb-2">Premium Access Status</h4>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Premium Access Status</h4>
                 <pre className="bg-muted p-3 rounded-md text-xs overflow-auto">
                   {JSON.stringify({ premiumAccess, orgPremiumAccess }, null, 2)}
                 </pre>
               </div>
 
-              <Separator />
-
-              <div>
-                <h4 className="font-medium mb-2">Active Membership</h4>
+              <div className="space-y-2">
+                <h4 className="text-sm font-medium text-muted-foreground">Active Membership</h4>
                 <pre className="bg-muted p-3 rounded-md text-xs overflow-auto max-h-64">
                   {JSON.stringify(appMembership, null, 2)}
                 </pre>
               </div>
 
               {organization && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="font-medium mb-2">Organization Data</h4>
-                    <pre className="bg-muted p-3 rounded-md text-xs overflow-auto">
-                      {JSON.stringify(organization, null, 2)}
-                    </pre>
-                  </div>
-                </>
+                <div className="space-y-2">
+                  <h4 className="text-sm font-medium text-muted-foreground">Organization Data</h4>
+                  <pre className="bg-muted p-3 rounded-md text-xs overflow-auto">
+                    {JSON.stringify(organization, null, 2)}
+                  </pre>
+                </div>
               )}
-
-              <Separator />
             </CardContent>
           </Card>
         </div>
