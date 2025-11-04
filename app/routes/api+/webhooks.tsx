@@ -5,7 +5,26 @@ import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 import type { Payment } from '@whop/sdk/resources/shared.mjs';
 
-export const action = async ({ request }: ActionFunctionArgs) => {
+/**
+ * Checks if a user is authorized to grant organization-wide premium access
+ * Only admins and owners should be able to upgrade the entire organization
+ */
+async function checkUserAuthorization(companyId: string, userId?: string): Promise<boolean> {
+  if (!userId) return false;
+
+  try {
+    // Check if user has admin access to the company
+    const accessCheck = await whopSdk.users.checkAccess(companyId, { id: userId });
+
+    // Only allow admin or owner level access to grant organization premium
+    return accessCheck.has_access && accessCheck.access_level === 'admin';
+  } catch (error) {
+    console.error(`Error checking authorization for user ${userId} in company ${companyId}:`, error);
+    return false;
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
   const requestBodyText = await request.text();
   console.warn('Request body:', requestBodyText);
   const headers = Object.fromEntries(request.headers);
@@ -18,9 +37,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await handlePaymentSucceeded(webhookData.data);
   }
 
-  handleWebhookEvent(webhookData.type, webhookData.data);
+  await handleWebhookEvent(webhookData.type, webhookData.data);
   return new Response(JSON.stringify({ success: true }), { status: 200 });
-};
+}
 
 function handlePaymentSucceeded(invoice: Payment): Promise<void> {
   // This is a placeholder for a potentially long running operation
@@ -31,7 +50,7 @@ function handlePaymentSucceeded(invoice: Payment): Promise<void> {
 /**
  * Handle webhook events (extracted for reuse in dev mode)
  */
-function handleWebhookEvent(action: string, data: any) {
+async function handleWebhookEvent(action: string, data: any) {
   console.log(`Processing webhook event: ${action}`, data);
 
   // Check if data is null (test webhooks may send null data)
@@ -61,21 +80,31 @@ function handleWebhookEvent(action: string, data: any) {
     action === 'app_membership.activated'
   ) {
     const membership = data;
-    const { product_id, page_id, id: membershipId } = membership;
+    const { product_id, page_id, id: membershipId, user } = membership;
 
     // Check if this membership is for the premium product
     if (product_id === PREMIUM_PRODUCT_ID && page_id) {
-      // Convert webhook timestamp fields to ISO strings
-      const membershipData = {
-        membershipId,
-        renewal_period_start: membership.renewal_period_start
-          ? new Date(membership.renewal_period_start * 1000).toISOString()
-          : null,
-        renewal_period_end: membership.renewal_period_end
-          ? new Date(membership.renewal_period_end * 1000).toISOString()
-          : null,
-      };
-      handleOrganizationPremiumAccess(page_id, 'premium', membershipData).catch(console.error);
+      // Check if the subscribing user is an admin/owner of the organization
+      // This ensures only authorized users can grant organization-wide premium access
+      const isAuthorizedUser = await checkUserAuthorization(page_id, user?.id);
+
+      if (isAuthorizedUser) {
+        console.log(`Authorized user ${user?.id} subscribed - granting organization ${page_id} premium access`);
+
+        // Convert webhook timestamp fields to ISO strings
+        const membershipData = {
+          membershipId,
+          renewal_period_start: membership.renewal_period_start
+            ? new Date(membership.renewal_period_start * 1000).toISOString()
+            : null,
+          renewal_period_end: membership.renewal_period_end
+            ? new Date(membership.renewal_period_end * 1000).toISOString()
+            : null,
+        };
+        handleOrganizationPremiumAccess(page_id, 'premium', membershipData).catch(console.error);
+      } else {
+        console.log(`User ${user?.id} subscribed but is not authorized to grant organization access`);
+      }
     }
   } else if (
     action === 'membership.deactivated' ||

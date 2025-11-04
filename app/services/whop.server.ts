@@ -10,7 +10,7 @@ export const PREMIUM_PRODUCT_ID = 'prod_refsXJqTNDzUT';
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,
   apiKey: env.WHOP_API_KEY,
-  webhookKey: btoa('ws_ee0bb37b7d2e48538562f01dae2d8e4d2ebb3478c691b544d5139ad89982ae31'),
+  webhookKey: btoa(env.WHOP_WEBHOOK_SECRET),
 });
 
 import { WhopServerSdk } from '@whop/api';
@@ -164,18 +164,19 @@ export const hasPremiumAccess = async ({
   userId?: string;
 }): Promise<{ hasAccess: boolean; accessLevel: 'individual' | 'organization' | 'none' }> => {
   try {
-    // First check individual user access to the premium product
+    // PRIORITY: Check organization-level access FIRST (organization is source of truth)
+    const orgAccess = await hasOrganizationPremiumAccess(companyId);
+    if (orgAccess) {
+      return { hasAccess: true, accessLevel: 'organization' };
+    }
+
+    // FALLBACK: Check individual user access to the premium product
+    // This allows individual users to have premium access even if organization doesn't
     const userToCheck = userId || (await verifyWhopToken(request)).userId;
     const individualAccess = await whopSdk.users.checkAccess(PREMIUM_PRODUCT_ID, { id: userToCheck });
 
     if (individualAccess.has_access && individualAccess.access_level === 'customer') {
       return { hasAccess: true, accessLevel: 'individual' };
-    }
-
-    // Then check organization-level access
-    const orgAccess = await hasOrganizationPremiumAccess(companyId);
-    if (orgAccess) {
-      return { hasAccess: true, accessLevel: 'organization' };
     }
 
     return { hasAccess: false, accessLevel: 'none' };

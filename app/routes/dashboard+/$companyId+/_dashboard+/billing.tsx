@@ -96,7 +96,7 @@ const BillingPage = () => {
           <h1 className="text-base font-semibold">Billing & Subscriptions</h1>
           {premiumAccess.hasAccess && (
             <Badge variant="default">
-              Premium {premiumAccess.accessLevel === 'organization' ? '(Organization)' : '(Individual)'}
+              Premium {premiumAccess.accessLevel === 'organization' ? '(Organization-wide)' : '(Individual)'}
             </Badge>
           )}
         </div>
@@ -111,7 +111,12 @@ const BillingPage = () => {
             <CardHeader>
               <CardTitle>Upgrade to Premium</CardTitle>
               <CardDescription>
-                Get access to advanced features and priority support
+                Get access to advanced features and priority support.
+                {orgPremiumAccess ? (
+                  <span className="text-green-600 font-medium"> Your organization has premium access!</span>
+                ) : (
+                  <span className="text-muted-foreground"> Organization admins can upgrade for everyone.</span>
+                )}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
