@@ -6,11 +6,11 @@ import { env } from './env.server';
 
 // Premium product ID - update this to match your premium product
 export const PREMIUM_PRODUCT_ID = 'prod_refsXJqTNDzUT';
+
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,
   apiKey: env.WHOP_API_KEY,
-  webhookKey: env.WHOP_WEBHOOK_SECRET,
-
+  webhookKey: 'ws_ee0bb37b7d2e48538562f01dae2d8e4d2ebb3478c691b544d5139ad89982ae31',
 });
 
 import { WhopServerSdk } from '@whop/api';

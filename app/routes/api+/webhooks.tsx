@@ -5,31 +5,28 @@ import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 import type { Payment } from '@whop/sdk/resources/shared.mjs';
 
-export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
-  try {
-    const requestBodyText = await request.text();
-    const headers = Object.fromEntries(request.headers);
+export const action = async ({ request }: ActionFunctionArgs) => {
+  const requestBodyText = await request.text();
+  console.warn('Request body:', requestBodyText);
+  const headers = Object.fromEntries(request.headers);
+  console.warn('Headers:', headers);
+  const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
+  console.warn('Webhook data:', webhookData);
 
-    const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-
-    console.warn('Webhook data:', webhookData);
-
-    // Handle the webhook event
-    if (webhookData.type === "payment.succeeded") {
-      handlePaymentSucceeded(webhookData.data)
-    }
-
-    handleWebhookEvent(webhookData.type, webhookData.data);
-    return new Response(JSON.stringify({ success: true }), { status: 200 });
-  } catch (error) {
-    console.error('Webhook processing error:', error);
-    throw error;
+  // Handle the webhook event
+  if (webhookData.type === 'payment.succeeded') {
+    await handlePaymentSucceeded(webhookData.data);
   }
+
+  handleWebhookEvent(webhookData.type, webhookData.data);
+  return new Response(JSON.stringify({ success: true }), { status: 200 });
 };
-async function handlePaymentSucceeded(invoice: Payment) {
+
+function handlePaymentSucceeded(invoice: Payment): Promise<void> {
   // This is a placeholder for a potentially long running operation
   // In a real scenario, you might need to fetch user data, update a database, etc.
-  console.warn("[PAYMENT SUCCEEDED]", invoice);
+  console.warn('[PAYMENT SUCCEEDED]', invoice);
+  return Promise.resolve();
 }
 /**
  * Handle webhook events (extracted for reuse in dev mode)
@@ -58,7 +55,11 @@ function handleWebhookEvent(action: string, data: any) {
     // In React Router v7, we don't have waitUntil, but we can still do async work
     // The response will be sent immediately while background work continues
     potentiallyLongRunningHandler(user_id, final_amount, currency, amount_after_fees).catch(console.error);
-  } else if (action === 'membership.activated' || action === 'app_membership.went_valid' || action === 'app_membership.activated') {
+  } else if (
+    action === 'membership.activated' ||
+    action === 'app_membership.went_valid' ||
+    action === 'app_membership.activated'
+  ) {
     const membership = data;
     const { product_id, page_id, id: membershipId } = membership;
 
@@ -76,7 +77,11 @@ function handleWebhookEvent(action: string, data: any) {
       };
       handleOrganizationPremiumAccess(page_id, 'premium', membershipData).catch(console.error);
     }
-  } else if (action === 'membership.deactivated' || action === 'app_membership.went_invalid' || action === 'app_membership.deactivated') {
+  } else if (
+    action === 'membership.deactivated' ||
+    action === 'app_membership.went_invalid' ||
+    action === 'app_membership.deactivated'
+  ) {
     const membership = data;
     const { product_id, page_id } = membership;
 
@@ -102,9 +107,9 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
       where: eq(organizationTable.id, companyId),
     });
 
-    const updateData: any = { 
-      plan, 
-      updatedAt: new Date().toISOString() 
+    const updateData: any = {
+      plan,
+      updatedAt: new Date().toISOString(),
     };
 
     // Add membership ID if available
@@ -122,10 +127,7 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
 
     if (existingOrg) {
       // Update existing organization
-      await db
-        .update(organizationTable)
-        .set(updateData)
-        .where(eq(organizationTable.id, companyId));
+      await db.update(organizationTable).set(updateData).where(eq(organizationTable.id, companyId));
       console.log(`Updated organization ${companyId} to ${plan} plan`);
     } else {
       // Create organization if it doesn't exist
