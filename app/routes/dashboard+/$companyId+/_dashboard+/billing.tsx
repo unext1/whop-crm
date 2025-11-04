@@ -1,18 +1,17 @@
-'use client';
+
+import { eq } from 'drizzle-orm';
+import { Calendar, CreditCard, ExternalLink, Package } from 'lucide-react';
 import { useState } from 'react';
 import { useLoaderData } from 'react-router';
-import { ExternalLink, CreditCard, Calendar, User, Package } from 'lucide-react';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/components/ui/card';
 import { Separator } from '~/components/ui/separator';
-import { hasOrganizationPremiumAccess, hasPremiumAccess, PREMIUM_PRODUCT_ID, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
-import { eq } from 'drizzle-orm';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
-import type { Route } from './+types/billing';
 import { env } from '~/services/env.server';
-import { createCheckoutSession } from '~/services/checkout.server';
+import { hasOrganizationPremiumAccess, hasPremiumAccess, PREMIUM_PRODUCT_ID, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
+import type { Route } from './+types/billing';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -73,11 +72,8 @@ const BillingPage = () => {
       // Dynamically import iframe SDK (client-side only)
       const { createSdk } = await import('@whop/iframe');
       const iframeSdk = createSdk({ appId: whopAppId });
-      const checkoutSession = await createCheckoutSession( planId);
-      if (!checkoutSession) {
-        throw new Error('Failed to create checkout session');
-      }
-      const result = await iframeSdk.inAppPurchase(checkoutSession);
+
+      const result = await iframeSdk.inAppPurchase({ planId });
       setPurchaseResult(result);
       
       if (result.status === 'ok') {

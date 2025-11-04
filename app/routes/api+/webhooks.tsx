@@ -1,4 +1,3 @@
-import type { PaymentSucceededWebhookEvent } from '@whop/sdk/resources/webhooks.mjs';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
