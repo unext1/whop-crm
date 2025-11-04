@@ -12,6 +12,7 @@ import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import type { Route } from './+types/billing';
 import { env } from '~/services/env.server';
+import { createCheckoutSession } from '~/services/checkout.server';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -72,8 +73,11 @@ const BillingPage = () => {
       // Dynamically import iframe SDK (client-side only)
       const { createSdk } = await import('@whop/iframe');
       const iframeSdk = createSdk({ appId: whopAppId });
-      
-      const result = await iframeSdk.inAppPurchase({ planId });
+      const checkoutSession = await createCheckoutSession( planId);
+      if (!checkoutSession) {
+        throw new Error('Failed to create checkout session');
+      }
+      const result = await iframeSdk.inAppPurchase(checkoutSession);
       setPurchaseResult(result);
       
       if (result.status === 'ok') {
