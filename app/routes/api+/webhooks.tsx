@@ -1,22 +1,24 @@
-import { makeWebhookValidator } from '@whop/api';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { env } from '~/services/env.server';
-import { PREMIUM_PRODUCT_ID } from '~/services/whop.server';
+import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
-  const validateWebhook = makeWebhookValidator({
-    webhookSecret: env.WHOP_WEBHOOK_SECRET ?? 'fallback',
-  });
   try {
+    // Read the request body as text
+    const requestBodyText = await request.text();
+    
+    // Convert headers to plain object (Whop SDK expects this format)
+    const headers = Object.fromEntries(request.headers);
+    
     // Validate the webhook to ensure it's from Whop
-    const webhookData = await validateWebhook(request);
+    const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
 
     // Handle the webhook event
-    if (webhookData.action === 'payment.succeeded') {
-      const payment = webhookData.data;
+    if (webhookData.type === 'payment.succeeded') {
+      const payment = webhookData.data as any;
       const { id, final_amount, amount_after_fees, currency, user_id, company_id, product_id } = payment;
 
       // final_amount is the amount the user paid
@@ -33,14 +35,15 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
       // In React Router v7, we don't have waitUntil, but we can still do async work
       // The response will be sent immediately while background work continues
       potentiallyLongRunningHandler(user_id, final_amount, currency, amount_after_fees).catch(console.error);
-    } else if (webhookData.action === 'membership.went_valid') {
-      const membership = webhookData.data;
-      const { product_id, page_id } = membership;
+    } else if (webhookData.type === 'membership.activated') {
+      const membership = webhookData.data as any;
+      const { product_id, page_id, id: membershipId } = membership;
 
       // Check if this membership is for the premium product
       if (product_id === PREMIUM_PRODUCT_ID && page_id) {
         // Convert webhook timestamp fields to ISO strings
         const membershipData = {
+          membershipId,
           renewal_period_start: membership.renewal_period_start 
             ? new Date(membership.renewal_period_start * 1000).toISOString() 
             : null,
@@ -50,8 +53,8 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
         };
         handleOrganizationPremiumAccess(page_id, 'premium', membershipData).catch(console.error);
       }
-    } else if (webhookData.action === 'membership.went_invalid') {
-      const membership = webhookData.data;
+    } else if (webhookData.type === 'membership.deactivated') {
+      const membership = webhookData.data as any;
       const { product_id, page_id } = membership;
 
       // Check if this membership deactivation is for the premium product
@@ -62,7 +65,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
       }
     } else {
       // Log other webhook events for debugging
-      console.log(`Received webhook event: ${webhookData.action}`, webhookData.data);
+      console.log(`Received webhook event: ${webhookData.type}`, webhookData.data);
     }
 
     // Make sure to return a 2xx status code quickly. Otherwise the webhook will be retried.
@@ -88,6 +91,11 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
       plan, 
       updatedAt: new Date().toISOString() 
     };
+
+    // Add membership ID if available
+    if (membershipData?.membershipId) {
+      updateData.membershipId = membershipData.membershipId;
+    }
 
     // Add subscription dates if available
     if (membershipData?.renewal_period_start) {

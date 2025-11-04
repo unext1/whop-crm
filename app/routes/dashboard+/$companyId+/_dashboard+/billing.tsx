@@ -18,9 +18,6 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   await requireUser(request, companyId);
   const { userId } = await verifyWhopToken(request);
   
-  // Fetch all memberships for this company
-  const memberships = await whopSdk.memberships.list({ company_id: companyId });
-  
   // Check premium access
   const premiumAccess = await hasPremiumAccess({ request, companyId, userId });
   const orgPremiumAccess = await hasOrganizationPremiumAccess(companyId);
@@ -30,10 +27,20 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     where: eq(organizationTable.id, companyId),
   });
 
+  // Fetch the organization's membership to the app (if it exists)
+  let appMembership = null;
+  if (organization?.membershipId) {
+    try {
+      appMembership = await whopSdk.memberships.retrieve(organization.membershipId);
+    } catch (error) {
+      console.error('Failed to fetch app membership:', error);
+    }
+  }
+
   return {
     companyId,
     userId,
-    memberships: memberships.data || [],
+    appMembership,
     premiumAccess,
     orgPremiumAccess,
     organization,
@@ -45,7 +52,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
 const BillingPage = () => {
   const { 
-    memberships, 
+    appMembership,
     premiumAccess, 
     orgPremiumAccess, 
     organization,
@@ -80,14 +87,6 @@ const BillingPage = () => {
       setPurchasing(false);
     }
   };
-
-  // Filter memberships by status
-  const activeMemberships = memberships.filter(m => 
-    ['active', 'trialing', 'completed'].includes(m.status)
-  );
-  const premiumMemberships = memberships.filter(m => 
-    (m as any).product?.id === premiumProductId
-  );
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
@@ -176,89 +175,82 @@ const BillingPage = () => {
             </Card>
           )}
 
-          {/* Active Memberships */}
-          {activeMemberships.length > 0 && (
+          {/* Your Subscription */}
+          {appMembership && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Package className="h-5 w-5" />
-                  Active Memberships ({activeMemberships.length})
+                  Your Subscription
                 </CardTitle>
                 <CardDescription>
-                  Manage your active subscriptions and billing
+                  Manage your subscription and billing
                 </CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {activeMemberships.map((membership) => (
-                  <div key={membership.id} className="p-4 border rounded-lg space-y-3">
-                    <div className="flex items-start justify-between">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-semibold">{(membership as any).product?.title || 'Unknown Product'}</h3>
-                          <Badge variant={
-                            membership.status === 'active' ? 'default' :
-                            membership.status === 'trialing' ? 'secondary' :
-                            'outline'
-                          }>
-                            {membership.status}
-                          </Badge>
-                        </div>
-                        {membership.user && (
-                          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <User className="h-3 w-3" />
-                            {membership.user.name} (@{membership.user.username})
-                          </div>
-                        )}
+              <CardContent>
+                <div className="p-4 border rounded-lg space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{(appMembership as any).product?.title || 'Premium'}</h3>
+                        <Badge variant={
+                          (appMembership as any).status === 'active' ? 'default' :
+                          (appMembership as any).status === 'trialing' ? 'secondary' :
+                          'outline'
+                        }>
+                          {(appMembership as any).status}
+                        </Badge>
                       </div>
-                      {membership.manage_url && (
-                        <Button variant="outline" size="sm" asChild>
-                          <a href={membership.manage_url} target="_blank" rel="noopener noreferrer" className="gap-2">
-                            <ExternalLink className="h-3 w-3" />
-                            Billing Portal
-                          </a>
-                        </Button>
-                      )}
+                      <p className="text-xs text-muted-foreground">Membership ID: {appMembership.id}</p>
                     </div>
-
-                    <Separator />
-
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      {membership.renewal_period_start && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="text-xs text-muted-foreground">Period Start</p>
-                            <p className="font-medium">
-                              {new Date(membership.renewal_period_start).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {membership.renewal_period_end && (
-                        <div className="flex items-center gap-2">
-                          <Calendar className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <p className="text-xs text-muted-foreground">Period End</p>
-                            <p className="font-medium">
-                              {new Date(membership.renewal_period_end).toLocaleDateString()}
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                      {membership.currency && (
-                        <div>
-                          <p className="text-xs text-muted-foreground">Currency</p>
-                          <p className="font-medium uppercase">{membership.currency}</p>
-                        </div>
-                      )}
-                      {membership.cancel_at_period_end && (
-                        <div>
-                          <Badge variant="destructive">Cancels at period end</Badge>
-                        </div>
-                      )}
-                    </div>
+                    {(appMembership as any).manage_url && (
+                      <Button variant="default" size="sm" asChild>
+                        <a href={(appMembership as any).manage_url} target="_blank" rel="noopener noreferrer" className="gap-2">
+                          <ExternalLink className="h-3 w-3" />
+                          Manage Subscription
+                        </a>
+                      </Button>
+                    )}
                   </div>
-                ))}
+
+                  <Separator />
+
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    {(appMembership as any).renewal_period_start && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Period Start</p>
+                          <p className="font-medium">
+                            {new Date((appMembership as any).renewal_period_start).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {(appMembership as any).renewal_period_end && (
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Period End</p>
+                          <p className="font-medium">
+                            {new Date((appMembership as any).renewal_period_end).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+                    {(appMembership as any).currency && (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Currency</p>
+                        <p className="font-medium uppercase">{(appMembership as any).currency}</p>
+                      </div>
+                    )}
+                    {(appMembership as any).cancel_at_period_end && (
+                      <div>
+                        <Badge variant="destructive">Cancels at period end</Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -282,23 +274,11 @@ const BillingPage = () => {
               <Separator />
 
               <div>
-                <h4 className="font-medium mb-2">All Memberships ({memberships.length})</h4>
-                <pre className="bg-muted p-3 rounded-md text-xs overflow-auto max-h-96">
-                  {JSON.stringify(memberships, null, 2)}
+                <h4 className="font-medium mb-2">Active Membership</h4>
+                <pre className="bg-muted p-3 rounded-md text-xs overflow-auto max-h-64">
+                  {JSON.stringify(appMembership, null, 2)}
                 </pre>
               </div>
-
-              {premiumMemberships.length > 0 && (
-                <>
-                  <Separator />
-                  <div>
-                    <h4 className="font-medium mb-2">Premium Memberships Only</h4>
-                    <pre className="bg-muted p-3 rounded-md text-xs overflow-auto max-h-64">
-                      {JSON.stringify(premiumMemberships, null, 2)}
-                    </pre>
-                  </div>
-                </>
-              )}
 
               {organization && (
                 <>
