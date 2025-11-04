@@ -1,13 +1,23 @@
+import { makeWebhookValidator } from '@whop/api';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
+import { env } from '~/services/env.server';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
+
+const validateWebhook = makeWebhookValidator({
+  webhookSecret: env.WHOP_WEBHOOK_SECRET,
+})
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
   // Log webhook secret for debugging (mask sensitive info)
   const { env } = await import('~/services/env.server');
-  
+  const validated = await validateWebhook(request);
+  console.log('Validated:', validated);
+  if (!validated) {
+    return new Response('Invalid webhook', { status: 400 });
+  }
   const webhookSecret = env.WHOP_WEBHOOK_SECRET;
   const base64Secret = Buffer.from(webhookSecret || '', 'utf8').toString('base64');
   console.log('Raw webhook secret:', webhookSecret ? `${webhookSecret.substring(0, 12)}...` : 'NOT SET');
