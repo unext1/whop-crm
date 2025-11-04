@@ -155,30 +155,24 @@ export const hasOrganizationPremiumAccess = async (companyId: string): Promise<b
  * Checks if a user has premium access either individually or through their organization
  */
 export const hasPremiumAccess = async ({
-  request,
   companyId,
-  userId,
+  request,
 }: {
   request: Request;
   companyId: string;
   userId?: string;
 }): Promise<{ hasAccess: boolean; accessLevel: 'individual' | 'organization' | 'none' }> => {
   try {
-    // PRIORITY: Check organization-level access FIRST (organization is source of truth)
+    const isAdmin = await hasAccess({ request, companyId });
+    if (!isAdmin) {
+      throw new Response('Access denied', { status: 403 });
+    }
     const orgAccess = await hasOrganizationPremiumAccess(companyId);
     if (orgAccess) {
       return { hasAccess: true, accessLevel: 'organization' };
     }
 
-    // FALLBACK: Check individual user access to the premium product
-    // This allows individual users to have premium access even if organization doesn't
-    const userToCheck = userId || (await verifyWhopToken(request)).userId;
-    const individualAccess = await whopSdk.users.checkAccess(PREMIUM_PRODUCT_ID, { id: userToCheck });
-
-    if (individualAccess.has_access && individualAccess.access_level === 'customer') {
-      return { hasAccess: true, accessLevel: 'individual' };
-    }
-
+    // No individual access allowed - organization must subscribe
     return { hasAccess: false, accessLevel: 'none' };
   } catch (error) {
     console.error('Error checking premium access:', error);

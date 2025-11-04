@@ -1,9 +1,9 @@
+import type { Payment } from '@whop/sdk/resources/shared.mjs';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
-import type { Payment } from '@whop/sdk/resources/shared.mjs';
 
 /**
  * Checks if a user is authorized to grant organization-wide premium access
@@ -208,7 +208,7 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
 /**
  * Checks if organization has any active premium memberships and downgrades if none exist
  */
-async function checkAndDowngradeOrganization(companyId: string) {
+function checkAndDowngradeOrganization(companyId: string) {
   try {
     // This would require checking Whop API for active memberships
     // For now, we'll keep it simple and rely on membership.activated webhooks
@@ -222,7 +222,7 @@ async function checkAndDowngradeOrganization(companyId: string) {
   }
 }
 
-async function potentiallyLongRunningHandler(
+function potentiallyLongRunningHandler(
   _user_id: string | null | undefined,
   _amount: number,
   _currency: string,

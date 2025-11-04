@@ -12,7 +12,7 @@ import type { Route } from './+types/_layout';
 import { organizationTable, userTable } from '~/db/schema';
 import { db } from '~/db';
 import { eq } from 'drizzle-orm';
-import { hasAccess, verifyWhopToken } from '~/services/whop.server';
+import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/services/whop.server';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -31,6 +31,19 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const user = await db.query.userTable.findFirst({
     where: eq(userTable.whopUserId, userId),
   });
+
+  // If organization exists, check if it has premium access
+  // Organizations must pay for premium access - no individual access allowed
+  if (organization) {
+    const hasOrgPremium = await hasOrganizationPremiumAccess(companyId);
+    if (!hasOrgPremium) {
+      // Redirect to billing page to upgrade organization
+      const billingPath = href('/dashboard/:companyId/billing', { companyId });
+      if (new URL(request.url).pathname !== billingPath) {
+        return redirect(billingPath);
+      }
+    }
+  }
 
   const url = new URL(request.url);
   const onboardingNewPath = href('/dashboard/:companyId/onboarding/new', { companyId });

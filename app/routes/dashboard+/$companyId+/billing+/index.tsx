@@ -1,3 +1,4 @@
+import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
 import { Calendar, CreditCard, ExternalLink, Package } from 'lucide-react';
 import { useState } from 'react';
@@ -10,22 +11,15 @@ import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
 import { env } from '~/services/env.server';
-import {
-  hasOrganizationPremiumAccess,
-  hasPremiumAccess,
-  requireUser,
-  verifyWhopToken,
-  whopSdk,
-} from '~/services/whop.server';
-import type { Route } from './+types/billing';
+import { hasOrganizationPremiumAccess, hasPremiumAccess, requireUser, whopSdk } from '~/services/whop.server';
+import type { Route } from '../_dashboard+/+types/billing';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
   await requireUser(request, companyId);
-  const { userId } = await verifyWhopToken(request);
 
-  // Check premium access
-  const premiumAccess = await hasPremiumAccess({ request, companyId, userId });
+  // Check premium access (organization-only model)
+  const premiumAccess = await hasPremiumAccess({ request, companyId });
   const orgPremiumAccess = await hasOrganizationPremiumAccess(companyId);
 
   // Fetch organization details
@@ -68,7 +62,7 @@ const BillingPage = () => {
 
     try {
       // Dynamically import iframe SDK (client-side only)
-      const { createSdk } = await import('@whop/iframe');
+
       const iframeSdk = createSdk({ appId: whopAppId });
       if (!checkoutSession) {
         throw new Error('Checkout session not available');
@@ -106,6 +100,25 @@ const BillingPage = () => {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto space-y-6">
+          {/* Organization Subscription Required Notice */}
+          {!orgPremiumAccess && (
+            <Card className="border-primary">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0">
+                    <CreditCard className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-primary">Organization Subscription Required</h3>
+                    <p className="text-sm text-foreground">
+                      This organization requires a premium subscription to access the dashboard. Organization admins can
+                      upgrade below to grant access for all team members.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
           {/* Purchase Section */}
           <Card>
             <CardHeader>
