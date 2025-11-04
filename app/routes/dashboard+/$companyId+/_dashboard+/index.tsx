@@ -6,7 +6,7 @@ import { Button } from '~/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '~/components/ui/card';
 import { db } from '~/db/index';
 import { boardTable, boardTaskTable, companiesTable, peopleTable } from '~/db/schema';
-import { requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { hasPremiumAccess, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
 import type { Route } from './+types/';
 
 function formatNumber(n: number) {
@@ -21,8 +21,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { userId } = await verifyWhopToken(request);
   const { access_level } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
-  const accessToProduct = await whopSdk.users.checkAccess('prod_refsXJqTNDzUT', { id: userId });
-  console.log(accessToProduct);
+  // Check premium access (both individual and organization-level)
+  const premiumAccess = await hasPremiumAccess({ request, companyId, userId });
 
   // Calculate date 30 days ago for growth comparison
   const thirtyDaysAgo = new Date();
@@ -162,7 +162,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   return {
     userId,
     access_level,
-    accessToProduct,
+    premiumAccess,
     companyId,
     stats: {
       people: {
@@ -188,7 +188,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 const DashboardPage = () => {
-  const { stats, recentPeople, recentCompanies, recentTasks, companyId, accessToProduct } =
+  const { stats, recentPeople, recentCompanies, recentTasks, companyId, premiumAccess } =
     useLoaderData<typeof loader>();
 
   const statsCards = [
@@ -224,9 +224,13 @@ const DashboardPage = () => {
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold">Dashboard</h1>
+          {premiumAccess.hasAccess && (
+            <Badge variant="default" className="ml-2">
+              Premium {premiumAccess.accessLevel === 'organization' ? '(Organization)' : '(Individual)'}
+            </Badge>
+          )}
         </div>
       </div>
-      <pre>{JSON.stringify(accessToProduct, null, 2)}</pre>
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4">

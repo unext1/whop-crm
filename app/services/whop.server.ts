@@ -1,12 +1,25 @@
 import Whop from '@whop/sdk';
 import { eq } from 'drizzle-orm';
 import { db } from '~/db';
-import { userTable } from '~/db/schema';
+import { organizationTable, userTable } from '~/db/schema';
 import { env } from './env.server';
+
+// Premium product ID - update this to match your premium product
+export const PREMIUM_PRODUCT_ID = 'prod_refsXJqTNDzUT';
 
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,
   apiKey: env.WHOP_API_KEY,
+  webhookKey: env.WHOP_WEBHOOK_SECRET,
+});
+
+import { WhopServerSdk } from '@whop/api';
+
+export const WhopServerApi = WhopServerSdk({
+  appId: env.WHOP_APP_ID ?? 'fallback',
+  appApiKey: env.WHOP_API_KEY ?? 'fallback',
+  onBehalfOfUserId: env.WHOP_AGENT_USER_ID,
+  companyId: env.WHOP_COMPANY_ID,
 });
 
 export const verifyWhopToken = async (request: Request) => {
@@ -77,6 +90,16 @@ export const getWhopCompanyMembers = async ({ request, companyId }: { request: R
   return memberListResponse.data;
 };
 
+export const getWhopCompanyMembership = async ({ request, companyId }: { request: Request; companyId: string }) => {
+  const isAdmin = await hasAccess({ request, companyId });
+  if (!isAdmin) {
+    throw new Response('Access denied', { status: 403 });
+  }
+
+  const memberListResponse = await whopSdk.memberships.list({ company_id: companyId });
+  return memberListResponse;
+};
+
 export const getAuthorizedUsers = async (companyId: string, role?: 'admin' | 'moderator' | 'owner') => {
   const params = { company_id: companyId, ...(role && { role }) };
   const authorizedUsers = await whopSdk.authorizedUsers.list(params);
@@ -110,4 +133,54 @@ export const isAdminCheck = async (request: Request, experienceId: string) => {
   }
 
   return true;
+};
+
+/**
+ * Checks if an organization has premium access based on database record
+ */
+export const hasOrganizationPremiumAccess = async (companyId: string): Promise<boolean> => {
+  try {
+    const organization = await db.query.organizationTable.findFirst({
+      where: eq(organizationTable.id, companyId),
+    });
+
+    return organization?.plan === 'premium';
+  } catch (error) {
+    console.error(`Error checking organization premium access for ${companyId}:`, error);
+    return false;
+  }
+};
+
+/**
+ * Checks if a user has premium access either individually or through their organization
+ */
+export const hasPremiumAccess = async ({
+  request,
+  companyId,
+  userId,
+}: {
+  request: Request;
+  companyId: string;
+  userId?: string;
+}): Promise<{ hasAccess: boolean; accessLevel: 'individual' | 'organization' | 'none' }> => {
+  try {
+    // First check individual user access to the premium product
+    const userToCheck = userId || (await verifyWhopToken(request)).userId;
+    const individualAccess = await whopSdk.users.checkAccess(PREMIUM_PRODUCT_ID, { id: userToCheck });
+
+    if (individualAccess.has_access && individualAccess.access_level === 'customer') {
+      return { hasAccess: true, accessLevel: 'individual' };
+    }
+
+    // Then check organization-level access
+    const orgAccess = await hasOrganizationPremiumAccess(companyId);
+    if (orgAccess) {
+      return { hasAccess: true, accessLevel: 'organization' };
+    }
+
+    return { hasAccess: false, accessLevel: 'none' };
+  } catch (error) {
+    console.error('Error checking premium access:', error);
+    return { hasAccess: false, accessLevel: 'none' };
+  }
 };

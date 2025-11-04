@@ -64,18 +64,38 @@ const TaskDeal = ({
   };
 
   const formatTimeAgo = (createdAt: string): string => {
+    // Ensure proper date parsing - if date doesn't have timezone info, treat as UTC
+    let createdDate: Date;
+    // Check if date has timezone info (Z for UTC, or +/-HH:MM pattern)
+    const hasTimezone = createdAt.includes('Z') || /[+-]\d{2}:\d{2}$/.test(createdAt);
+    if (hasTimezone) {
+      // Date has timezone info, parse normally
+      createdDate = new Date(createdAt);
+    } else {
+      // Date doesn't have timezone info, assume UTC and append 'Z'
+      createdDate = new Date(createdAt.endsWith('Z') ? createdAt : `${createdAt}Z`);
+    }
+    
     const now = Date.now();
-    const created = new Date(createdAt).getTime();
+    const created = createdDate.getTime();
     const diffMs = now - created;
+    
+    // Handle negative differences (future dates) by showing "Recently"
+    if (diffMs < 0) {
+      return 'Recently';
+    }
+    
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-    if (diffMins < 30) {
+    // Show "Recently" for anything less than 5 minutes
+    if (diffMins < 5) {
       return 'Recently';
     }
+    // Show minutes for 5-59 minutes
     if (diffMins < 60) {
-      return '30mins';
+      return `${diffMins}min`;
     }
     if (diffHours < 24) {
       return `${diffHours}h`;

@@ -11,8 +11,12 @@ const environmentSchema = z.object({
   WHOP_AGENT_USER_ID: z.string().min(1).trim(),
   WHOP_COMPANY_ID: z.string().min(1).trim(),
 
+  WHOP_ACCESS_PASS_ID: z.string().min(1).trim(),
+  WHOP_PREMIUM_PLAN_ID: z.string().min(1).trim(),
+  WHOP_ANNUAL_PLAN_ID: z.string().min(1).trim(),
+
   TURSO_DATABASE_URL: z.string().min(1).trim(),
-  TURSO_AUTH_TOKEN: z.string().min(1).trim()
+  TURSO_AUTH_TOKEN: z.string().min(1).trim(),
 });
 
 export const env = environmentSchema.parse(process.env);

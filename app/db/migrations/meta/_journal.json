@@ -15,6 +15,20 @@
       "when": 1762110722304,
       "tag": "0001_same_anthem",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1762260933717,
+      "tag": "0002_worried_darkstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1762266285582,
+      "tag": "0003_strong_loners",
+      "breakpoints": true
     }
   ]
 }

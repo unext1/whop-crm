@@ -76,7 +76,7 @@ export function NavUser({
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link to={href('/dashboard/:companyId', { companyId: params.companyId as string })}>
+                <Link to={href('/dashboard/:companyId/billing', { companyId: params.companyId as string })}>
                   <CreditCard />
                   Billing
                 </Link>

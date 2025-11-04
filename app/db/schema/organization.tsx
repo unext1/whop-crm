@@ -6,6 +6,8 @@ export const organizationTable = sqliteTable('organizations', {
   name: text('name'),
   ownerId: text('owner_id'), // ausr_xxxx,
   plan: text('plan').default('free'),
+  subscriptionStart: text('subscription_start'),
+  subscriptionEnd: text('subscription_end'),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
