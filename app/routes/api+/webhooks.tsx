@@ -6,10 +6,18 @@ import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
+  // Log webhook secret for debugging (mask sensitive info)
+  const { env } = await import('~/services/env.server');
+  const webhookSecret = env.WHOP_WEBHOOK_SECRET;
+  console.log('Webhook secret configured:', webhookSecret ? `${webhookSecret.substring(0, 8)}...` : 'NOT SET');
+
+  // Read the request body once
+  const requestBodyText = await request.text();
+
   try {
     // Validate the webhook to ensure it's from Whop (SDK handles signature validation internally)
-    const requestBodyText = await request.text();
     const headers = Object.fromEntries(request.headers);
+    console.log('Attempting webhook validation with headers:', Object.keys(headers));
     const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
 
     // Handle the webhook event
@@ -23,7 +31,6 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
 
     // TEMPORARY: If validation fails, try to parse as raw webhook for testing
     try {
-      const requestBodyText = await request.text();
       const webhookPayload = JSON.parse(requestBodyText);
       console.warn('⚠️  FALLBACK: Processing webhook without validation');
       handleWebhookEvent(webhookPayload.action, webhookPayload.data);
