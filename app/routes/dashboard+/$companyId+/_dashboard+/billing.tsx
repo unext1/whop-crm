@@ -1,4 +1,3 @@
-
 import { eq } from 'drizzle-orm';
 import { Calendar, CreditCard, ExternalLink, Package } from 'lucide-react';
 import { useState } from 'react';
@@ -9,19 +8,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '~/com
 import { Separator } from '~/components/ui/separator';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
+import { createCheckoutSession } from '~/services/checkout.server';
 import { env } from '~/services/env.server';
-import { hasOrganizationPremiumAccess, hasPremiumAccess, PREMIUM_PRODUCT_ID, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
+import {
+  hasOrganizationPremiumAccess,
+  hasPremiumAccess,
+  requireUser,
+  verifyWhopToken,
+  whopSdk,
+} from '~/services/whop.server';
 import type { Route } from './+types/billing';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
   await requireUser(request, companyId);
   const { userId } = await verifyWhopToken(request);
-  
+
   // Check premium access
   const premiumAccess = await hasPremiumAccess({ request, companyId, userId });
   const orgPremiumAccess = await hasOrganizationPremiumAccess(companyId);
-  
+
   // Fetch organization details
   const organization = await db.query.organizationTable.findFirst({
     where: eq(organizationTable.id, companyId),
@@ -37,45 +43,40 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     }
   }
 
+  const checkoutSession = await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId);
+
   return {
-    companyId,
-    userId,
     appMembership,
     premiumAccess,
     orgPremiumAccess,
     organization,
+    checkoutSession,
     whopAppId: env.WHOP_APP_ID,
-    premiumPlanId: env.WHOP_PREMIUM_PLAN_ID,
-    premiumProductId: PREMIUM_PRODUCT_ID,
   };
 };
 
 const BillingPage = () => {
-  const { 
-    appMembership,
-    premiumAccess, 
-    orgPremiumAccess, 
-    organization,
-    whopAppId,
-    premiumPlanId,
-    premiumProductId,
-  } = useLoaderData<typeof loader>();
-  
+  const { appMembership, premiumAccess, orgPremiumAccess, organization, checkoutSession, whopAppId } =
+    useLoaderData<typeof loader>();
+
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseResult, setPurchaseResult] = useState<any>(null);
 
-  const handlePurchase = async (planId: string) => {
+  const handlePurchase = async () => {
     setPurchasing(true);
     setPurchaseResult(null);
-    
+
     try {
       // Dynamically import iframe SDK (client-side only)
       const { createSdk } = await import('@whop/iframe');
       const iframeSdk = createSdk({ appId: whopAppId });
+      if (!checkoutSession) {
+        throw new Error('Checkout session not available');
+      }
 
-      const result = await iframeSdk.inAppPurchase({ planId });
+      const result = await iframeSdk.inAppPurchase(checkoutSession);
       setPurchaseResult(result);
-      
+
       if (result.status === 'ok') {
         // Reload page after successful purchase
         setTimeout(() => window.location.reload(), 2000);
@@ -105,7 +106,6 @@ const BillingPage = () => {
       {/* Content */}
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-5xl mx-auto space-y-6">
-          
           {/* Purchase Section */}
           <Card>
             <CardHeader>
@@ -121,25 +121,25 @@ const BillingPage = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-3">
-                <Button 
-                  onClick={() => handlePurchase(premiumPlanId)}
-                  disabled={purchasing || premiumAccess.hasAccess}
-                  className="gap-2"
-                >
+                <Button onClick={handlePurchase} className="gap-2">
                   <CreditCard className="h-4 w-4" />
-                  {purchasing ? 'Opening checkout...' : premiumAccess.hasAccess ? 'Already Premium' : 'Purchase Premium'}
+                  {purchasing
+                    ? 'Redirecting to checkout...'
+                    : premiumAccess.hasAccess
+                      ? 'Already Premium'
+                      : 'Purchase Premium'}
                 </Button>
               </div>
-              
+
               {purchaseResult && (
-                <div className={`p-4 rounded-md ${
-                  purchaseResult.status === 'ok' 
-                    ? 'bg-green-50 border border-green-200 text-green-800' 
-                    : 'bg-red-50 border border-red-200 text-red-800'
-                }`}>
-                  <pre className="text-xs overflow-auto">
-                    {JSON.stringify(purchaseResult, null, 2)}
-                  </pre>
+                <div
+                  className={`p-4 rounded-md ${
+                    purchaseResult.status === 'ok'
+                      ? 'bg-green-50 border border-green-200 text-green-800'
+                      : 'bg-red-50 border border-red-200 text-red-800'
+                  }`}
+                >
+                  <pre className="text-xs overflow-auto">{JSON.stringify(purchaseResult, null, 2)}</pre>
                 </div>
               )}
             </CardContent>
@@ -162,17 +162,13 @@ const BillingPage = () => {
                   {organization.subscriptionStart && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Subscription Start:</span>
-                      <span className="text-sm">
-                        {new Date(organization.subscriptionStart).toLocaleDateString()}
-                      </span>
+                      <span className="text-sm">{new Date(organization.subscriptionStart).toLocaleDateString()}</span>
                     </div>
                   )}
                   {organization.subscriptionEnd && (
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Subscription End:</span>
-                      <span className="text-sm">
-                        {new Date(organization.subscriptionEnd).toLocaleDateString()}
-                      </span>
+                      <span className="text-sm">{new Date(organization.subscriptionEnd).toLocaleDateString()}</span>
                     </div>
                   )}
                 </div>
@@ -188,9 +184,7 @@ const BillingPage = () => {
                   <Package className="h-5 w-5" />
                   Your Subscription
                 </CardTitle>
-                <CardDescription>
-                  Manage your subscription and billing
-                </CardDescription>
+                <CardDescription>Manage your subscription and billing</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="p-4 border rounded-lg space-y-3">
@@ -198,11 +192,15 @@ const BillingPage = () => {
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <h3 className="font-semibold">{(appMembership as any).product?.title || 'Premium'}</h3>
-                        <Badge variant={
-                          (appMembership as any).status === 'active' ? 'default' :
-                          (appMembership as any).status === 'trialing' ? 'secondary' :
-                          'outline'
-                        }>
+                        <Badge
+                          variant={
+                            (appMembership as any).status === 'active'
+                              ? 'default'
+                              : (appMembership as any).status === 'trialing'
+                                ? 'secondary'
+                                : 'outline'
+                          }
+                        >
                           {(appMembership as any).status}
                         </Badge>
                       </div>
@@ -210,7 +208,12 @@ const BillingPage = () => {
                     </div>
                     {(appMembership as any).manage_url && (
                       <Button variant="default" size="sm" asChild>
-                        <a href={(appMembership as any).manage_url} target="_blank" rel="noopener noreferrer" className="gap-2">
+                        <a
+                          href={(appMembership as any).manage_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="gap-2"
+                        >
                           <ExternalLink className="h-3 w-3" />
                           Manage Subscription
                         </a>
@@ -264,9 +267,7 @@ const BillingPage = () => {
           <Card>
             <CardHeader>
               <CardTitle>Debug Information</CardTitle>
-              <CardDescription>
-                Complete membership and access data for debugging
-              </CardDescription>
+              <CardDescription>Complete membership and access data for debugging</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
@@ -298,17 +299,6 @@ const BillingPage = () => {
               )}
 
               <Separator />
-
-              <div>
-                <h4 className="font-medium mb-2">Configuration</h4>
-                <pre className="bg-muted p-3 rounded-md text-xs overflow-auto">
-                  {JSON.stringify({ 
-                    whopAppId, 
-                    premiumPlanId,
-                    premiumProductId 
-                  }, null, 2)}
-                </pre>
-              </div>
             </CardContent>
           </Card>
         </div>

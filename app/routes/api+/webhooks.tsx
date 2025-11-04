@@ -19,7 +19,7 @@ async function checkUserAuthorization(companyId: string, userId?: string): Promi
     // Only allow admin or owner level access to grant organization premium
     return accessCheck.has_access && accessCheck.access_level === 'admin';
   } catch (error) {
-    console.error(`Error checking authorization for user ${userId} in company ${companyId}:`, error);
+    console.error('Error checking authorization for user ' + userId + ' in company ' + companyId + ':', error);
     return false;
   }
 }
@@ -51,11 +51,11 @@ function handlePaymentSucceeded(invoice: Payment): Promise<void> {
  * Handle webhook events (extracted for reuse in dev mode)
  */
 async function handleWebhookEvent(action: string, data: any) {
-  console.log(`Processing webhook event: ${action}`, data);
+  console.log('Processing webhook event: ' + action, data);
 
   // Check if data is null (test webhooks may send null data)
   if (data === null) {
-    console.log(`Received ${action} webhook with null data - likely a test webhook`);
+    console.log('Received ' + action + ' webhook with null data - likely a test webhook');
     return;
   }
 
@@ -63,7 +63,7 @@ async function handleWebhookEvent(action: string, data: any) {
     const payment = data;
     const { id, final_amount, amount_after_fees, currency, user_id, company_id, product_id } = payment;
 
-    console.log(`Payment ${id} succeeded for ${user_id} with amount ${final_amount} ${currency}`);
+    console.log('Payment ' + id + ' succeeded for ' + user_id + ' with amount ' + final_amount + ' ' + currency);
 
     // Check if this payment is for the premium product
     if (product_id === PREMIUM_PRODUCT_ID && company_id) {
@@ -80,16 +80,26 @@ async function handleWebhookEvent(action: string, data: any) {
     action === 'app_membership.activated'
   ) {
     const membership = data;
-    const { product_id, page_id, id: membershipId, user } = membership;
+    const { product_id, id: membershipId, user, metadata } = membership;
+
+    // Use metadata.companyId from checkout session instead of webhook's company field
+    // The webhook's company field contains the app owner's company, not the user's company
+    const companyId = metadata?.companyId;
+
+    console.log(
+      'Membership activated - user: ' + user?.id + ', company from metadata: ' + companyId + ', product: ' + product_id,
+    );
 
     // Check if this membership is for the premium product
-    if (product_id === PREMIUM_PRODUCT_ID && page_id) {
+    if (product_id === PREMIUM_PRODUCT_ID && companyId) {
       // Check if the subscribing user is an admin/owner of the organization
       // This ensures only authorized users can grant organization-wide premium access
-      const isAuthorizedUser = await checkUserAuthorization(page_id, user?.id);
+      const isAuthorizedUser = await checkUserAuthorization(companyId, user?.id);
 
       if (isAuthorizedUser) {
-        console.log(`Authorized user ${user?.id} subscribed - granting organization ${page_id} premium access`);
+        console.log(
+          'Authorized user ' + user?.id + ' subscribed - granting organization ' + companyId + ' premium access',
+        );
 
         // Convert webhook timestamp fields to ISO strings
         const membershipData = {
@@ -101,10 +111,17 @@ async function handleWebhookEvent(action: string, data: any) {
             ? new Date(membership.renewal_period_end * 1000).toISOString()
             : null,
         };
-        handleOrganizationPremiumAccess(page_id, 'premium', membershipData).catch(console.error);
+        handleOrganizationPremiumAccess(companyId, 'premium', membershipData).catch(console.error);
       } else {
-        console.log(`User ${user?.id} subscribed but is not authorized to grant organization access`);
+        console.log(
+          'User ' +
+            user?.id +
+            ' subscribed but is not authorized to grant organization access for company ' +
+            companyId,
+        );
       }
+    } else {
+      console.log('Membership activated but missing companyId in metadata or not premium product');
     }
   } else if (
     action === 'membership.deactivated' ||
@@ -112,17 +129,22 @@ async function handleWebhookEvent(action: string, data: any) {
     action === 'app_membership.deactivated'
   ) {
     const membership = data;
-    const { product_id, page_id } = membership;
+    const { product_id, metadata } = membership;
+
+    // Use metadata.companyId from checkout session
+    const companyId = metadata?.companyId;
+
+    console.log('Membership deactivated - company from metadata: ' + companyId + ', product: ' + product_id);
 
     // Check if this membership deactivation is for the premium product
-    if (product_id === PREMIUM_PRODUCT_ID && page_id) {
+    if (product_id === PREMIUM_PRODUCT_ID && companyId) {
       // Check if there are any other active premium memberships for this organization
       // If not, downgrade to free
-      checkAndDowngradeOrganization(page_id).catch(console.error);
+      checkAndDowngradeOrganization(companyId).catch(console.error);
     }
   } else {
     // Log other webhook events for debugging
-    console.log(`Received webhook event: ${action}`, data);
+    console.log('Received webhook event: ' + action, data);
   }
 }
 
@@ -157,7 +179,7 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
     if (existingOrg) {
       // Update existing organization
       await db.update(organizationTable).set(updateData).where(eq(organizationTable.id, companyId));
-      console.log(`Updated organization ${companyId} to ${plan} plan`);
+      console.log('Updated organization ' + companyId + ' to ' + plan + ' plan');
     } else {
       // Create organization if it doesn't exist
       await db.insert(organizationTable).values({
@@ -165,10 +187,10 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
         ...updateData,
         createdAt: new Date().toISOString(),
       });
-      console.log(`Created organization ${companyId} with ${plan} plan`);
+      console.log('Created organization ' + companyId + ' with ' + plan + ' plan');
     }
   } catch (error) {
-    console.error(`Error updating organization ${companyId}:`, error);
+    console.error('Error updating organization ' + companyId + ':', error);
     throw error;
   }
 }
@@ -182,9 +204,11 @@ async function checkAndDowngradeOrganization(companyId: string) {
     // For now, we'll keep it simple and rely on membership.activated webhooks
     // to re-activate premium when a new membership is created
     // In a production app, you might want to check the Whop API here
-    console.log(`Membership deactivated for organization ${companyId} - keeping current plan status`);
+    console.log('Membership deactivated for organization ' + companyId + ' - keeping current plan status');
+    return Promise.resolve();
   } catch (error) {
-    console.error(`Error checking organization ${companyId}:`, error);
+    console.error('Error checking organization ' + companyId + ':', error);
+    return Promise.resolve();
   }
 }
 
