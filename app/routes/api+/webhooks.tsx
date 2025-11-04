@@ -5,75 +5,14 @@ import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
-  // Log webhook secret for debugging (mask sensitive info)
-  const { env } = await import('~/services/env.server');
-  
-  const webhookSecret = env.WHOP_WEBHOOK_SECRET;
-  const base64Secret = Buffer.from(webhookSecret || '', 'utf8').toString('base64');
-  console.log('Raw webhook secret:', webhookSecret ? `${webhookSecret.substring(0, 12)}...` : 'NOT SET');
-  console.log('Base64 webhook secret:', base64Secret ? `${base64Secret.substring(0, 12)}...` : 'NOT SET');
-  console.log('Raw secret length:', webhookSecret?.length);
-  console.log('Raw secret prefix:', webhookSecret?.substring(0, 5));
-
-  // Check if secret matches what user said they have
-  const userReportedSecret = 'ws_d6843d85b24bf8069f83e6b1a27e880d8ebbb003a5b7448b7b29fc3ff7a261f9';
-  const matchesReported = webhookSecret === userReportedSecret;
-  console.log('✅ Secret matches user reported value:', matchesReported);
-
-  if (!matchesReported) {
-    console.log('❌ Vercel secret:', webhookSecret?.substring(0, 20));
-    console.log('❌ User reported secret:', userReportedSecret.substring(0, 20));
-  }
-
-  // Read the request body once
   const requestBodyText = await request.text();
-
-  try {
-    // Validate the webhook to ensure it's from Whop (SDK handles signature validation internally)
-    const headers = Object.fromEntries(request.headers);
-    console.log('Attempting webhook validation with headers:', Object.keys(headers));
-  const signatureHeaders = ['svix-id', 'svix-timestamp', 'svix-signature'];
-  const whopSignatureHeaders = ['x-whop-signature'];
-  const presentHeaders = signatureHeaders.filter(h => headers[h.toLowerCase()]);
-  const presentWhopHeaders = whopSignatureHeaders.filter(h => headers[h.toLowerCase()]);
-  const missingHeaders = signatureHeaders.filter(h => !headers[h.toLowerCase()]);
-  console.log('✅ Present standard signature headers:', presentHeaders);
-  console.log('✅ Present Whop signature headers:', presentWhopHeaders);
-  console.log('❌ Missing standard signature headers:', missingHeaders);
-
-  if (presentWhopHeaders.length > 0) {
-    console.log('🔍 Whop is using custom signature format (x-whop-signature) instead of standard Svix headers');
-    console.log('🔍 x-whop-signature value:', headers['x-whop-signature']?.substring(0, 20) + '...');
-
-    // For now, since Whop is using custom headers, let's try processing without validation
-    // The webhook is reaching us, so it's likely legitimate
-    console.warn('⚠️  Using fallback processing due to custom Whop signature format');
-    handleWebhookEvent(JSON.parse(requestBodyText).action, JSON.parse(requestBodyText).data);
-    return new Response('OK', { status: 200 });
-  }
-
+  const headers = Object.fromEntries(request.headers);
   const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-
-    // Handle the webhook event
-    handleWebhookEvent(webhookData.type, webhookData.data);
-
-    // Make sure to return a 2xx status code quickly. Otherwise the webhook will be retried.
-    return new Response('OK', { status: 200 });
-  } catch (error) {
-    // Log webhook validation errors but still return 200 to prevent retries
-    console.error('Webhook validation failed:', error);
-
-    // TEMPORARY: If validation fails, try to parse as raw webhook for testing
-    try {
-      const webhookPayload = JSON.parse(requestBodyText);
-      console.warn('⚠️  FALLBACK: Processing webhook without validation');
-      handleWebhookEvent(webhookPayload.action, webhookPayload.data);
-      return new Response('OK', { status: 200 });
-    } catch (fallbackError) {
-      console.error('Fallback parsing also failed:', fallbackError);
-      return new Response('OK', { status: 200 });
-    }
-  }
+  console.log('Headers:', headers);
+  console.log('Webhook data:', webhookData);
+  handleWebhookEvent(webhookData.type, webhookData.data);
+  console.log('Response sent');
+  return new Response('OK', { status: 200 });
 };
 
 /**
