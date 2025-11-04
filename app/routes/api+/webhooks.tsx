@@ -36,7 +36,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
 
     handleWebhookEvent(webhookData.type, webhookData.data);
 
-    console.log('Webhook data:', webhookData);
+    console.warn('Webhook data:', webhookData);
    	// Handle the webhook event
    	if (webhookData.type === "payment.succeeded") {
   		handlePaymentSucceeded(webhookData.data)
@@ -50,7 +50,7 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
 async function handlePaymentSucceeded(invoice: Payment) {
   // This is a placeholder for a potentially long running operation
   // In a real scenario, you might need to fetch user data, update a database, etc.
-  console.log("[PAYMENT SUCCEEDED]", invoice);
+  console.warn("[PAYMENT SUCCEEDED]", invoice);
 }
 /**
  * Handle webhook events (extracted for reuse in dev mode)
