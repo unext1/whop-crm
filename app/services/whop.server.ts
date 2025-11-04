@@ -144,12 +144,114 @@ export const hasOrganizationPremiumAccess = async (companyId: string): Promise<b
       where: eq(organizationTable.id, companyId),
     });
 
-    return organization?.plan === 'premium';
-  } catch (error) {
-    console.error(`Error checking organization premium access for ${companyId}:`, error);
+    if (!organization) return false;
+
+    // If plan is not premium, no access
+    if (organization.plan !== 'premium') return false;
+
+    // If no membership ID, no active subscription
+    if (!organization.membershipId) return false;
+
+    // Check if subscription has expired based on stored dates
+    if (organization.subscriptionEnd) {
+      const endDate = new Date(organization.subscriptionEnd);
+      const now = new Date();
+
+      if (now > endDate) {
+        await downgradeOrganization(companyId);
+        return false;
+      }
+    }
+
+    // Periodic membership validation (check with Whop API every hour)
+    const shouldCheckMembership = shouldCheckMembershipStatus(organization);
+    if (shouldCheckMembership) {
+      const isValid = await validateMembershipWithWhop(organization.membershipId);
+
+      if (!isValid) {
+        await downgradeOrganization(companyId);
+        return false;
+      }
+
+      // Update last check timestamp
+      await db
+        .update(organizationTable)
+        .set({
+          lastMembershipCheck: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        })
+        .where(eq(organizationTable.id, companyId));
+    }
+
+    return true;
+  } catch (_error) {
     return false;
   }
 };
+
+/**
+ * Check if we should validate membership status with Whop API
+ * Only check every hour to avoid spamming the API
+ */
+function shouldCheckMembershipStatus(organization: { lastMembershipCheck?: string | null }): boolean {
+  if (!organization.lastMembershipCheck) return true;
+
+  const lastCheck = new Date(organization.lastMembershipCheck);
+  const now = new Date();
+  const hoursSinceLastCheck = (now.getTime() - lastCheck.getTime()) / (1000 * 60 * 60);
+
+  return hoursSinceLastCheck >= 1; // Check every hour
+}
+
+/**
+ * Validate membership with Whop API
+ */
+async function validateMembershipWithWhop(membershipId: string): Promise<boolean> {
+  try {
+    const membership = await whopSdk.memberships.retrieve(membershipId);
+
+    // Check if membership is still active
+    if (membership.status !== 'active' && membership.status !== 'trialing') {
+      return false;
+    }
+
+    // If it was canceled but cancelAtPeriodEnd is true, it might still be active
+    if (membership.cancel_at_period_end) {
+      // Check if we're still within the active period
+      const renewalEnd = membership.renewal_period_end;
+      if (renewalEnd) {
+        const endDate = new Date(renewalEnd);
+        const now = new Date();
+        if (now > endDate) {
+          return false; // Past the period end, should be canceled
+        }
+      }
+    }
+
+    return true;
+  } catch (_error) {
+    return false; // Assume invalid if we can't check
+  }
+}
+
+/**
+ * Downgrade organization to free plan and clear membership data
+ */
+async function downgradeOrganization(companyId: string): Promise<void> {
+  await db
+    .update(organizationTable)
+    .set({
+      plan: 'free',
+      membershipId: null,
+      subscriptionStart: null,
+      subscriptionEnd: null,
+      cancelAtPeriodEnd: false,
+      canceledAt: null,
+      lastMembershipCheck: null,
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(organizationTable.id, companyId));
+}
 
 /**
  * Checks if a user has premium access either individually or through their organization
@@ -174,8 +276,7 @@ export const hasPremiumAccess = async ({
 
     // No individual access allowed - organization must subscribe
     return { hasAccess: false, accessLevel: 'none' };
-  } catch (error) {
-    console.error('Error checking premium access:', error);
+  } catch (_error) {
     return { hasAccess: false, accessLevel: 'none' };
   }
 };

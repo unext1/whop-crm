@@ -12,13 +12,7 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { Button } from './ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from './ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -173,21 +167,11 @@ export function QuickActionsMenu({
 
       {/* Create Task Dialog */}
       {type === 'person' && (
-        <QuickTodoDialog
-          personId={entityId}
-          userId={userId}
-          open={taskOpen}
-          onOpenChange={setTaskOpen}
-        />
+        <QuickTodoDialog personId={entityId} userId={userId} open={taskOpen} onOpenChange={setTaskOpen} />
       )}
 
       {type === 'company' && (
-        <QuickTodoDialog
-          companyId={entityId}
-          userId={userId}
-          open={taskOpen}
-          onOpenChange={setTaskOpen}
-        />
+        <QuickTodoDialog companyId={entityId} userId={userId} open={taskOpen} onOpenChange={setTaskOpen} />
       )}
 
       {/* Create Deal Dialog */}
@@ -221,12 +205,7 @@ export function QuickActionsMenu({
             </div>
             <div className="space-y-2">
               <Label htmlFor="deal-amount">Amount (optional)</Label>
-              <Input
-                id="deal-amount"
-                name="amount"
-                type="number"
-                placeholder="0"
-              />
+              <Input id="deal-amount" name="amount" type="number" placeholder="0" />
             </div>
             <div className="space-y-2">
               <Label htmlFor="deal-content">Notes</Label>
@@ -258,8 +237,8 @@ export function QuickActionsMenu({
               Delete {type === 'person' ? 'Person' : type === 'company' ? 'Company' : 'Task'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete {entityName}? This action cannot be undone and will permanently remove this{' '}
-              {type === 'person' ? 'person' : type === 'company' ? 'company' : 'task'} and all associated data.
+              Are you sure you want to delete {entityName}? This action cannot be undone and will permanently remove
+              this {type === 'person' ? 'person' : type === 'company' ? 'company' : 'task'} and all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -279,5 +258,3 @@ export function QuickActionsMenu({
     </>
   );
 }
-
-

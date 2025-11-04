@@ -1,1 +1,0 @@
-ALTER TABLE `organizations` ADD `membership_id` text;

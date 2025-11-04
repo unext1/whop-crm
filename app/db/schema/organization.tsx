@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 
 export const organizationTable = sqliteTable('organizations', {
   id: text('id').primaryKey().notNull(), // biz_xxxx,
@@ -9,6 +9,9 @@ export const organizationTable = sqliteTable('organizations', {
   membershipId: text('membership_id'), // mem_xxxx - the active membership to the app
   subscriptionStart: text('subscription_start'),
   subscriptionEnd: text('subscription_end'),
+  cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).default(false),
+  canceledAt: text('canceled_at'),
+  lastMembershipCheck: text('last_membership_check'), // timestamp of last Whop API check
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
