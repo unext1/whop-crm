@@ -10,33 +10,34 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
     const requestBodyText = await request.text();
     const headers = Object.fromEntries(request.headers);
 
-    console.log('Raw request body:', requestBodyText);
-    console.log('Headers:', headers);
-    console.log('WHOP_WEBHOOK_SECRET length:', "ws_ee0bb37b7d2e48538562f01dae2d8e4d2ebb3478c691b544d5139ad89982ae31".length);
-
     let webhookData;
     try {
+      // Try Standard Webhooks format first
       webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
     } catch (unwrapError) {
-      console.error('Webhook unwrap failed:', unwrapError);
+      console.warn('Standard webhook unwrap failed, trying raw JSON format');
 
-      // Try to parse as raw JSON if unwrap fails (for testing or malformed webhooks)
+      // Fallback: handle raw JSON format (used by some Whop webhook configurations)
       try {
         const rawData = JSON.parse(requestBodyText);
-        console.log('Parsed as raw JSON:', rawData);
-        webhookData = rawData;
+
+        // Convert raw format to expected format
+        // Raw format uses 'action', expected format uses 'type'
+        webhookData = {
+          type: rawData.action,
+          data: rawData.data,
+          api_version: rawData.api_version
+        };
       } catch (jsonError) {
-        console.error('Could not parse as JSON either:', jsonError);
+        console.error('Could not parse webhook as JSON either');
         throw unwrapError; // Re-throw original error
       }
     }
-    console.log('Webhook data:', webhookData);
+
     handleWebhookEvent(webhookData.type, webhookData.data);
-    console.log('Response sent');
     return new Response('OK', { status: 200 });
   } catch (error) {
     console.error('Webhook processing error:', error);
-    console.log('Raw request body for debugging:', await request.clone().text());
     throw error;
   }
 };
