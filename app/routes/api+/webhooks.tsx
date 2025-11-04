@@ -1,25 +1,26 @@
-import type { Payment } from '@whop/sdk/resources/shared.mjs';
 import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
+import type { Payment } from '@whop/sdk/resources/shared.mjs';
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
   try {
     const requestBodyText = await request.text();
     const headers = Object.fromEntries(request.headers);
+
     const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
 
-   
-    handleWebhookEvent(webhookData.type, webhookData.data);
-
     console.warn('Webhook data:', webhookData);
-   	// Handle the webhook event
-   	if (webhookData.type === "payment.succeeded") {
-  		handlePaymentSucceeded(webhookData.data)
-   	}
-    return new Response(JSON.stringify(webhookData), { status: 200 });
+
+    // Handle the webhook event
+    if (webhookData.type === "payment.succeeded") {
+      handlePaymentSucceeded(webhookData.data)
+    }
+
+    handleWebhookEvent(webhookData.type, webhookData.data);
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
   } catch (error) {
     console.error('Webhook processing error:', error);
     throw error;
