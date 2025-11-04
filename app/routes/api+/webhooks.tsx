@@ -48,19 +48,17 @@ export async function action({ request }: ActionFunctionArgs) {
         throw new Error('WHOP_WEBHOOK_SECRET not configured');
       }
 
-      // Standard Webhooks expects the body to be base64-encoded for signature calculation
-      // So we need to base64-encode the JSON body first
-      const base64Body = Buffer.from(requestBodyText, 'utf8').toString('base64');
+      // Standard Webhooks signature format: id.timestamp.body (where body is the raw request body)
+      const signedPayload = `${webhookId}.${webhookTimestamp}.${requestBodyText}`;
+      console.warn('Signed payload:', signedPayload);
 
-      // Create the signed payload: webhook_id.webhook_timestamp.base64_body
-      const signedPayload = `${webhookId}.${webhookTimestamp}.${base64Body}`;
-
-      // Create HMAC signature
-      // The webhook secret from Whop is base64-encoded, so decode it first
-      const decodedSecret = Buffer.from(secret, 'base64');
-      const hmac = crypto.createHmac('sha256', decodedSecret);
+      // Use the webhook secret directly (Whop SDK handles the base64 decoding internally)
+      const hmac = crypto.createHmac('sha256', secret);
       hmac.update(signedPayload, 'utf8');
       const expectedSignature = hmac.digest('base64');
+
+      console.warn('Expected signature:', expectedSignature);
+      console.warn('Received signature:', signature);
 
       // Compare signatures (constant time comparison)
       if (!crypto.timingSafeEqual(Buffer.from(signature, 'base64'), Buffer.from(expectedSignature, 'base64'))) {
