@@ -49,7 +49,7 @@ export const getAuthorizedUserId = async ({
   if (!authorizedUser) {
     throw new Response('Authorized user not found', { status: 404 });
   }
-  return authorizedUser.user;
+  return authorizedUser;
 };
 
 export const getPublicUser = async (userId: string) => {

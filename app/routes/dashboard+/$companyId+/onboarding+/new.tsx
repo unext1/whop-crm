@@ -14,7 +14,12 @@ import { organizationTable, userTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
 import { env } from '~/services/env.server';
 import { putToast } from '~/services/cookie.server';
-import { getAuthorizedUserId, getPublicUser, verifyWhopToken } from '~/services/whop.server';
+import {
+  getAuthorizedUserId,
+  getPublicUser,
+  hasOrganizationPremiumAccess,
+  verifyWhopToken,
+} from '~/services/whop.server';
 import type { Route } from './+types/new';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
@@ -30,6 +35,9 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const hasOrg = existingOrg.length > 0;
   const hasUser = existingUser.length > 0;
 
+  // Check if organization already has premium access
+  const hasPremiumAccess = hasOrg ? await hasOrganizationPremiumAccess(companyId) : false;
+
   // If both exist, redirect to dashboard (onboarding complete)
   // if (hasOrg && hasUser) {
   //   throw redirect(href('/dashboard/:companyId', { companyId }));
@@ -39,6 +47,8 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   let initialStep = 1;
   if (hasOrg && !hasUser) {
     initialStep = 2; // Skip org creation, go to user profile
+  } else if (hasOrg && hasUser && hasPremiumAccess) {
+    initialStep = 5; // Skip everything if org exists, user exists, and has premium - go to completion
   }
 
   // Create checkout sessions for both monthly and annual plans
@@ -48,13 +58,14 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   return {
     whopUser: {
       id: authorizedUser.id,
-      username: authorizedUser.username || null,
-      name: authorizedUser.name,
-      email: authorizedUser.email,
+      username: authorizedUser.user.username || null,
+      name: authorizedUser.user.name,
+      email: authorizedUser.user.email,
     },
     initialStep,
     hasOrg,
     hasUser,
+    hasPremiumAccess,
     monthlyCheckout,
     annualCheckout,
     whopAppId: env.WHOP_APP_ID,
@@ -80,7 +91,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     await db.insert(organizationTable).values({
       id: companyId,
       name: name.trim(),
-      ownerId: authorizedUser.id,
     });
 
     return data({ success: true, step: 1, message: 'Organization created' } as const);
@@ -94,20 +104,37 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data({ error: 'First name and last name are required', step: 2 } as const, { status: 400 });
     }
 
-    await db.insert(userTable).values({
-      id: authorizedUser.id,
-      email: authorizedUser.email || 'user@example.com',
-      name: firstName.trim(),
-      lastName: lastName.trim(),
-      whopUserId: userId,
-      organizationId: companyId,
-      profilePictureUrl: publicWhopUser.profile_picture?.url || null,
-    });
+    const [createdUser] = await db
+      .insert(userTable)
+      .values({
+        email: authorizedUser.user.email || 'user@example.com',
+        name: firstName.trim(),
+        lastName: lastName.trim(),
+        whopUserId: userId,
+        organizationId: companyId,
+        profilePictureUrl: publicWhopUser.profile_picture?.url || null,
+      })
+      .returning();
+
+    await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
 
     return data({ success: true, step: 2, message: 'Profile created' } as const);
   }
 
   if (intent === 'processPayment') {
+    // Check if organization already has premium access
+    const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
+
+    // If they already have premium, skip payment and go to completion
+    if (hasPremiumAccess) {
+      return data({
+        success: true,
+        step: 3,
+        skipPayment: true,
+        message: 'Organization already has premium access',
+      } as const);
+    }
+
     const selectedPlan = formData.get('selectedPlan')?.toString();
 
     if (!selectedPlan || !['monthly', 'annual'].includes(selectedPlan)) {
@@ -137,7 +164,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   if (intent === 'complete') {
     const headers = await putToast({
       title: 'Welcome! 🎉',
-      message: 'Your workspace is ready to go',
+      message: 'Your Organization is ready to go',
       variant: 'default',
     });
 
@@ -189,6 +216,10 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
       if (step === 3 && 'checkoutSession' in actionData) {
         // Process payment with the checkout session
         handlePayment(actionData.checkoutSession);
+      } else if (step === 3 && 'skipPayment' in actionData && actionData.skipPayment) {
+        // Organization already has premium - skip to completion
+        const timer = setTimeout(() => setStep(5), 100);
+        return () => clearTimeout(timer);
       } else if (step === 3 && !('checkoutSession' in actionData)) {
         // Plan selected but no checkout session - stay on step 3
       } else {
@@ -348,67 +379,80 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               className="space-y-8"
             >
               <div className="text-center space-y-4">
-                <h1 className="text-3xl font-semibold text-foreground">Choose your plan</h1>
+                <h1 className="text-3xl font-semibold text-foreground">
+                  {loaderData.hasPremiumAccess ? 'Premium Access Confirmed' : 'Choose your plan'}
+                </h1>
                 <p className="text-base text-muted-foreground">
-                  One subscription unlocks premium features for your entire team
+                  {loaderData.hasPremiumAccess
+                    ? 'Your organization already has premium access'
+                    : 'One subscription unlocks premium features for your entire team'}
                 </p>
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 border border-primary/20 rounded-full text-sm text-primary">
-                  <Check className="w-4 h-4" />
-                  All team members get premium access for free
+                {loaderData.hasPremiumAccess ? (
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-full text-sm text-green-700">
+                    <Check className="w-4 h-4" />
+                    Premium access active
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 border border-primary/20 rounded-full text-sm text-primary">
+                    <Check className="w-4 h-4" />
+                    All team members get premium access for free
+                  </div>
+                )}
+              </div>
+
+              {!loaderData.hasPremiumAccess && (
+                <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
+                  {/* Monthly Plan */}
+                  <Card
+                    className={`cursor-pointer transition-all duration-200 flex-1 ${
+                      selectedPlan === 'monthly'
+                        ? 'ring-2 ring-primary border-primary bg-primary/5'
+                        : 'hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedPlan('monthly')}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <div className="space-y-3">
+                        <div className="text-sm font-medium text-muted-foreground">Monthly</div>
+                        <div className="text-3xl font-bold">
+                          $19<span className="text-lg font-normal text-muted-foreground">/mo</span>
+                        </div>
+                        <div className="text-sm text-muted-foreground">Perfect for getting started</div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Annual Plan */}
+                  <Card
+                    className={`cursor-pointer transition-all duration-200 flex-1 relative ${
+                      selectedPlan === 'annual'
+                        ? 'ring-2 ring-primary border-primary bg-primary/5'
+                        : 'hover:border-primary/50'
+                    }`}
+                    onClick={() => setSelectedPlan('annual')}
+                  >
+                    <CardContent className="p-6 text-center">
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-center gap-2">
+                          <div className="text-sm font-medium text-muted-foreground">Annual</div>
+                          <Badge variant="secondary" className="text-xs">
+                            Save 17%
+                          </Badge>
+                        </div>
+                        <div className="text-3xl font-bold">
+                          $190<span className="text-lg font-normal text-muted-foreground">/yr</span>
+                        </div>
+                        <div className="text-sm text-green-600 font-medium">7-day free trial</div>
+                      </div>
+                    </CardContent>
+                    {selectedPlan === 'annual' && (
+                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
+                        <Check className="w-4 h-4 text-primary-foreground" />
+                      </div>
+                    )}
+                  </Card>
                 </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
-                {/* Monthly Plan */}
-                <Card
-                  className={`cursor-pointer transition-all duration-200 flex-1 ${
-                    selectedPlan === 'monthly'
-                      ? 'ring-2 ring-primary border-primary bg-primary/5'
-                      : 'hover:border-primary/50'
-                  }`}
-                  onClick={() => setSelectedPlan('monthly')}
-                >
-                  <CardContent className="p-6 text-center">
-                    <div className="space-y-3">
-                      <div className="text-sm font-medium text-muted-foreground">Monthly</div>
-                      <div className="text-3xl font-bold">
-                        $19<span className="text-lg font-normal text-muted-foreground">/mo</span>
-                      </div>
-                      <div className="text-sm text-muted-foreground">Perfect for getting started</div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Annual Plan */}
-                <Card
-                  className={`cursor-pointer transition-all duration-200 flex-1 relative ${
-                    selectedPlan === 'annual'
-                      ? 'ring-2 ring-primary border-primary bg-primary/5'
-                      : 'hover:border-primary/50'
-                  }`}
-                  onClick={() => setSelectedPlan('annual')}
-                >
-                  <CardContent className="p-6 text-center">
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="text-sm font-medium text-muted-foreground">Annual</div>
-                        <Badge variant="secondary" className="text-xs">
-                          Save 17%
-                        </Badge>
-                      </div>
-                      <div className="text-3xl font-bold">
-                        $190<span className="text-lg font-normal text-muted-foreground">/yr</span>
-                      </div>
-                      <div className="text-sm text-green-600 font-medium">7-day free trial</div>
-                    </div>
-                  </CardContent>
-                  {selectedPlan === 'annual' && (
-                    <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                      <Check className="w-4 h-4 text-primary-foreground" />
-                    </div>
-                  )}
-                </Card>
-              </div>
+              )}
 
               {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 3 && (
                 <p className="text-sm text-destructive text-center">{actionData.error}</p>
@@ -418,7 +462,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                 <div className="w-full max-w-sm space-y-4">
                   <Form method="post">
                     <input type="hidden" name="intent" value="processPayment" />
-                    <input type="hidden" name="selectedPlan" value={selectedPlan} />
+                    {!loaderData.hasPremiumAccess && <input type="hidden" name="selectedPlan" value={selectedPlan} />}
 
                     <Button
                       type="submit"
@@ -426,16 +470,20 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                       className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
                     >
                       {isSubmitting
-                        ? 'Setting up payment...'
+                        ? 'Processing...'
                         : isProcessingPayment
                           ? 'Processing payment...'
-                          : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
+                          : loaderData.hasPremiumAccess
+                            ? 'Continue'
+                            : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
                     </Button>
                   </Form>
 
-                  <div className="text-center">
-                    <div className="text-xs text-muted-foreground">Secure payment powered by Whop</div>
-                  </div>
+                  {!loaderData.hasPremiumAccess && (
+                    <div className="text-center">
+                      <div className="text-xs text-muted-foreground">Secure payment powered by Whop</div>
+                    </div>
+                  )}
                 </div>
               </div>
             </motion.div>

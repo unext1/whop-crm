@@ -89,7 +89,7 @@ CREATE TABLE `people_emails` (
 );
 --> statement-breakpoint
 CREATE TABLE `user` (
-	`id` text PRIMARY KEY NOT NULL,
+	`id` text PRIMARY KEY DEFAULT (uuid4()) NOT NULL,
 	`whop_user_id` text NOT NULL,
 	`email` text NOT NULL,
 	`name` text,

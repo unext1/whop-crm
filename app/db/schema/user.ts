@@ -6,7 +6,7 @@ import { taskAssigneesTable } from '../kanban-schemas/task-assignees';
 import { organizationTable } from './organization';
 
 export const userTable = sqliteTable('user', {
-  id: text('id').primaryKey().notNull(), // ausr_xxxx,
+  id: text('id').primaryKey().default(sql`(uuid4())`).notNull(),
   whopUserId: text('whop_user_id').notNull(), // user_xxxx,
   email: text('email').notNull(),
   name: text('name'),

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "85a0d85a-5470-465e-989e-ef5dc1763ef5",
+  "id": "b1596e68-c9de-4b97-a80b-2ab89319c229",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "activities": {
@@ -637,7 +637,8 @@
           "type": "text",
           "primaryKey": true,
           "notNull": true,
-          "autoincrement": false
+          "autoincrement": false,
+          "default": "(uuid4())"
         },
         "whop_user_id": {
           "name": "whop_user_id",
