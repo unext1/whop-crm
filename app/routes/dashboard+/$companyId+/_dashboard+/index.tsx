@@ -162,6 +162,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   return {
     userId,
     access_level,
+    accessToProduct,
     companyId,
     stats: {
       people: {
