@@ -9,31 +9,9 @@ export const action = async ({ request }: ActionFunctionArgs): Promise<Response>
   try {
     const requestBodyText = await request.text();
     const headers = Object.fromEntries(request.headers);
+    const webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
 
-    let webhookData;
-    try {
-      // Try Standard Webhooks format first
-      webhookData = whopSdk.webhooks.unwrap(requestBodyText, { headers });
-    } catch (unwrapError) {
-      console.warn('Standard webhook unwrap failed, trying raw JSON format');
-
-      // Fallback: handle raw JSON format (used by some Whop webhook configurations)
-      try {
-        const rawData = JSON.parse(requestBodyText);
-
-        // Convert raw format to expected format
-        // Raw format uses 'action', expected format uses 'type'
-        webhookData = {
-          type: rawData.action,
-          data: rawData.data,
-          api_version: rawData.api_version
-        };
-      } catch (jsonError) {
-        console.error('Could not parse webhook as JSON either');
-        throw unwrapError; // Re-throw original error
-      }
-    }
-
+   
     handleWebhookEvent(webhookData.type, webhookData.data);
 
     console.warn('Webhook data:', webhookData);
