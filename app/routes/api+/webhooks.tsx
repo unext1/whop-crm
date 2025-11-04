@@ -2,7 +2,6 @@ import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
-import { env } from '~/services/env.server';
 import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
 
 export const action = async ({ request }: ActionFunctionArgs): Promise<Response> => {
