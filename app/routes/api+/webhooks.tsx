@@ -114,15 +114,11 @@ async function handleWebhookEvent(action: string, data: any) {
           'Authorized user ' + user?.id + ' subscribed - granting organization ' + companyId + ' premium access',
         );
 
-        // Convert webhook timestamp fields to ISO strings
+        // Membership data is already in correct format
         const membershipData = {
           membershipId,
-          renewal_period_start: membership.renewal_period_start
-            ? new Date(membership.renewal_period_start * 1000).toISOString()
-            : null,
-          renewal_period_end: membership.renewal_period_end
-            ? new Date(membership.renewal_period_end * 1000).toISOString()
-            : null,
+          renewal_period_start: membership.renewal_period_start,
+          renewal_period_end: membership.renewal_period_end,
         };
         handleOrganizationPremiumAccess(companyId, 'premium', membershipData).catch(console.error);
       } else {
