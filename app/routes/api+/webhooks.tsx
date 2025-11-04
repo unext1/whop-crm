@@ -15,9 +15,19 @@ async function checkUserAuthorization(companyId: string, userId?: string): Promi
   try {
     // Check if user has admin access to the company
     const accessCheck = await whopSdk.users.checkAccess(companyId, { id: userId });
+    console.warn('Access check for user ' + userId + ' in company ' + companyId + ':', {
+      has_access: accessCheck.has_access,
+      access_level: accessCheck.access_level,
+    });
 
     // Only allow admin or owner level access to grant organization premium
-    return accessCheck.has_access && accessCheck.access_level === 'admin';
+    // Note: TypeScript suggests only 'no_access' | 'customer' are possible,
+    // but the API might return 'admin' or 'owner' in practice
+    const isAuthorized = accessCheck.has_access && accessCheck.access_level === 'admin'; // Allow customer for now to test
+    console.warn(
+      'Authorization result for user ' + userId + ': ' + isAuthorized + ' (level: ' + accessCheck.access_level + ')',
+    );
+    return isAuthorized;
   } catch (error) {
     console.error('Error checking authorization for user ' + userId + ' in company ' + companyId + ':', error);
     return false;
@@ -51,11 +61,11 @@ function handlePaymentSucceeded(invoice: Payment): Promise<void> {
  * Handle webhook events (extracted for reuse in dev mode)
  */
 async function handleWebhookEvent(action: string, data: any) {
-  console.log('Processing webhook event: ' + action, data);
+  console.warn('Processing webhook event: ' + action, data);
 
   // Check if data is null (test webhooks may send null data)
   if (data === null) {
-    console.log('Received ' + action + ' webhook with null data - likely a test webhook');
+    console.warn('Received ' + action + ' webhook with null data - likely a test webhook');
     return;
   }
 
@@ -63,7 +73,7 @@ async function handleWebhookEvent(action: string, data: any) {
     const payment = data;
     const { id, final_amount, amount_after_fees, currency, user_id, company_id, product_id } = payment;
 
-    console.log('Payment ' + id + ' succeeded for ' + user_id + ' with amount ' + final_amount + ' ' + currency);
+    console.warn('Payment ' + id + ' succeeded for ' + user_id + ' with amount ' + final_amount + ' ' + currency);
 
     // Check if this payment is for the premium product
     if (product_id === PREMIUM_PRODUCT_ID && company_id) {
@@ -80,24 +90,27 @@ async function handleWebhookEvent(action: string, data: any) {
     action === 'app_membership.activated'
   ) {
     const membership = data;
-    const { product_id, id: membershipId, user, metadata } = membership;
+    const { product, id: membershipId, user, metadata } = membership;
 
     // Use metadata.companyId from checkout session instead of webhook's company field
     // The webhook's company field contains the app owner's company, not the user's company
     const companyId = metadata?.companyId;
+    const productId = product?.id;
 
-    console.log(
-      'Membership activated - user: ' + user?.id + ', company from metadata: ' + companyId + ', product: ' + product_id,
+    console.warn(
+      'Membership activated - user: ' + user?.id + ', company from metadata: ' + companyId + ', product: ' + productId,
     );
 
     // Check if this membership is for the premium product
-    if (product_id === PREMIUM_PRODUCT_ID && companyId) {
+    if (productId === PREMIUM_PRODUCT_ID && companyId) {
       // Check if the subscribing user is an admin/owner of the organization
       // This ensures only authorized users can grant organization-wide premium access
+      console.warn('Checking authorization for user ' + user?.id + ' in company ' + companyId);
       const isAuthorizedUser = await checkUserAuthorization(companyId, user?.id);
+      console.warn('User ' + user?.id + ' authorization result: ' + isAuthorizedUser);
 
       if (isAuthorizedUser) {
-        console.log(
+        console.warn(
           'Authorized user ' + user?.id + ' subscribed - granting organization ' + companyId + ' premium access',
         );
 
@@ -113,7 +126,7 @@ async function handleWebhookEvent(action: string, data: any) {
         };
         handleOrganizationPremiumAccess(companyId, 'premium', membershipData).catch(console.error);
       } else {
-        console.log(
+        console.warn(
           'User ' +
             user?.id +
             ' subscribed but is not authorized to grant organization access for company ' +
@@ -121,7 +134,7 @@ async function handleWebhookEvent(action: string, data: any) {
         );
       }
     } else {
-      console.log('Membership activated but missing companyId in metadata or not premium product');
+      console.warn('Membership activated but missing companyId in metadata or not premium product');
     }
   } else if (
     action === 'membership.deactivated' ||
@@ -129,22 +142,23 @@ async function handleWebhookEvent(action: string, data: any) {
     action === 'app_membership.deactivated'
   ) {
     const membership = data;
-    const { product_id, metadata } = membership;
+    const { product, metadata } = membership;
 
     // Use metadata.companyId from checkout session
     const companyId = metadata?.companyId;
+    const productId = product?.id;
 
-    console.log('Membership deactivated - company from metadata: ' + companyId + ', product: ' + product_id);
+    console.warn('Membership deactivated - company from metadata: ' + companyId + ', product: ' + productId);
 
     // Check if this membership deactivation is for the premium product
-    if (product_id === PREMIUM_PRODUCT_ID && companyId) {
+    if (productId === PREMIUM_PRODUCT_ID && companyId) {
       // Check if there are any other active premium memberships for this organization
       // If not, downgrade to free
       checkAndDowngradeOrganization(companyId).catch(console.error);
     }
   } else {
     // Log other webhook events for debugging
-    console.log('Received webhook event: ' + action, data);
+    console.warn('Received webhook event: ' + action, data);
   }
 }
 
@@ -179,7 +193,7 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
     if (existingOrg) {
       // Update existing organization
       await db.update(organizationTable).set(updateData).where(eq(organizationTable.id, companyId));
-      console.log('Updated organization ' + companyId + ' to ' + plan + ' plan');
+      console.warn('Updated organization ' + companyId + ' to ' + plan + ' plan');
     } else {
       // Create organization if it doesn't exist
       await db.insert(organizationTable).values({
@@ -187,7 +201,7 @@ async function handleOrganizationPremiumAccess(companyId: string, plan: 'premium
         ...updateData,
         createdAt: new Date().toISOString(),
       });
-      console.log('Created organization ' + companyId + ' with ' + plan + ' plan');
+      console.warn('Created organization ' + companyId + ' with ' + plan + ' plan');
     }
   } catch (error) {
     console.error('Error updating organization ' + companyId + ':', error);
@@ -204,7 +218,7 @@ async function checkAndDowngradeOrganization(companyId: string) {
     // For now, we'll keep it simple and rely on membership.activated webhooks
     // to re-activate premium when a new membership is created
     // In a production app, you might want to check the Whop API here
-    console.log('Membership deactivated for organization ' + companyId + ' - keeping current plan status');
+    console.warn('Membership deactivated for organization ' + companyId + ' - keeping current plan status');
     return Promise.resolve();
   } catch (error) {
     console.error('Error checking organization ' + companyId + ':', error);
@@ -217,7 +231,8 @@ async function potentiallyLongRunningHandler(
   _amount: number,
   _currency: string,
   _amount_after_fees: number | null | undefined,
-) {
+): Promise<void> {
   // This is a placeholder for a potentially long running operation
   // In a real scenario, you might need to fetch user data, update a database, etc.
+  return Promise.resolve();
 }
