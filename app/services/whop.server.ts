@@ -25,7 +25,7 @@ export const hasAccess = async ({ request, companyId }: { request: Request; comp
   const { userId } = await verifyWhopToken(request);
   const { access_level, has_access } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
-  return has_access && (access_level === 'admin' || access_level === 'customer');
+  return has_access && access_level === 'admin';
 };
 
 export const getAuthorizedUserId = async ({
