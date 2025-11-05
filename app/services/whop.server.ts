@@ -34,7 +34,7 @@ export const hasAccess = async ({ request, companyId }: { request: Request; comp
   const { userId } = await verifyWhopToken(request);
   const { access_level, has_access } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
-  return has_access && access_level === 'admin';
+  return (has_access && access_level === 'admin') || access_level === 'customer';
 };
 
 export const getAuthorizedUserId = async ({
@@ -128,7 +128,7 @@ export const isAdminCheck = async (request: Request, experienceId: string) => {
   const { userId } = await verifyWhopToken(request);
 
   const { access_level } = await whopSdk.users.checkAccess(experienceId, { id: userId });
-  if (access_level === 'no_access' || access_level !== 'admin') {
+  if (access_level === 'no_access' || (access_level !== 'admin' && access_level !== 'customer')) {
     return false;
   }
 

@@ -15,7 +15,8 @@ async function checkUserAuthorization(companyId: string, userId?: string): Promi
     const accessCheck = await whopSdk.users.checkAccess(companyId, { id: userId });
 
     // Only allow admin or owner level access to grant organization premium
-    const isAuthorized = accessCheck.has_access && accessCheck.access_level === 'admin';
+    const isAuthorized =
+      (accessCheck.has_access && accessCheck.access_level === 'admin') || accessCheck.access_level === 'customer';
     return isAuthorized;
   } catch {
     return false;
