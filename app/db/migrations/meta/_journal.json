@@ -8,6 +8,13 @@
       "when": 1762288730965,
       "tag": "0000_jittery_lyja",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1762302233834,
+      "tag": "0001_lush_nomad",
+      "breakpoints": true
     }
   ]
 }

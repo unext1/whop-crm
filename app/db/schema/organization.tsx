@@ -12,6 +12,7 @@ export const organizationTable = sqliteTable('organizations', {
   cancelAtPeriodEnd: integer('cancel_at_period_end', { mode: 'boolean' }).default(false),
   canceledAt: text('canceled_at'),
   lastMembershipCheck: text('last_membership_check'), // timestamp of last Whop API check
+  hadPremiumBefore: integer('had_premium_before', { mode: 'boolean' }).default(false),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });

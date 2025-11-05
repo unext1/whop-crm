@@ -188,8 +188,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 const DashboardPage = () => {
-  const { stats, recentPeople, recentCompanies, recentTasks, companyId, premiumAccess } =
-    useLoaderData<typeof loader>();
+  const { stats, recentPeople, recentCompanies, recentTasks, companyId } = useLoaderData<typeof loader>();
 
   const statsCards = [
     {
@@ -224,11 +223,6 @@ const DashboardPage = () => {
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
           <h1 className="text-base font-semibold">Dashboard</h1>
-          {premiumAccess.hasAccess && (
-            <Badge variant="default" className="ml-2">
-              Premium {premiumAccess.accessLevel === 'organization' ? '(Organization)' : '(Individual)'}
-            </Badge>
-          )}
         </div>
       </div>
 

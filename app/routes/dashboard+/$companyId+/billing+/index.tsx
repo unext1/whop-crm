@@ -39,9 +39,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const annualCheckoutSession = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
 
   // Check if organization ever had premium access
-  const everHadPremium = organization
-    ? organization.subscriptionStart || organization.canceledAt || organization.cancelAtPeriodEnd
-    : false;
+  const everHadPremium = organization ? organization.hadPremiumBefore : false;
 
   return {
     appMembership,
@@ -305,16 +303,14 @@ const BillingPage = () => {
 
           {/* Current Premium Status */}
           {orgPremiumAccess && (
-            <div className="p-6 bg-green-50 border border-green-200 rounded-lg">
+            <div className="p-6 bg-background border border-primary rounded-lg">
               <div className="flex items-center gap-3">
                 <div className="shrink-0">
-                  <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                    <div className="w-4 h-4 bg-green-500 rounded-full" />
-                  </div>
+                  <div className="w-4 h-4 bg-primary rounded-full flex items-center justify-center" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-green-800">Premium Active</h3>
-                  <p className="text-sm text-green-700">
+                  <h3 className="font-semibold text-primary-foreground">Premium Active</h3>
+                  <p className="text-sm text-muted-foreground">
                     Your organization has premium access. All team members can use advanced features.
                   </p>
                 </div>
@@ -386,7 +382,7 @@ const BillingPage = () => {
                                 ? 'secondary'
                                 : 'outline'
                           }
-                          className="h-5 text-xs"
+                          className="h-5 text-xs capitalize"
                         >
                           {appMembership.status}
                         </Badge>

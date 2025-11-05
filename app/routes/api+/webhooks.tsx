@@ -98,7 +98,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
         };
 
         await handleOrganizationPremiumAccess(companyId, 'premium', membershipData).catch((error) => {
-          console.error('Error activating premium membership:', error);
+          console.warn('Error activating premium membership:', error);
         });
       } else {
         console.warn('Unauthorized premium activation attempt', {
@@ -190,6 +190,7 @@ async function handleOrganizationPremiumAccess(
     updateData.cancelAtPeriodEnd = false;
     updateData.canceledAt = null;
     updateData.lastMembershipCheck = null;
+    updateData.hadPremiumBefore = true;
   }
 
   if (existingOrg) {

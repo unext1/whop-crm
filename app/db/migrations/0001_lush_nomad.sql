@@ -1,0 +1,1 @@
+ALTER TABLE `organizations` ADD `had_premium_before` integer DEFAULT false;
