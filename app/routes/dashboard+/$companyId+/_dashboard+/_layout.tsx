@@ -37,10 +37,22 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   if (organization) {
     const hasOrgPremium = await hasOrganizationPremiumAccess(companyId);
     if (!hasOrgPremium) {
-      // Redirect to billing page to upgrade organization
-      const billingPath = href('/dashboard/:companyId/billing', { companyId });
-      if (new URL(request.url).pathname !== billingPath) {
-        return redirect(billingPath);
+      // Check if organization ever had premium access
+      const everHadPremium =
+        organization.subscriptionStart || organization.canceledAt || organization.cancelAtPeriodEnd;
+
+      if (everHadPremium) {
+        // Organization had premium before but lost it - redirect to billing
+        const billingPath = href('/dashboard/:companyId/billing', { companyId });
+        if (new URL(request.url).pathname !== billingPath) {
+          return redirect(billingPath);
+        }
+      } else {
+        // Organization never had premium - redirect to onboarding
+        const onboardingPath = href('/dashboard/:companyId/onboarding/new', { companyId });
+        if (new URL(request.url).pathname !== onboardingPath) {
+          return redirect(onboardingPath);
+        }
       }
     }
   }

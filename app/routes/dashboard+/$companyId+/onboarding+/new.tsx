@@ -1,9 +1,8 @@
 import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
-import { Check, Sparkles } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
-import { useCallback, useEffect, useState } from 'react';
-import { data, Form, href, redirect, useActionData, useNavigation } from 'react-router';
+import { Check, CheckSquare } from 'lucide-react';
+import { useState } from 'react';
+import { data, Form, href, redirect, useActionData, useNavigation, useParams } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
@@ -12,8 +11,8 @@ import { Label } from '~/components/ui/label';
 import { db } from '~/db';
 import { organizationTable, userTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
-import { env } from '~/services/env.server';
 import { putToast } from '~/services/cookie.server';
+import { env } from '~/services/env.server';
 import {
   getAuthorizedUserId,
   getPublicUser,
@@ -30,7 +29,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const existingOrg = await db.select().from(organizationTable).where(eq(organizationTable.id, companyId)).limit(1);
 
   // Check if user profile exists
-  const existingUser = await db.select().from(userTable).where(eq(userTable.id, userId)).limit(1);
+  const existingUser = await db.select().from(userTable).where(eq(userTable.whopUserId, userId)).limit(1);
 
   const hasOrg = existingOrg.length > 0;
   const hasUser = existingUser.length > 0;
@@ -47,11 +46,13 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   let initialStep = 1;
   if (hasOrg && !hasUser) {
     initialStep = 2; // Skip org creation, go to user profile
-  } else if (hasOrg && hasUser && hasPremiumAccess) {
-    initialStep = 5; // Skip everything if org exists, user exists, and has premium - go to completion
+  } else if (hasOrg && hasUser) {
+    if (hasPremiumAccess) {
+      throw redirect(href('/dashboard/:companyId', { companyId }));
+    }
+    initialStep = 3; // Org and user exist but no premium - go to payment
   }
 
-  // Create checkout sessions for both monthly and annual plans
   const monthlyCheckout = await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId);
   const annualCheckout = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
 
@@ -83,9 +84,19 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
   if (intent === 'createOrg') {
     const name = formData.get('name')?.toString();
+    const teamSize = formData.get('teamSize')?.toString();
+    const industry = formData.get('industry')?.toString();
 
     if (!name || name.trim().length === 0) {
       return data({ error: 'Organization name is required', step: 1 } as const, { status: 400 });
+    }
+
+    if (!teamSize) {
+      return data({ error: 'Team size is required', step: 1 } as const, { status: 400 });
+    }
+
+    if (!industry) {
+      return data({ error: 'Industry is required', step: 1 } as const, { status: 400 });
     }
 
     await db.insert(organizationTable).values({
@@ -125,14 +136,14 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // Check if organization already has premium access
     const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
 
-    // If they already have premium, skip payment and go to completion
+    // If they already have premium, redirect to dashboard
     if (hasPremiumAccess) {
-      return data({
-        success: true,
-        step: 3,
-        skipPayment: true,
-        message: 'Organization already has premium access',
-      } as const);
+      const headers = await putToast({
+        title: 'Welcome! 🎉',
+        message: 'Your Organization is ready to go',
+        variant: 'default',
+      });
+      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
     }
 
     const selectedPlan = formData.get('selectedPlan')?.toString();
@@ -142,10 +153,8 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
 
     // Get the appropriate checkout session
-    const checkoutSession =
-      selectedPlan === 'monthly'
-        ? await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId)
-        : await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
+    const planId = selectedPlan === 'monthly' ? env.WHOP_PREMIUM_PLAN_ID : env.WHOP_ANNUAL_PLAN_ID;
+    const checkoutSession = await createCheckoutSession(planId, companyId);
 
     if (!checkoutSession) {
       return data({ error: 'Failed to create checkout session', step: 3 } as const, { status: 500 });
@@ -161,378 +170,468 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     } as const);
   }
 
-  if (intent === 'complete') {
-    const headers = await putToast({
-      title: 'Welcome! 🎉',
-      message: 'Your Organization is ready to go',
-      variant: 'default',
-    });
-
-    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
-  }
-
   return data({ error: 'Invalid intent' } as const, { status: 400 });
 };
 
+// Mockup Components
+const DashboardMockup = ({ orgName }: { orgName: string }) => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border border-border/40 bg-muted/10 px-4 rounded-lg">
+      <div className="flex items-center gap-2">
+        <div className="h-7 w-7 rounded bg-primary/80 flex items-center justify-center">
+          <span className="text-primary-foreground font-bold text-xs">W</span>
+        </div>
+        <span className="text-sm font-semibold">{orgName || 'Your Company'}</span>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="h-6 w-6 rounded-full bg-muted/30" />
+      </div>
+    </div>
+
+    {/* Stats Grid */}
+    <div className="grid grid-cols-4 gap-3">
+      {[1, 2, 3, 4].map((i) => (
+        <div key={i} className="h-24 bg-muted/15 border border-border/30 rounded-lg" />
+      ))}
+    </div>
+
+    {/* Content Grid */}
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-3">
+        <div className="h-5 w-24 bg-muted/30 rounded" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-10 bg-muted/15 border border-border/30 rounded-lg" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        <div className="h-5 w-24 bg-muted/30 rounded" />
+        {[1, 2, 3].map((i) => (
+          <div key={i} className="h-10 bg-muted/15 border border-border/30 rounded-lg" />
+        ))}
+      </div>
+    </div>
+  </div>
+);
+
+const TaskDetailMockup = (_props?: { orgName?: string }) => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border border-border/40 bg-muted/10 px-4 rounded-lg">
+      <div className="flex items-center gap-2">
+        <CheckSquare className="h-5 w-5 text-primary" />
+        <span className="text-sm font-semibold">Tasks</span>
+      </div>
+      <div className="h-6 w-6 rounded-full bg-muted/30" />
+    </div>
+
+    {/* Table */}
+    <div className="space-y-2">
+      <div className="grid grid-cols-5 gap-3 px-4 py-2 text-xs font-medium text-muted-foreground">
+        <div>Task</div>
+        <div>Owner</div>
+        <div>Due</div>
+        <div>Status</div>
+        <div>Priority</div>
+      </div>
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="grid grid-cols-5 gap-3 px-4 py-3 bg-muted/10 border border-border/30 rounded-lg">
+          <div className="h-4 bg-muted/30 rounded w-32" />
+          <div className="h-4 bg-muted/30 rounded w-24" />
+          <div className="h-4 bg-muted/30 rounded w-20" />
+          <div className="h-4 bg-muted/30 rounded w-16" />
+          <div className="h-4 bg-muted/30 rounded w-12" />
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const SalesFeaturesMockup = (_props?: { orgName?: string }) => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border border-border/40 bg-muted/10 px-4 rounded-lg">
+      <div className="flex items-center gap-2">
+        <div className="h-5 w-5 rounded bg-primary/60" />
+        <span className="text-sm font-semibold">Sales Pipeline</span>
+      </div>
+      <div className="h-6 w-6 rounded-full bg-muted/30" />
+    </div>
+
+    {/* Kanban Columns */}
+    <div className="flex gap-3 overflow-x-auto pb-2">
+      {['Lead', 'Qualified', 'Proposal', 'Won'].map((col, idx) => (
+        <div key={col} className="shrink-0 w-48 space-y-3">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{
+                backgroundColor: idx === 0 ? '#3b82f6' : idx === 1 ? '#eab308' : idx === 2 ? '#a855f7' : '#22c55e',
+              }}
+            />
+            <span className="text-xs font-medium">{col}</span>
+            <span className="text-xs text-muted-foreground">{[3, 2, 1, 5][idx]}</span>
+          </div>
+          {[1, 2].map((i) => (
+            <div key={i} className="p-3 bg-muted/10 border border-border/30 rounded-lg space-y-2">
+              <div className="h-3 bg-muted/30 rounded w-3/4" />
+              <div className="h-2 bg-muted/30 rounded w-1/2" />
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
 const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
-  const [step, setStep] = useState(loaderData.initialStep);
+  const params = useParams();
+  const step = loaderData.initialStep;
   const [orgName, setOrgName] = useState('');
+  const [teamSize, setTeamSize] = useState('');
+  const [industry, setIndustry] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+  const [paymentResult, setPaymentResult] = useState<{ status: string; [key: string]: unknown } | null>(null);
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === 'submitting';
 
-  const handlePayment = useCallback(
-    async (checkoutSession: unknown) => {
-      setIsProcessingPayment(true);
+  const handlePayment = async (plan: 'monthly' | 'annual') => {
+    setIsProcessingPayment(true);
+    setPaymentResult(null);
 
-      try {
-        const iframeSdk = createSdk({ appId: loaderData.whopAppId });
-        const result = await iframeSdk.inAppPurchase(checkoutSession as { planId: string; id?: string });
+    try {
+      const iframeSdk = createSdk({ appId: loaderData.whopAppId });
 
-        if (result.status === 'ok') {
-          // Payment successful - advance to completion
-          setStep(5);
-        } else {
-          // Payment failed - stay on current step
-          // Error handled silently
+      if (plan === 'monthly') {
+        if (!loaderData.monthlyCheckout) {
+          throw new Error('Checkout session not available');
         }
-      } catch {
-        // Payment error - stay on current step
-      } finally {
-        setIsProcessingPayment(false);
+        const result = await iframeSdk.inAppPurchase(loaderData.monthlyCheckout);
+        if (result.status === 'ok') {
+          setTimeout(() => window.location.reload(), 2000);
+        }
+      } else if (plan === 'annual') {
+        if (!loaderData.annualCheckout) {
+          throw new Error('Checkout session not available');
+        }
+        const result = await iframeSdk.inAppPurchase(loaderData.annualCheckout);
+        if (result.status === 'ok') {
+          setTimeout(() => window.location.reload(), 2000);
+        }
       }
-    },
-    [loaderData.whopAppId],
-  );
 
-  // Handle payment processing and step advancement
-  useEffect(() => {
-    if (actionData && 'success' in actionData && actionData.success && actionData.step === step && !isSubmitting) {
-      if (step === 3 && 'checkoutSession' in actionData) {
-        // Process payment with the checkout session
-        handlePayment(actionData.checkoutSession);
-      } else if (step === 3 && 'skipPayment' in actionData && actionData.skipPayment) {
-        // Organization already has premium - skip to completion
-        const timer = setTimeout(() => setStep(5), 100);
-        return () => clearTimeout(timer);
-      } else if (step === 3 && !('checkoutSession' in actionData)) {
-        // Plan selected but no checkout session - stay on step 3
-      } else {
-        // Other steps - advance normally
-        const timer = setTimeout(() => setStep(step + 1), 100);
-        return () => clearTimeout(timer);
-      }
+      // Payment successful - redirect to dashboard
+      setTimeout(() => {
+        window.location.href = href('/dashboard/:companyId', { companyId: params.companyId as string });
+      }, 2000);
+    } catch (error) {
+      setPaymentResult({ status: 'error', error: String(error) });
+    } finally {
+      setIsProcessingPayment(false);
     }
-  }, [actionData, step, isSubmitting, handlePayment]);
-
-  const slideVariants = {
-    enter: (direction: number) => ({
-      x: direction > 0 ? 1000 : -1000,
-      opacity: 0,
-    }),
-    center: {
-      x: 0,
-      opacity: 1,
-    },
-    exit: (direction: number) => ({
-      x: direction < 0 ? 1000 : -1000,
-      opacity: 0,
-    }),
   };
 
+  const totalSteps = 3;
+
   return (
-    <div className="flex-1 overflow-hidden bg-linear-to-br from-background via-muted/30 to-muted/50 flex items-center justify-center p-4">
-      {/* Main Content */}
-      <div className="w-full max-w-2xl">
-        <AnimatePresence mode="wait" custom={step}>
+    <div className="flex min-h-screen bg-background">
+      {/* Left Column - Form Content */}
+      <div className="flex w-full flex-col lg:w-1/2">
+        {/* Header */}
+        <div className="flex items-center justify-between px-12 py-6">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center">
+              <img src="/logo.png" alt="WHOP CRM" className="h-8 w-8 rounded" />
+            </div>
+            <span className="text-base font-semibold">CRM</span>
+          </div>
+          <span className="text-sm font-medium text-muted-foreground">
+            {step} of {totalSteps}
+          </span>
+        </div>
+
+        {/* Main Content */}
+        <div className="flex flex-1 flex-col justify-center px-12 py-12">
           {step === 1 && (
-            <motion.div
-              key="step1"
-              custom={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="space-y-8"
-            >
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold text-foreground">Create your workspace</h1>
+            <div className="flex flex-col gap-12">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-3xl font-bold text-foreground">Create your organization</h1>
+                  <p className="text-lg text-muted-foreground">
+                    Set up your organization so you can start managing your work today
+                  </p>
+                </div>
               </div>
 
-              <Form method="post" className="space-y-6">
-                <input type="hidden" name="intent" value="createOrg" />
+              <div className="flex flex-col gap-6">
+                <Form method="post" className="flex flex-col gap-6">
+                  <input type="hidden" name="intent" value="createOrg" />
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name" className="text-muted-foreground text-sm">
-                      Organization name
-                    </Label>
-                    <Input
-                      id="name"
-                      name="name"
-                      value={orgName}
-                      onChange={(e) => setOrgName(e.target.value)}
-                      placeholder="Enter your organization name..."
-                      required
-                      autoFocus
-                      className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 1 && (
-                  <p className="text-sm text-destructive">{actionData.error}</p>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={isSubmitting || !orgName.trim()}
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-                >
-                  {isSubmitting ? 'Creating...' : 'Continue'}
-                </Button>
-              </Form>
-            </motion.div>
-          )}
-
-          {step === 2 && (
-            <motion.div
-              key="step2"
-              custom={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="space-y-8"
-            >
-              <div className="text-center space-y-4">
-                <h1 className="text-4xl font-bold text-foreground">Let's get to know you</h1>
-              </div>
-
-              <Form method="post" className="space-y-6">
-                <input type="hidden" name="intent" value="createUser" />
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="firstName" className="text-muted-foreground text-sm">
-                      First name
-                    </Label>
-                    <Input
-                      id="firstName"
-                      name="firstName"
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      placeholder="Enter your first name..."
-                      required
-                      autoFocus
-                      className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lastName" className="text-muted-foreground text-sm">
-                      Last name
-                    </Label>
-                    <Input
-                      id="lastName"
-                      name="lastName"
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      placeholder="Enter your last name..."
-                      required
-                      className="h-12 bg-muted/50 border-border text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-primary"
-                    />
-                  </div>
-                </div>
-
-                {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 2 && (
-                  <p className="text-sm text-destructive">{actionData.error}</p>
-                )}
-
-                <Button
-                  type="submit"
-                  disabled={isSubmitting || !firstName || !lastName}
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-                >
-                  {isSubmitting ? 'Saving...' : 'Continue'}
-                </Button>
-              </Form>
-            </motion.div>
-          )}
-
-          {step === 3 && (
-            <motion.div
-              key="step3"
-              custom={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="space-y-8"
-            >
-              <div className="text-center space-y-4">
-                <h1 className="text-3xl font-semibold text-foreground">
-                  {loaderData.hasPremiumAccess ? 'Premium Access Confirmed' : 'Choose your plan'}
-                </h1>
-                <p className="text-base text-muted-foreground">
-                  {loaderData.hasPremiumAccess
-                    ? 'Your organization already has premium access'
-                    : 'One subscription unlocks premium features for your entire team'}
-                </p>
-                {loaderData.hasPremiumAccess ? (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-green-50 border border-green-200 rounded-full text-sm text-green-700">
-                    <Check className="w-4 h-4" />
-                    Premium access active
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-2 px-4 py-2 bg-primary/5 border border-primary/20 rounded-full text-sm text-primary">
-                    <Check className="w-4 h-4" />
-                    All team members get premium access for free
-                  </div>
-                )}
-              </div>
-
-              {!loaderData.hasPremiumAccess && (
-                <div className="flex flex-col sm:flex-row gap-4 max-w-2xl mx-auto">
-                  {/* Monthly Plan */}
-                  <Card
-                    className={`cursor-pointer transition-all duration-200 flex-1 ${
-                      selectedPlan === 'monthly'
-                        ? 'ring-2 ring-primary border-primary bg-primary/5'
-                        : 'hover:border-primary/50'
-                    }`}
-                    onClick={() => setSelectedPlan('monthly')}
-                  >
-                    <CardContent className="p-6 text-center">
-                      <div className="space-y-3">
-                        <div className="text-sm font-medium text-muted-foreground">Monthly</div>
-                        <div className="text-3xl font-bold">
-                          $19<span className="text-lg font-normal text-muted-foreground">/mo</span>
-                        </div>
-                        <div className="text-sm text-muted-foreground">Perfect for getting started</div>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Annual Plan */}
-                  <Card
-                    className={`cursor-pointer transition-all duration-200 flex-1 relative ${
-                      selectedPlan === 'annual'
-                        ? 'ring-2 ring-primary border-primary bg-primary/5'
-                        : 'hover:border-primary/50'
-                    }`}
-                    onClick={() => setSelectedPlan('annual')}
-                  >
-                    <CardContent className="p-6 text-center">
-                      <div className="space-y-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <div className="text-sm font-medium text-muted-foreground">Annual</div>
-                          <Badge variant="secondary" className="text-xs">
-                            Save 17%
-                          </Badge>
-                        </div>
-                        <div className="text-3xl font-bold">
-                          $190<span className="text-lg font-normal text-muted-foreground">/yr</span>
-                        </div>
-                        <div className="text-sm text-green-600 font-medium">7-day free trial</div>
-                      </div>
-                    </CardContent>
-                    {selectedPlan === 'annual' && (
-                      <div className="absolute -top-2 -right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                        <Check className="w-4 h-4 text-primary-foreground" />
-                      </div>
-                    )}
-                  </Card>
-                </div>
-              )}
-
-              {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 3 && (
-                <p className="text-sm text-destructive text-center">{actionData.error}</p>
-              )}
-
-              <div className="flex justify-center">
-                <div className="w-full max-w-sm space-y-4">
-                  <Form method="post">
-                    <input type="hidden" name="intent" value="processPayment" />
-                    {!loaderData.hasPremiumAccess && <input type="hidden" name="selectedPlan" value={selectedPlan} />}
-
-                    <Button
-                      type="submit"
-                      disabled={isSubmitting || isProcessingPayment}
-                      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
-                    >
-                      {isSubmitting
-                        ? 'Processing...'
-                        : isProcessingPayment
-                          ? 'Processing payment...'
-                          : loaderData.hasPremiumAccess
-                            ? 'Continue'
-                            : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
-                    </Button>
-                  </Form>
-
-                  {!loaderData.hasPremiumAccess && (
-                    <div className="text-center">
-                      <div className="text-xs text-muted-foreground">Secure payment powered by Whop</div>
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="name" className="text-sm font-semibold text-foreground">
+                        Organization name
+                      </Label>
+                      <Input
+                        id="name"
+                        name="name"
+                        value={orgName}
+                        onChange={(e) => setOrgName(e.target.value)}
+                        placeholder="Acme Corp"
+                        required
+                        autoFocus
+                        className="h-10 text-sm"
+                      />
                     </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="teamSize" className="text-sm font-semibold text-foreground">
+                        How big is your team?
+                      </Label>
+                      <select
+                        id="teamSize"
+                        name="teamSize"
+                        value={teamSize}
+                        onChange={(e) => setTeamSize(e.target.value)}
+                        required
+                        className="h-10 px-3 text-sm border border-border rounded-md bg-background"
+                      >
+                        <option value="">Select team size</option>
+                        <option value="1-5">1-5 people</option>
+                        <option value="6-10">6-10 people</option>
+                        <option value="11-25">11-25 people</option>
+                        <option value="26-50">26-50 people</option>
+                        <option value="51-100">51-100 people</option>
+                        <option value="100+">100+ people</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="industry" className="text-sm font-semibold text-foreground">
+                        Industry
+                      </Label>
+                      <select
+                        id="industry"
+                        name="industry"
+                        value={industry}
+                        onChange={(e) => setIndustry(e.target.value)}
+                        required
+                        className="h-10 px-3 text-sm border border-border rounded-md bg-background"
+                      >
+                        <option value="">Select industry</option>
+                        <option value="technology">Technology</option>
+                        <option value="healthcare">Healthcare</option>
+                        <option value="finance">Finance</option>
+                        <option value="education">Education</option>
+                        <option value="retail">Retail</option>
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="consulting">Consulting</option>
+                        <option value="real-estate">Real Estate</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 1 && (
+                    <p className="text-sm text-destructive">{actionData.error}</p>
                   )}
-                </div>
-              </div>
-            </motion.div>
-          )}
 
-          {step === 5 && (
-            <motion.div
-              key="step5"
-              custom={step}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-              className="space-y-8"
-            >
-              <div className="text-center space-y-8">
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  transition={{ type: 'spring', delay: 0.2 }}
-                  className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full"
-                >
-                  <Sparkles className="w-8 h-8 text-primary" />
-                </motion.div>
-
-                <div className="space-y-3">
-                  <h1 className="text-3xl font-semibold text-foreground">Welcome to your workspace!</h1>
-                  <p className="text-base text-muted-foreground">Everything is set up and ready to go.</p>
-                </div>
-
-                <Form method="post" className="pt-4">
-                  <input type="hidden" name="intent" value="complete" />
                   <Button
                     type="submit"
-                    className="w-full h-11 bg-primary hover:bg-primary/90 text-primary-foreground font-medium"
+                    disabled={isSubmitting || !orgName.trim() || !teamSize || !industry}
+                    className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
                   >
-                    Get started
+                    {isSubmitting ? 'Creating...' : 'Continue'}
                   </Button>
                 </Form>
               </div>
-            </motion.div>
+            </div>
           )}
-        </AnimatePresence>
+
+          {step === 2 && (
+            <div className="flex flex-col gap-12">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-3xl font-bold text-foreground">Create your profile</h1>
+                  <p className="text-lg text-muted-foreground">
+                    Set up your personal profile so your team knows who you are
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                <Form method="post" className="flex flex-col gap-6">
+                  <input type="hidden" name="intent" value="createUser" />
+
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="firstName" className="text-sm font-semibold text-foreground">
+                        First name
+                      </Label>
+                      <Input
+                        id="firstName"
+                        name="firstName"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        placeholder="John"
+                        required
+                        autoFocus
+                        className="h-10 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      <Label htmlFor="lastName" className="text-sm font-semibold text-foreground">
+                        Last name
+                      </Label>
+                      <Input
+                        id="lastName"
+                        name="lastName"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        placeholder="Doe"
+                        required
+                        className="h-10 text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 2 && (
+                    <p className="text-sm text-destructive">{actionData.error}</p>
+                  )}
+
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || !firstName.trim() || !lastName.trim()}
+                    className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Continue'}
+                  </Button>
+                </Form>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            <div className="flex flex-col gap-12">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-3xl font-bold text-foreground">Choose your plan</h1>
+                  <p className="text-lg text-muted-foreground">Select the plan that works best for your team</p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                {!loaderData.hasPremiumAccess && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Monthly */}
+                      <Card
+                        className={`cursor-pointer transition-all border ${
+                          selectedPlan === 'monthly'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border/50 hover:border-border'
+                        }`}
+                        onClick={() => setSelectedPlan('monthly')}
+                      >
+                        <CardContent className="p-4 text-center space-y-1">
+                          <div className="text-xs font-medium text-muted-foreground">Monthly</div>
+                          <div className="text-xl font-bold text-foreground">$19</div>
+                          <div className="text-xs text-muted-foreground">per month</div>
+                        </CardContent>
+                      </Card>
+
+                      {/* Annual */}
+                      <Card
+                        className={`cursor-pointer transition-all border relative ${
+                          selectedPlan === 'annual'
+                            ? 'border-primary bg-primary/5'
+                            : 'border-border/50 hover:border-border'
+                        }`}
+                        onClick={() => setSelectedPlan('annual')}
+                      >
+                        <CardContent className="p-4 text-center space-y-1">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <div className="text-xs font-medium text-muted-foreground">Annual</div>
+                            <Badge
+                              variant="secondary"
+                              className="text-xs h-4 bg-primary/20 text-primary hover:bg-primary/30"
+                            >
+                              Save 17%
+                            </Badge>
+                          </div>
+                          <div className="text-xl font-bold text-foreground">$190</div>
+                          <div className="text-xs text-muted-foreground">per year</div>
+                        </CardContent>
+                        {selectedPlan === 'annual' && (
+                          <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
+                            <Check className="h-3 w-3 text-background" />
+                          </div>
+                        )}
+                      </Card>
+                    </div>
+
+                    {/* Trust badges */}
+                    <div className="flex gap-2 pt-2">
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Check className="h-3.5 w-3.5 text-primary/60" />
+                        SOC 2 certified
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 3 && (
+                  <p className="text-sm text-destructive text-center">{actionData.error}</p>
+                )}
+
+                <Form method="post" className="flex flex-col gap-6">
+                  <input type="hidden" name="intent" value="processPayment" />
+                  {!loaderData.hasPremiumAccess && <input type="hidden" name="selectedPlan" value={selectedPlan} />}
+
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || isProcessingPayment}
+                    className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
+                    onClick={() => handlePayment(selectedPlan)}
+                  >
+                    {isSubmitting
+                      ? 'Processing...'
+                      : isProcessingPayment
+                        ? 'Processing payment...'
+                        : loaderData.hasPremiumAccess
+                          ? 'Get Started'
+                          : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
+                  </Button>
+                </Form>
+
+                {paymentResult && (
+                  <div
+                    className={`p-4 rounded-md border ${
+                      paymentResult.status === 'ok'
+                        ? 'bg-muted/50 border-border text-green-700'
+                        : 'bg-destructive/5 border-destructive/20 text-destructive'
+                    }`}
+                  >
+                    <pre className="text-xs overflow-auto">{JSON.stringify(paymentResult, null, 2)}</pre>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Footer */}
-      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 text-center">
-        <p className="text-xs text-muted-foreground">© 2025 WHOP CRM · Privacy Policy · Support · Sign out</p>
+      {/* Right Column - Mockups */}
+      <div className="hidden lg:flex w-1/2 flex-col items-center bg-muted/30 justify-center px-12 py-12">
+        {step === 1 && <DashboardMockup orgName={orgName} />}
+        {step === 2 && <TaskDetailMockup />}
+        {step === 3 && <SalesFeaturesMockup />}
       </div>
     </div>
   );
