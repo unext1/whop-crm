@@ -51,14 +51,13 @@ import {
   peopleTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
-import { verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
-  const { userId } = await verifyWhopToken(request);
-  const { access_level } = await whopSdk.users.checkAccess(organizationId, { id: userId });
+  const { user } = await requireUser(request, organizationId);
 
   // Fetch the specific person with organization isolation and company relations
   const person = await db.query.peopleTable.findFirst({
@@ -120,8 +119,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   return {
-    userId,
-    access_level,
+    user,
     organizationId,
     person: { ...person, activities },
     tasks,
@@ -132,8 +130,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
 export const action = async ({ params, request }: Route.ActionArgs) => {
   const { companyId: organizationId, id: personId } = params;
-  const { userId } = await verifyWhopToken(request);
-  await whopSdk.users.checkAccess(organizationId, { id: userId });
+  const { user } = await requireUser(request, organizationId);
+  const userId = user.id;
 
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -661,7 +659,7 @@ function cn(...classes: (string | boolean | undefined)[]) {
 }
 
 const PersonPage = () => {
-  const { person, tasksByColumn, allCompanies, userId, organizationId } = useLoaderData<typeof loader>();
+  const { person, tasksByColumn, allCompanies, user, organizationId } = useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState('timeline');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
@@ -962,7 +960,7 @@ const PersonPage = () => {
                 person.peopleEmails?.find((pe) => pe.email.isPrimary)?.email.email ||
                 person.peopleEmails?.[0]?.email.email
               }
-              userId={userId}
+              userId={user.id}
               organizationId={organizationId}
               onDelete={() => {
                 const formData = new FormData();
@@ -1021,7 +1019,7 @@ const PersonPage = () => {
                 <div className="flex items-center gap-2">
                   <QuickTodoDialog
                     personId={person.id}
-                    userId={userId}
+                    userId={user.id}
                     trigger={
                       <Button size="sm" className="h-8 text-xs">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />

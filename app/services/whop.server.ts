@@ -13,15 +13,6 @@ export const whopSdk = new Whop({
   webhookKey: btoa(env.WHOP_WEBHOOK_SECRET),
 });
 
-import { WhopServerSdk } from '@whop/api';
-
-export const WhopServerApi = WhopServerSdk({
-  appId: env.WHOP_APP_ID ?? 'fallback',
-  appApiKey: env.WHOP_API_KEY ?? 'fallback',
-  onBehalfOfUserId: env.WHOP_AGENT_USER_ID,
-  companyId: env.WHOP_COMPANY_ID,
-});
-
 export const verifyWhopToken = async (request: Request) => {
   const { userId } = await whopSdk.verifyUserToken(request.headers);
   if (!userId) {
@@ -34,7 +25,7 @@ export const hasAccess = async ({ request, companyId }: { request: Request; comp
   const { userId } = await verifyWhopToken(request);
   const { access_level, has_access } = await whopSdk.users.checkAccess(companyId, { id: userId });
 
-  return (has_access && access_level === 'admin') || access_level === 'customer';
+  return has_access && (access_level === 'admin' || access_level === 'customer');
 };
 
 export const getAuthorizedUserId = async ({
@@ -128,7 +119,7 @@ export const isAdminCheck = async (request: Request, experienceId: string) => {
   const { userId } = await verifyWhopToken(request);
 
   const { access_level } = await whopSdk.users.checkAccess(experienceId, { id: userId });
-  if (access_level === 'no_access' || (access_level !== 'admin' && access_level !== 'customer')) {
+  if (access_level === 'no_access' || access_level !== 'admin') {
     return false;
   }
 

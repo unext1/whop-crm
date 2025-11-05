@@ -348,8 +348,13 @@ const BillingPage = () => {
                   )}
                   {organization.subscriptionEnd && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">Subscription End</span>
-                      <span className="text-sm">{new Date(organization.subscriptionEnd).toLocaleDateString()}</span>
+                      <span className="text-sm text-muted-foreground">
+                        {appMembership?.status === 'trialing' ? 'Trial ends on' : 'Subscription End'}
+                      </span>
+                      <span className="text-sm">
+                        {new Date(organization.subscriptionEnd).toLocaleDateString()}
+                        {appMembership?.status === 'trialing' && ' (will be charged)'}
+                      </span>
                     </div>
                   )}
                 </div>
