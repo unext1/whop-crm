@@ -606,7 +606,9 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                         ? 'Processing payment...'
                         : loaderData.hasPremiumAccess
                           ? 'Get Started'
-                          : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
+                          : selectedPlan === 'monthly'
+                            ? 'Subscribe to Monthly Plan'
+                            : 'Start Free Today'}
                   </Button>
                 </Form>
 
