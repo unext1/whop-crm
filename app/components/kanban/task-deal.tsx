@@ -75,16 +75,16 @@ const TaskDeal = ({
       // Date doesn't have timezone info, assume UTC and append 'Z'
       createdDate = new Date(createdAt.endsWith('Z') ? createdAt : `${createdAt}Z`);
     }
-    
+
     const now = Date.now();
     const created = createdDate.getTime();
     const diffMs = now - created;
-    
+
     // Handle negative differences (future dates) by showing "Recently"
     if (diffMs < 0) {
       return 'Recently';
     }
-    
+
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
     const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
@@ -185,8 +185,10 @@ const TaskDeal = ({
           onDragStart={(e: DragEvent) => handleDragStart(e, { name, id, columnId, ownerId, content, createdAt })}
         >
           {/* Title Row */}
-          <div className="flex items-start gap-2">
-            <DollarSign className="h-3 w-3 text-muted-foreground shrink-0 mt-0.5" />
+          <div className="flex items-center gap-2">
+            <div className="h-6 w-6 flex items-center justify-center rounded bg-primary text-xs font-semibold ">
+              <DollarSign className="h-3 w-3 text-foreground shrink-0" />
+            </div>
             <h3 className="flex-1 text-sm font-semibold line-clamp-1">{name}</h3>
           </div>
 

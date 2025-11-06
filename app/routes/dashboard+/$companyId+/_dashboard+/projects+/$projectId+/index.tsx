@@ -235,6 +235,9 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
   const [filteredTasks, setFilteredTasks] = useState(project.tasks);
   const createFetcher = useFetcher();
 
+  // Memoize additionalFields to prevent infinite re-renders
+  const additionalFields = useMemo(() => [], []);
+
   // Update selected project and filtered tasks when navigation happens
   useEffect(() => {
     setSelectedProjectId(project.id);
@@ -403,6 +406,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
             companies={companies}
             people={people}
             onFilteredTasksChange={setFilteredTasks}
+            additionalFields={additionalFields}
           />
         </div>
         <div className="flex items-center gap-2">

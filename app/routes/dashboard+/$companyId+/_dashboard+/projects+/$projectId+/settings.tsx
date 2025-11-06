@@ -11,7 +11,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { eq } from 'drizzle-orm';
 import { GripVertical, Menu, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { data, redirect, useFetcher } from 'react-router';
+import { data, Form, redirect, useFetcher, useNavigation } from 'react-router';
 import { z } from 'zod';
 import type { Route } from './+types/settings';
 
@@ -203,7 +203,7 @@ function SortableColumn({ column, onDelete }: { column: Column; onDelete: (colum
           variant="ghost"
           size="sm"
           onClick={() => onDelete(column.id)}
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-red-500"
         >
           ×
         </Button>
@@ -216,6 +216,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
   const { project, projectId, companyId } = loaderData;
   const [activeTab, setActiveTab] = useState('columns');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [createColumnDialogOpen, setCreateColumnDialogOpen] = useState(false);
   const [columns, setColumns] = useState<Column[]>(project.columns || []);
   const inputRef = useRef<HTMLInputElement>(null);
   const fetcher = useFetcher();
@@ -268,7 +269,14 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
     });
   };
 
-  // Sidebar JSX
+  const navigation = useNavigation();
+  useEffect(() => {
+    if (navigation.state === 'submitting') {
+      setTimeout(() => {
+        setCreateColumnDialogOpen(false);
+      }, 400);
+    }
+  }, [navigation.state]);
   const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
@@ -308,7 +316,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
           <Separator />
 
           <div>
-            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Owner</h3>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Created By</h3>
             <div className="space-y-2">
               {project.owner ? (
                 <div className="flex items-center gap-2 text-sm">
@@ -323,7 +331,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
                   </div>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No owner</p>
+                <p className="text-xs text-muted-foreground">No creator</p>
               )}
             </div>
           </div>
@@ -389,11 +397,10 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
             </Button>
 
             <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
-              {project.name?.charAt(0) || 'P'}
+              <Settings className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">{project.name || 'Unnamed Project'}</h1>
-              <p className="text-xs text-muted-foreground">Settings</p>
+              <h1 className="text-lg font-semibold">Settings</h1>
             </div>
           </div>
         </div>
@@ -426,26 +433,26 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Project Columns</h2>
-                <Dialog>
+                <Dialog open={createColumnDialogOpen} onOpenChange={setCreateColumnDialogOpen}>
                   <DialogTrigger asChild>
                     <Button size="sm" className="h-8 text-xs">
                       Create Column
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-[425px] bg-muted/30 backdrop-blur-md border-none shadow-s">
                     <DialogHeader>
                       <DialogTitle>Create Column</DialogTitle>
                     </DialogHeader>
 
-                    <fetcher.Form method="post" action={`/dashboard/${companyId}/projects/${projectId}/settings`}>
+                    <Form method="post">
                       <input type="hidden" name="intent" value="createColumn" />
                       <Input autoFocus required ref={inputRef} type="text" name="name" placeholder="Column name..." />
                       <div className="flex justify-end mt-4">
-                        <Button type="submit" size="sm">
-                          Create Column
+                        <Button type="submit" size="sm" disabled={navigation.state === 'submitting'}>
+                          {navigation.state === 'submitting' ? 'Creating...' : 'Create Column'}
                         </Button>
                       </div>
-                    </fetcher.Form>
+                    </Form>
                   </DialogContent>
                 </Dialog>
               </div>
