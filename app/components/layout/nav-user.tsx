@@ -83,9 +83,9 @@ export function NavUser({
               </DropdownMenuItem>
 
               <DropdownMenuItem asChild>
-                <Link to={href('/dashboard/:companyId', { companyId: params.companyId as string })}>
+                <Link to={href('/dashboard/:companyId/settings', { companyId: params.companyId as string })}>
                   <UserIcon />
-                  Account Settings
+                  Organizaiton Settings
                 </Link>
               </DropdownMenuItem>
             </DropdownMenuGroup>

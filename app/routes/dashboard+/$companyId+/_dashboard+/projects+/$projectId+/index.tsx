@@ -1,10 +1,11 @@
-import { eq, sql, and, inArray } from 'drizzle-orm';
-import { ArrowUpDown, KanbanSquareIcon, ListFilter } from 'lucide-react';
+import { and, eq, inArray, sql } from 'drizzle-orm';
+import { KanbanSquareIcon } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
 import type { Route } from './+types/index';
 
 import Column from '~/components/kanban/column';
+import { KanbanFilterList } from '~/components/kanban/kanban-filter-list';
 import { NewColumn } from '~/components/kanban/new-column';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
@@ -17,9 +18,9 @@ import {
   boardColumnTable,
   boardTable,
   boardTaskTable,
-  taskCommentTable,
   companiesTable,
   peopleTable,
+  taskCommentTable,
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
@@ -231,12 +232,14 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(project.id);
+  const [filteredTasks, setFilteredTasks] = useState(project.tasks);
   const createFetcher = useFetcher();
 
-  // Update selected project when navigation happens
+  // Update selected project and filtered tasks when navigation happens
   useEffect(() => {
     setSelectedProjectId(project.id);
-  }, [project.id]);
+    setFilteredTasks(project.tasks);
+  }, [project.id, project.tasks]);
 
   // Call hooks at top level
   const pendingItems = usePendingTasks();
@@ -245,8 +248,8 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
 
   // Memoize expensive computations to prevent unnecessary re-renders
   const { columns } = useMemo(() => {
-    type TaskRecord = (typeof project.tasks)[number];
-    const tasksById = new Map<string, TaskRecord>(project.tasks.map((item) => [item.id, item]));
+    type TaskRecord = (typeof filteredTasks)[number];
+    const tasksById = new Map<string, TaskRecord>(filteredTasks.map((item) => [item.id, item]));
 
     for (const pendingItem of pendingItems) {
       const item = tasksById.get(pendingItem.id);
@@ -326,8 +329,9 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
       const columnId = item.columnId;
       if (!columnId) continue; // Skip items with null columnId
       const column = columns.get(columnId);
-      if (!column) throw Error('missing column');
+      if (!column) continue; // Skip tasks with missing columns
       // Ensure order is not null for UI components and assignees exist
+
       const taskWithValidOrder: TaskWithOrderAndColumn = {
         ...item,
         order: item.order ?? 0,
@@ -338,7 +342,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
     }
 
     return { tasksById, columns };
-  }, [project.tasks, project.columns, project.id, user, pendingItems, optAddingColumns, optRemovingColumns]);
+  }, [filteredTasks, project.columns, project.id, user, pendingItems, optAddingColumns, optRemovingColumns]);
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -375,7 +379,13 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
                 ))}
                 <SelectSeparator />
                 <div className="p-1">
-                  <Button type="button" size="sm" className="h-8 w-full text-xs" onClick={() => setCreateOpen(true)}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-full text-xs bg-transparent"
+                    onClick={() => setCreateOpen(true)}
+                  >
                     + Create new project
                   </Button>
                 </div>
@@ -388,20 +398,18 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
       {/* Secondary Action Bar */}
       <div className="flex h-10 items-center justify-between border-b border-border px-4 bg-muted/20">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-7 text-xs">
-            <ListFilter className="h-3.5 w-3.5 mr-1.5" />
-            Filter
-          </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs">
-            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5" />
-            Sort
-          </Button>
+          <KanbanFilterList
+            tasks={project.tasks}
+            companies={companies}
+            people={people}
+            onFilteredTasksChange={setFilteredTasks}
+          />
         </div>
         <div className="flex items-center gap-2">
           {project.ownerId === user.id ? (
             <Link
               to={`/dashboard/${companyId}/projects/${projectId}/settings`}
-              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 text-xs')}
+              className={cn(buttonVariants({ variant: 'default', size: 'sm' }), 'h-8 text-xs  shadow-s')}
             >
               Project Settings
             </Link>

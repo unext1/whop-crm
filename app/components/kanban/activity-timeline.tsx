@@ -122,7 +122,7 @@ function formatActivityDescription(
   // Pattern: "X changed from Y to Z" → "{user} changed X from Y to Z"
   const changedFromMatch = desc.match(/^(.+?)\s+changed\s+from\s+(.+?)\s+to\s+(.+)$/i);
   if (changedFromMatch) {
-    return `${user} changed ${changedFromMatch[1].toLowerCase()} from "${changedFromMatch[2]}" to "${changedFromMatch[3]}"`;
+    return `${user} changed ${changedFromMatch[1].toLowerCase()} from ${changedFromMatch[2]} to ${changedFromMatch[3]}`;
   }
 
   // Pattern: "X added" or "added X" → "{user} added X"
@@ -143,13 +143,13 @@ function formatActivityDescription(
   // Handle metadata-based changes
   if (metadata) {
     if (metadata.field && metadata.oldValue && metadata.newValue) {
-      return `${user} changed ${metadata.field.toLowerCase()} from "${metadata.oldValue}" to "${metadata.newValue}"`;
+      return `${user} changed ${metadata.field.toLowerCase()} from ${metadata.oldValue} to ${metadata.newValue}`;
     }
     if (metadata.field && metadata.newValue) {
       return `${user} changed ${metadata.field.toLowerCase()} to ${metadata.newValue}`;
     }
     if (metadata.oldValue && metadata.newValue) {
-      return `${user} moved from "${metadata.oldValue}" to "${metadata.newValue}"`;
+      return `${user} moved from ${metadata.oldValue} to ${metadata.newValue}`;
     }
   }
 

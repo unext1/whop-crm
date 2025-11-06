@@ -1,7 +1,6 @@
 import { Check, ChevronsUpDown, X } from 'lucide-react';
 import * as React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '~/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
@@ -11,7 +10,7 @@ export interface ComboboxMultipleOption {
   id: string;
   name: string;
   email?: string;
-  avatar?: string;
+  profilePictureUrl?: string;
   [key: string]: unknown;
 }
 
@@ -47,6 +46,13 @@ export function ComboboxMultiple({
     onSelectionChange(selectedIds.filter((v) => v !== value));
   };
 
+  const selectedOptions = selectedIds
+    .map((id) => options.find((o) => o.id === id))
+    .filter((option): option is NonNullable<typeof option> => option !== undefined);
+  const maxVisible = 10;
+  const visibleOptions = selectedOptions.slice(0, maxVisible);
+  const remainingCount = selectedOptions.length - maxVisible;
+
   return (
     <div className={className}>
       <Popover open={open} onOpenChange={setOpen}>
@@ -55,43 +61,46 @@ export function ComboboxMultiple({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="w-full p-1 relative"
+            className="w-full justify-between hover:bg-transparent p-1.5 has-[>svg]:px-1"
             disabled={disabled}
           >
-            <div className="flex flex-wrap w-full justify-start gap-1 pe-2.5">
+            <div className="flex gap-1 flex-1 min-w-0 overflow-x-scroll scrollbar-thin">
               {selectedIds.length > 0 ? (
-                selectedIds.map((val) => {
-                  const option = options.find((o) => o.id === val);
-                  return option ? (
-                    <Badge key={val} variant="outline" className="gap-1.5">
-                      {option.avatar && (
-                        <Avatar className="size-4">
-                          <AvatarImage src={option.avatar} alt={option.name} />
-                          <AvatarFallback className="text-xs">{option.name[0]}</AvatarFallback>
+                <>
+                  {visibleOptions.map((option) => (
+                    <div key={option.id} className="flex items-center gap-1 bg-muted rounded px-2 py-1 text-xs">
+                      {option.profilePictureUrl && (
+                        <Avatar className="size-3">
+                          <AvatarImage src={option.profilePictureUrl} alt={option.name} />
+                          <AvatarFallback className="text-[10px]">{option.name[0]}</AvatarFallback>
                         </Avatar>
                       )}
-                      <span className="font-medium">{option.name}</span>
-                      <Badge
+                      <span className="truncate max-w-20">{option.name}</span>
+                      <button
+                        type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          removeSelection(val);
+                          removeSelection(option.id);
                         }}
-                        className="cursor-pointer"
+                        className="ml-1 hover:bg-muted-foreground/20 rounded p-0.5"
                       >
-                        <X className="h-3 w-3" />
-                      </Badge>
-                    </Badge>
-                  ) : null;
-                })
+                        <X className="h-2.5 w-2.5" />
+                      </button>
+                    </div>
+                  ))}
+                  {remainingCount > 0 && (
+                    <div className="bg-muted rounded px-2 py-1 text-xs text-muted-foreground">+{remainingCount}</div>
+                  )}
+                </>
               ) : (
-                <span className="px-2.5">{placeholder}</span>
+                <span className="text-muted-foreground">{placeholder}</span>
               )}
             </div>
-            <ChevronsUpDown className="absolute top-2 end-3 h-4 w-4 shrink-0 opacity-50" />
+            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-          <Command>
+        <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
+          <Command className="bg-muted/30 backdrop-blur-sm shadow-s">
             <CommandInput placeholder={searchPlaceholder} />
             <CommandList>
               <ScrollArea className="max-h-[300px] [&>div]:block!">
@@ -100,9 +109,9 @@ export function ComboboxMultiple({
                   {options.map((option) => (
                     <CommandItem key={option.id} value={option.name} onSelect={() => toggleSelection(option.id)}>
                       <span className="flex items-center gap-2 flex-1">
-                        {option.avatar && (
+                        {option.profilePictureUrl && (
                           <Avatar className="size-7">
-                            <AvatarImage src={option.avatar} alt={option.name} />
+                            <AvatarImage src={option.profilePictureUrl} alt={option.name} />
                             <AvatarFallback>{option.name[0]}</AvatarFallback>
                           </Avatar>
                         )}

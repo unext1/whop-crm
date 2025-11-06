@@ -6,21 +6,24 @@ import {
   CheckSquare,
   Circle,
   Clock,
+  Eye,
   FileText,
   Globe,
   Linkedin,
   Mail,
   MapPin,
   Menu,
+  MoreHorizontal,
   Paperclip,
   Phone,
   Plus,
   Trash2,
   Twitter,
+  Users,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { data, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
@@ -39,6 +42,13 @@ import {
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { db } from '~/db';
@@ -52,14 +62,14 @@ import {
   peopleTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
-import { verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: companyId } = params;
-  const { userId } = await verifyWhopToken(request);
-  const { access_level } = await whopSdk.users.checkAccess(organizationId, { id: userId });
+  const { user } = await requireUser(request, organizationId);
+  const userId = user.id;
 
   // Fetch the specific company with organization isolation and people relationships
   const company = await db.query.companiesTable.findFirst({
@@ -85,7 +95,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   // Fetch associated tasks
   const tasks = await db.query.boardTaskTable.findMany({
-    where: eq(boardTaskTable.companyId, companyId),
+    where: and(eq(boardTaskTable.companyId, companyId), eq(boardTaskTable.type, 'tasks')),
     with: {
       column: true,
     },
@@ -115,13 +125,13 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { userId, access_level, organizationId, company: { ...company, activities }, allPeople, tasksByColumn };
+  return { userId, organizationId, company: { ...company, activities }, allPeople, tasksByColumn };
 };
 
 export const action = async ({ params, request }: Route.ActionArgs) => {
   const { companyId: organizationId, id: companyId } = params;
-  const { userId } = await verifyWhopToken(request);
-  await whopSdk.users.checkAccess(organizationId, { id: userId });
+  const { user } = await requireUser(request, organizationId);
+  const userId = user.id;
 
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -271,7 +281,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     const name = String(formData.get('name') || '');
     const content = formData.get('content') ? String(formData.get('content')) : null;
     const relatedCompanyId = formData.get('relatedCompanyId') ? String(formData.get('relatedCompanyId')) : null;
-
     if (!name) {
       return data({ error: 'Task name required' }, { status: 400 });
     }
@@ -283,7 +292,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
       const todoColumn = await db.query.boardColumnTable.findFirst({
         where: and(eq(boardColumnTable.boardId, tasksBoard.id), eq(boardColumnTable.name, 'Todo')),
       });
-
       if (!todoColumn) {
         return data({ error: 'Todo column not found' }, { status: 500 });
       }
@@ -295,7 +303,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
       });
 
       const nextOrder = maxOrderTask?.order ? maxOrderTask.order + 1 : 1;
-
       await db.transaction(async (tx) => {
         const task = await tx
           .insert(boardTaskTable)
@@ -429,6 +436,7 @@ const tabs = [
   { id: 'timeline', label: 'Timeline', icon: Clock },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'notes', label: 'Notes', icon: FileText },
+  { id: 'team', label: 'Team', icon: Users },
   { id: 'files', label: 'Files', icon: Paperclip },
   { id: 'emails', label: 'Emails', icon: Mail },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
@@ -777,30 +785,21 @@ const CompanyPage = () => {
               />
             </div>
           )}
-
           {activeTab === 'tasks' && (
             <div className="">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Tasks</h2>
                 <div className="flex items-center gap-2">
                   <QuickTodoDialog
-                    companyId={company.id}
+                    personId={company.id}
                     userId={userId}
                     trigger={
                       <Button size="sm" className="h-8 text-xs">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
-                        Quick Todo
+                        Add Todo
                       </Button>
                     }
                   />
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => navigate(`/dashboard/${organizationId}/tasks`)}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    New Task
-                  </Button>
                 </div>
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
@@ -833,35 +832,40 @@ const CompanyPage = () => {
                             key={task.id}
                             className="rounded-lg border border-border bg-card p-3 shadow-sm hover:border-primary/50 transition-colors"
                           >
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="flex items-start gap-2 flex-1">
                                 {columnName.toLowerCase() === 'done' || columnName.toLowerCase() === 'completed' ? (
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const formData = new FormData();
+                                      formData.append('intent', 'completeTask');
+                                      formData.append('taskId', task.id);
+                                      formData.append('columnName', 'Todo');
+                                      submit(formData, { method: 'post' });
+                                    }}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  </button>
                                 ) : (
-                                  <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const formData = new FormData();
+                                      formData.append('intent', 'completeTask');
+                                      formData.append('taskId', task.id);
+                                      formData.append('columnName', 'Done');
+                                      submit(formData, { method: 'post' });
+                                    }}
+                                  >
+                                    <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  </button>
                                 )}
                                 <div className="flex-1">
                                   <h4 className="text-sm font-medium">{task.name}</h4>
                                   {task.content && <p className="text-xs text-muted-foreground mt-1">{task.content}</p>}
                                 </div>
                               </div>
-                              {columnName.toLowerCase() !== 'done' && columnName.toLowerCase() !== 'completed' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => {
-                                    const formData = new FormData();
-                                    formData.append('intent', 'completeTask');
-                                    formData.append('taskId', task.id);
-                                    formData.append('columnName', 'Done');
-                                    submit(formData, { method: 'post' });
-                                  }}
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Complete
-                                </Button>
-                              )}
                             </div>
                           </div>
                         ))}
@@ -910,6 +914,86 @@ const CompanyPage = () => {
                   Upload first file
                 </Button>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'team' && (
+            <div className="">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-sm font-semibold">Team</h2>
+                <ComboboxMultiple
+                  options={peopleOptions}
+                  selectedIds={selectedPeopleIds}
+                  onSelectionChange={handlePeopleChange}
+                  placeholder="Add team members..."
+                  searchPlaceholder="Search people..."
+                  emptyText="No people found."
+                  className="w-64"
+                />
+              </div>
+              {company.companiesPeople.length === 0 ? (
+                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <Users className="mx-auto h-12 w-12 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No team members yet</p>
+                  <p className="text-xs text-muted-foreground mt-2">Use the dropdown above to add team members</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="grid gap-3">
+                    {company.companiesPeople.map(({ person }) => (
+                      <div
+                        key={person.id}
+                        className="flex items-center justify-between rounded-lg border border-border bg-card p-3 shadow-sm"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+                            {person.name?.charAt(0) || 'P'}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium">{person.name}</p>
+                            <p className="text-xs text-muted-foreground">{person.jobTitle || 'No title'}</p>
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                              <MoreHorizontal className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem asChild>
+                              <Link
+                                to={`/dashboard/${organizationId}/people/${person.id}`}
+                                className="flex items-center"
+                              >
+                                <Eye className="mr-2 h-3 w-3" />
+                                View Person
+                              </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive hover:text-destructive-foreground"
+                              onClick={() => {
+                                const formData = new FormData();
+                                formData.append('intent', 'update-people');
+                                // Remove this person from selected people
+                                const newIds = selectedPeopleIds.filter((id) => id !== person.id);
+                                newIds.forEach((id) => {
+                                  formData.append('peopleIds', id);
+                                });
+                                submit(formData, { method: 'post' });
+                              }}
+                            >
+                              <X className="mr-2 h-3 w-3" />
+                              Remove Association
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

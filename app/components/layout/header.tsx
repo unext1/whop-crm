@@ -1,4 +1,3 @@
-import { Building2 } from 'lucide-react';
 import type React from 'react';
 import { Separator } from '~/components/ui/separator';
 import { SidebarTrigger } from '~/components/ui/sidebar';
@@ -19,10 +18,10 @@ export const Header = ({ className, fixed, children, ...props }: HeaderProps) =>
       {...props}
     >
       <SidebarTrigger variant="outline" />
-      <div className="flex items-center">
+      {/* <div className="flex items-center">
         <Building2 className="h-4 w-4" />
         <span className="text-sm ml-2">Route name</span>
-      </div>
+      </div> */}
       <Separator orientation="vertical" className="h-6" />
       {children}
     </header>

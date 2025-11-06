@@ -1,6 +1,6 @@
 import { parseWithZod } from '@conform-to/zod';
 import { and, eq } from 'drizzle-orm';
-import { CheckSquare, Clock, Edit, FileText, Menu, MoreHorizontal, Paperclip, Plus, User, X } from 'lucide-react';
+import { CheckSquare, Clock, Edit, FileText, Menu, Paperclip, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
 import { z } from 'zod';
@@ -10,7 +10,6 @@ import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { EditableText } from '~/components/kanban/editible-text';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '~/components/ui/dialog';
@@ -280,9 +279,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
         >
           <X className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
       </div>
 
       <div className=" p-4">
@@ -292,11 +288,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
             {task.name?.charAt(0) || 'T'}
           </div>
           <h2 className="text-lg font-semibold">{task.name || 'Unnamed Task'}</h2>
-          {task.column && (
-            <Badge variant="secondary" className="mt-1.5 text-xs capitalize">
-              {task.column.name}
-            </Badge>
-          )}
         </div>
 
         {/* Details Section */}
@@ -331,7 +322,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 task.assignees.map((assignee) => (
                   <div key={assignee.userId} className="flex items-center gap-2 text-sm">
                     <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarImage src={assignee.user.name || ''} alt="avatar" />
+                      <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
                         {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
                       </AvatarFallback>
@@ -355,7 +346,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               {task.owner ? (
                 <div className="flex items-center gap-2 text-sm">
                   <Avatar className="h-6 w-6 shrink-0">
-                    <AvatarImage src={task.owner.name || ''} alt="avatar" />
+                    <AvatarImage src={task.owner.profilePictureUrl || ''} alt="avatar" />
                     <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
                       {task.owner.name ? task.owner.name[0].toUpperCase() : 'O'}
                     </AvatarFallback>
@@ -482,17 +473,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {task.ownerId === user.id && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs bg-transparent"
-                onClick={() => setManageUsersOpen(true)}
-              >
-                <User className="mr-1.5 h-3.5 w-3.5" />
-                Manage Users
-              </Button>
-            )}
             <QuickActionsMenu
               type="task"
               entityId={task.id}
@@ -559,7 +539,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   <Label className="text-xs font-semibold text-muted-foreground">Add Comment</Label>
                   <div className="flex gap-2 mt-4">
                     <Avatar className="h-8 w-8 shrink-0">
-                      <AvatarImage src={user.name || ''} alt="avatar" />
+                      <AvatarImage src={user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                         {user.name ? user.name[0].toUpperCase() : 'U'}
                       </AvatarFallback>
@@ -589,7 +569,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <Card key={comment.id} className="p-4 bg-card shadow-sm">
                       <div className="flex items-start gap-3">
                         <Avatar className="h-8 w-8 shrink-0">
-                          <AvatarImage src={comment.user?.name || ''} alt="avatar" />
+                          <AvatarImage src={comment.user?.profilePictureUrl || ''} alt="avatar" />
                           <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                             {comment.user?.name ? comment.user.name[0].toUpperCase() : 'U'}
                           </AvatarFallback>
@@ -682,7 +662,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
           className="sm:max-w-xl p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
           showCloseButton={false}
         >
-          {/* Header */}
           <div className="flex h-14 items-center justify-between border-b border-border px-6 bg-muted/40">
             <DialogTitle className="text-sm font-semibold m-0">Manage Users</DialogTitle>
             <DialogClose asChild>
@@ -692,7 +671,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               </Button>
             </DialogClose>
           </div>
-          {/* Content */}
           <div className="overflow-auto max-h-[calc(100vh-180px)] p-6">
             <div className="space-y-3">
               {task.assignees && task.assignees.length > 0 ? (
@@ -704,7 +682,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     >
                       <div className="flex items-center gap-2">
                         <Avatar className="h-8 w-8">
-                          <AvatarImage src={assignee.user.name || ''} alt="avatar" />
+                          <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
                           <AvatarFallback className="text-xs bg-primary text-primary-foreground">
                             {assignee.user.name ? assignee.user.name[0].toUpperCase() : ''}
                           </AvatarFallback>

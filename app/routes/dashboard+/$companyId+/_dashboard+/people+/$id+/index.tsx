@@ -1,5 +1,6 @@
 import { and, eq, or } from 'drizzle-orm';
 import {
+  BriefcaseBusinessIcon,
   Calendar,
   CheckCircle2,
   CheckSquare,
@@ -14,27 +15,16 @@ import {
   Paperclip,
   Phone,
   Plus,
-  Trash2,
   Twitter,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
 import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { AddEmailDialog } from '~/components/add-email-dialog';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
@@ -48,6 +38,8 @@ import {
   boardTaskTable,
   companiesPeopleTable,
   companiesTable,
+  emailsTable,
+  peopleEmailsTable,
   peopleTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
@@ -59,7 +51,6 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
   const { user } = await requireUser(request, organizationId);
 
-  // Fetch the specific person with organization isolation and company relations
   const person = await db.query.peopleTable.findFirst({
     where: and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)),
     with: {
@@ -444,11 +435,11 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
           .returning();
 
         await db.insert(boardColumnTable).values([
-          { name: 'Lead', order: 1, boardId: newBoard[0].id },
-          { name: 'Qualified', order: 2, boardId: newBoard[0].id },
-          { name: 'Proposal', order: 3, boardId: newBoard[0].id },
-          { name: 'Negotiation', order: 4, boardId: newBoard[0].id },
-          { name: 'Won', order: 5, boardId: newBoard[0].id },
+          { name: '👋 Lead', order: 1, boardId: newBoard[0].id },
+          { name: '👍 Qualified', order: 2, boardId: newBoard[0].id },
+          { name: '💡 Proposal', order: 3, boardId: newBoard[0].id },
+          { name: '💬 Negotiation', order: 4, boardId: newBoard[0].id },
+          { name: '🎉 Won', order: 5, boardId: newBoard[0].id },
         ]);
 
         return newBoard[0];
@@ -642,6 +633,160 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     }
   }
 
+  // Add emails
+  if (intent === 'addEmails') {
+    const emailsData = formData.getAll('emails') as string[];
+    const emailTypes = formData.getAll('emailTypes') as string[];
+    const primaryIndex = formData.get('primaryIndex')
+      ? Number.parseInt(formData.get('primaryIndex') as string, 10)
+      : -1;
+
+    if (!emailsData.length) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'No emails provided',
+        variant: 'destructive',
+      });
+      return data({ error: 'No emails provided' }, { headers, status: 400 });
+    }
+
+    try {
+      await db.transaction(async (tx) => {
+        for (let i = 0; i < emailsData.length; i++) {
+          const email = emailsData[i].trim();
+          const type = (emailTypes[i] || 'work') as 'work' | 'personal' | 'other';
+          const isPrimary = i === primaryIndex;
+
+          if (email) {
+            // Check if email already exists in this organization
+            const existingEmail = await tx.query.emailsTable.findFirst({
+              where: and(eq(emailsTable.email, email), eq(emailsTable.organizationId, organizationId)),
+            });
+
+            let emailId: string;
+
+            if (existingEmail) {
+              emailId = existingEmail.id;
+              // If marking as primary, update existing email
+              if (isPrimary && !existingEmail.isPrimary) {
+                await tx.update(emailsTable).set({ isPrimary: true, type }).where(eq(emailsTable.id, emailId));
+              }
+            } else {
+              // Create new email
+              const insert = await tx
+                .insert(emailsTable)
+                .values({
+                  email,
+                  organizationId,
+                  type,
+                  isPrimary,
+                })
+                .returning();
+              await tx.insert(peopleEmailsTable).values({
+                personId,
+                emailId: insert[0].id,
+              });
+              emailId = insert[0].id;
+            }
+
+            // Check if relationship already exists
+            const existingRelation = await tx.query.peopleEmailsTable.findFirst({
+              where: and(eq(peopleEmailsTable.personId, personId), eq(peopleEmailsTable.emailId, emailId)),
+            });
+
+            if (!existingRelation) {
+              await tx.insert(peopleEmailsTable).values({
+                personId,
+                emailId,
+              });
+
+              // Log activity
+              await logPersonActivity({
+                personId,
+                userId,
+                activityType: 'updated',
+                description: `Added email ${email}`,
+              });
+            }
+          }
+        }
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'Emails added successfully',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to add emails',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to add emails' }, { headers, status: 500 });
+    }
+  }
+
+  // Remove email
+  if (intent === 'removeEmail') {
+    const emailId = formData.get('emailId')?.toString();
+
+    if (!emailId) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Email ID is required',
+        variant: 'destructive',
+      });
+      return data({ error: 'Email ID required' }, { headers, status: 400 });
+    }
+
+    try {
+      // Get email details for logging
+      const email = await db.query.emailsTable.findFirst({
+        where: eq(emailsTable.id, emailId),
+      });
+
+      if (!email) {
+        const headers = await putToast({
+          title: 'Error',
+          message: 'Email not found',
+          variant: 'destructive',
+        });
+        return data({ error: 'Email not found' }, { headers, status: 404 });
+      }
+
+      // Remove the relationship
+      await db
+        .delete(peopleEmailsTable)
+        .where(and(eq(peopleEmailsTable.personId, personId), eq(peopleEmailsTable.emailId, emailId)));
+
+      // Log activity
+      await logPersonActivity({
+        personId,
+        userId,
+        activityType: 'updated',
+        description: `Removed email ${email.email}`,
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'Email removed successfully',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to remove email',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to remove email' }, { headers, status: 500 });
+    }
+  }
+
   return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
@@ -686,6 +831,19 @@ const PersonPage = () => {
     submit(formData, { method: 'post' });
   };
 
+  const handleAddEmails = (emails: { email: string; type: 'work' | 'personal' | 'other'; isPrimary: boolean }[]) => {
+    const formData = new FormData();
+    formData.append('intent', 'addEmails');
+    emails.forEach((email, index) => {
+      formData.append('emails', email.email);
+      formData.append('emailTypes', email.type);
+      if (email.isPrimary) {
+        formData.append('primaryIndex', index.toString());
+      }
+    });
+    submit(formData, { method: 'post' });
+  };
+
   // Sidebar JSX
   const sidebarContent = (
     <div className="flex flex-col w-full">
@@ -698,39 +856,6 @@ const PersonPage = () => {
         >
           <X className="h-4 w-4" />
         </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Person</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete {person.name}? This action cannot be undone and will permanently remove
-                this person and all associated data.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append('intent', 'delete');
-                  submit(formData, { method: 'post' });
-                }}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
 
       <div className="overflow-auto p-4">
@@ -747,7 +872,6 @@ const PersonPage = () => {
               </Badge>
             )}
           </div>
-          {person.jobTitle && <p className="text-sm text-muted-foreground">{person.jobTitle}</p>}
         </div>
 
         {/* Details Section */}
@@ -762,31 +886,75 @@ const PersonPage = () => {
               placeholder="Add description..."
             />
           </div>
+          <div className="flex items-center gap-2 text-sm">
+            <BriefcaseBusinessIcon className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
+            <EditableField
+              value={person.jobTitle}
+              fieldName="fieldValue"
+              intent="updatePersonField"
+              fieldNameParam="jobTitle"
+              placeholder="Add job title..."
+            />
+          </div>
           <Separator />
 
           <div>
-            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Contact</h3>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-xs font-medium text-muted-foreground">Contact</h3>
+              <AddEmailDialog
+                trigger={
+                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                    <Plus className="mr-1 h-3 w-3" />
+                    Email
+                  </Button>
+                }
+                onAddEmails={handleAddEmails}
+              />
+            </div>
             <div className="space-y-2">
-              {emails.length > 0 && (
-                <div className="flex items-start gap-2 text-sm">
-                  <Mail className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
-                  <div className="flex-1 flex flex-col gap-1">
-                    {emails.map((email) => (
-                      <div key={email.id} className="flex items-center gap-1.5">
-                        <a href={`mailto:${email.email}`} className="text-foreground hover:text-primary">
-                          {email.email}
-                        </a>
-                        {email.isPrimary && (
-                          <Badge variant="secondary" className="h-5 text-[10px] px-1">
-                            Primary
-                          </Badge>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
               <div className="flex items-start gap-2 text-sm">
+                <Mail className="mt-0.5 h-3.5 w-3.5 text-muted-foreground" />
+                {emails.length > 0 ? (
+                  <div className="flex-1 flex flex-col gap-1">
+                    {emails
+                      .sort((a) => (a.isPrimary ? -1 : 1))
+                      .map((email) => (
+                        <div key={email.id} className="flex items-center gap-1.5 group">
+                          <a
+                            href={`mailto:${email.email}`}
+                            className="text-foreground hover:text-primary text-xs flex-1"
+                          >
+                            {email.email}
+                          </a>
+                          {email.isPrimary && (
+                            <Badge variant="default" className="h-5 text-[10px] px-1">
+                              Primary
+                            </Badge>
+                          )}
+                          <Badge variant="outline" className="h-5 text-[10px] px-1 capitalize">
+                            {email.type}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground"
+                            onClick={() => {
+                              const formData = new FormData();
+                              formData.append('intent', 'removeEmail');
+                              formData.append('emailId', email.id);
+                              submit(formData, { method: 'post' });
+                            }}
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ))}
+                  </div>
+                ) : (
+                  <span className="text-sm text-muted-foreground">No emails found</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2 text-sm">
                 <Phone className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <EditableField
                   value={person.phone}
@@ -796,7 +964,7 @@ const PersonPage = () => {
                   placeholder="Add phone..."
                 />
               </div>
-              <div className="flex items-start gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <EditableField
                   value={person.address}
@@ -806,7 +974,7 @@ const PersonPage = () => {
                   placeholder="Add address..."
                 />
               </div>
-              <div className="flex items-start gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Globe className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <EditableField
                   value={person.website}
@@ -841,7 +1009,7 @@ const PersonPage = () => {
           <div>
             <h3 className="mb-2 text-xs font-medium text-muted-foreground">Social</h3>
             <div className="space-y-2">
-              <div className="flex items-start gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Linkedin className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <EditableField
                   value={person.linkedin}
@@ -851,7 +1019,7 @@ const PersonPage = () => {
                   placeholder="Add LinkedIn..."
                 />
               </div>
-              <div className="flex items-start gap-2 text-sm">
+              <div className="flex items-center gap-2 text-sm">
                 <Twitter className="mt-0.5 h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <EditableField
                   value={person.twitter}
@@ -1023,18 +1191,10 @@ const PersonPage = () => {
                     trigger={
                       <Button size="sm" className="h-8 text-xs">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
-                        Quick Todo
+                        Add Todo
                       </Button>
                     }
                   />
-                  <Button
-                    size="sm"
-                    className="h-8 text-xs"
-                    onClick={() => navigate(`/dashboard/${organizationId}/tasks`)}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    New Task
-                  </Button>
                 </div>
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
@@ -1067,35 +1227,40 @@ const PersonPage = () => {
                             key={task.id}
                             className="rounded-lg border border-border bg-card p-3 shadow-sm hover:border-primary/50 transition-colors"
                           >
-                            <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center justify-between gap-2">
                               <div className="flex items-start gap-2 flex-1">
                                 {columnName.toLowerCase() === 'done' || columnName.toLowerCase() === 'completed' ? (
-                                  <CheckCircle2 className="h-4 w-4 text-green-500 shrink-0 mt-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const formData = new FormData();
+                                      formData.append('intent', 'completeTask');
+                                      formData.append('taskId', task.id);
+                                      formData.append('columnName', 'Todo');
+                                      submit(formData, { method: 'post' });
+                                    }}
+                                  >
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  </button>
                                 ) : (
-                                  <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const formData = new FormData();
+                                      formData.append('intent', 'completeTask');
+                                      formData.append('taskId', task.id);
+                                      formData.append('columnName', 'Done');
+                                      submit(formData, { method: 'post' });
+                                    }}
+                                  >
+                                    <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                  </button>
                                 )}
                                 <div className="flex-1">
                                   <h4 className="text-sm font-medium">{task.name}</h4>
                                   {task.content && <p className="text-xs text-muted-foreground mt-1">{task.content}</p>}
                                 </div>
                               </div>
-                              {columnName.toLowerCase() !== 'done' && columnName.toLowerCase() !== 'completed' && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => {
-                                    const formData = new FormData();
-                                    formData.append('intent', 'completeTask');
-                                    formData.append('taskId', task.id);
-                                    formData.append('columnName', 'Done');
-                                    submit(formData, { method: 'post' });
-                                  }}
-                                >
-                                  <CheckCircle2 className="h-3 w-3 mr-1" />
-                                  Complete
-                                </Button>
-                              )}
                             </div>
                           </div>
                         ))}

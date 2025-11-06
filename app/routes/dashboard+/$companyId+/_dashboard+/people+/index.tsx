@@ -148,13 +148,20 @@ const columns: ColumnDef<PeopleWithCompany>[] = [
         return <span className="text-sm text-muted-foreground">—</span>;
       }
 
+      // Sort emails so primary comes first, or just use original order
+      const sortedEmails = [...emails].sort((a, b) => {
+        if (a.isPrimary) return -1;
+        if (b.isPrimary) return 1;
+        return 0;
+      });
+
       return (
-        <div className="flex flex-wrap gap-1.5 max-w-[300px]">
-          {emails.map((email) => (
+        <div className="flex gap-1.5 max-w-[200px] scrollbar-thin overflow-x-auto">
+          {sortedEmails.map((email, index) => (
             <Badge
               key={email.id}
-              variant={email.isPrimary ? 'default' : 'secondary'}
-              className="text-xs font-normal max-w-full"
+              variant={index === 0 ? 'default' : 'secondary'}
+              className="text-xs font-normal shrink-0"
             >
               <Mail className="h-2.5 w-2.5 mr-1 shrink-0" />
               <span className="truncate">{email.email}</span>

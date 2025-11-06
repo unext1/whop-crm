@@ -11,7 +11,17 @@ export const SaveButton = forwardRef<HTMLButtonElement, React.ButtonHTMLAttribut
 
 export const CancelButton = forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLButtonElement>>(
   (props, ref) => {
-    return <Button ref={ref} type="button" tabIndex={0} {...props} variant="destructive" size="sm" />;
+    return (
+      <Button
+        ref={ref}
+        type="button"
+        tabIndex={0}
+        {...props}
+        variant="destructive"
+        size="sm"
+        className="bg-red-500 hover:bg-red-600"
+      />
+    );
   },
 );
 
@@ -58,10 +68,10 @@ export function EditableText({
         ref={inputRef}
         type="text"
         className={cn(
-          size === 'sm' && 'w-full h-8 text-sm font-semibold',
-          size === 'md' && 'w-full h-8 text-sm font-semibold',
-          size === 'lg' && 'w-full h-12 text-xl font-semibold',
-          size === undefined && 'w-full h-8 text-sm font-semibold',
+          size === 'sm' && 'w-full h-8 text-xs font-semibold',
+          size === 'md' && 'w-full h-8 text-xs font-semibold',
+          size === 'lg' && 'w-full h-12 text-sm font-semibold',
+          size === undefined && 'w-full h-8 md:text-xs text-xs font-semibold',
         )}
         aria-label={inputLabel}
         name={fieldName}
@@ -88,10 +98,11 @@ export function EditableText({
       aria-label={buttonLabel}
       type="button"
       className={cn(
-        size === 'sm' && 'text-sm justify-start h-8 w-full px-[13px] font-semibold ',
-        size === 'md' && 'text-sm justify-start h-8 w-full px-[13px] font-semibold ',
+        size === 'sm' && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
+        size === 'md' && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
         size === 'lg' && 'text-xl justify-start h-12 w-full px-[13px] font-semibold ',
-        size === undefined && 'text-sm justify-start h-8 w-full px-[13px] font-semibold ',
+        size === undefined && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
+        'hover:bg-muted',
       )}
       ref={buttonRef}
       onClick={() => {

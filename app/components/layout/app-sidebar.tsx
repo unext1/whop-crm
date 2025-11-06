@@ -1,4 +1,4 @@
-import { Building2Icon, CheckSquareIcon, KanbanIcon, LayoutDashboardIcon, SearchIcon, UsersIcon } from 'lucide-react';
+import { Building2Icon, CheckSquareIcon, KanbanIcon, LayoutDashboardIcon, UsersIcon } from 'lucide-react';
 import { href, Link, useParams } from 'react-router';
 import {
   Sidebar,
@@ -8,12 +8,15 @@ import {
   SidebarRail,
   useSidebar,
 } from '~/components/ui/sidebar';
-import type { UserType } from '~/db/schema';
-import { Kbd } from '../ui/kbd';
+import type { OrganizationType, UserType } from '~/db/schema';
 import { NavGroup } from './nav-group';
 import { NavUser } from './nav-user';
 
-export function AppSidebar({ user, ...props }: { user: UserType } & React.ComponentProps<typeof Sidebar>) {
+export function AppSidebar({
+  user,
+  organization,
+  ...props
+}: { user: UserType; organization: OrganizationType } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
 
   const navGroups = [
@@ -129,7 +132,7 @@ export function AppSidebar({ user, ...props }: { user: UserType } & React.Compon
                     </g>
                   </g>
                 </svg>
-                CRM
+                {organization.name}
               </div>
             )}
           </Link>
@@ -138,7 +141,7 @@ export function AppSidebar({ user, ...props }: { user: UserType } & React.Compon
         </div>
       </SidebarHeader>
       <SidebarContent>
-        <div className="flex flex-wrap items-center gap-4 px-2 mt-2">
+        {/* <div className="flex flex-wrap items-center gap-4 px-2 mt-2">
           <div className="px-2 w-full border rounded-lg text-xs p-1 flex justify-between items-center">
             <div className="flex items-center gap-2">
               <SearchIcon className="size-3" />
@@ -148,7 +151,7 @@ export function AppSidebar({ user, ...props }: { user: UserType } & React.Compon
               <Kbd>⌘</Kbd> <Kbd>K</Kbd>
             </div>
           </div>
-        </div>
+        </div> */}
         {navGroups.map((props) => (
           <NavGroup key={props.title} {...props} />
         ))}

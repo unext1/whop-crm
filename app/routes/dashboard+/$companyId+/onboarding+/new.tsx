@@ -9,7 +9,7 @@ import { Card, CardContent } from '~/components/ui/card';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { db } from '~/db';
-import { organizationTable, userTable } from '~/db/schema';
+import { boardColumnTable, boardTable, organizationTable, userTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
 import { putToast } from '~/services/cookie.server';
 import { env } from '~/services/env.server';
@@ -99,10 +99,31 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data({ error: 'Industry is required', step: 1 } as const, { status: 400 });
     }
 
-    await db.insert(organizationTable).values({
-      id: companyId,
-      name: name.trim(),
-    });
+    const org = await db
+      .insert(organizationTable)
+      .values({
+        id: companyId,
+        name: name.trim(),
+      })
+      .returning();
+
+    const newBoard = await db
+      .insert(boardTable)
+      .values({
+        name: 'Pipeline',
+        type: 'pipeline',
+        companyId: org[0].id,
+        ownerId: userId,
+      })
+      .returning();
+
+    await db.insert(boardColumnTable).values([
+      { name: '👋 Lead', order: 1, boardId: newBoard[0].id },
+      { name: '👍 Qualified', order: 2, boardId: newBoard[0].id },
+      { name: '💡 Proposal', order: 3, boardId: newBoard[0].id },
+      { name: '💬 Negotiation', order: 4, boardId: newBoard[0].id },
+      { name: '🎉 Won', order: 5, boardId: newBoard[0].id },
+    ]);
 
     return data({ success: true, step: 1, message: 'Organization created' } as const);
   }
@@ -577,10 +598,18 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                     </div>
 
                     {/* Trust badges */}
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex  items-center  gap-2 pt-2">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Check className="h-3.5 w-3.5 text-primary/60" />
-                        SOC 2 certified
+                        Access to all team members
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Check className="h-3.5 w-3.5 text-primary/60" />
+                        Unlocked all features
+                      </div>
+                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <Check className="h-3.5 w-3.5 text-primary/60" />
+                        Priority support
                       </div>
                     </div>
                   </>

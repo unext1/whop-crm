@@ -13,6 +13,15 @@ export const whopSdk = new Whop({
   webhookKey: btoa(env.WHOP_WEBHOOK_SECRET),
 });
 
+import { WhopServerSdk } from '@whop/api';
+
+export const WhopServerApi = WhopServerSdk({
+  appId: env.WHOP_APP_ID ?? 'fallback',
+  appApiKey: env.WHOP_API_KEY ?? 'fallback',
+  onBehalfOfUserId: env.WHOP_AGENT_USER_ID,
+  companyId: env.WHOP_COMPANY_ID,
+});
+
 export const verifyWhopToken = async (request: Request) => {
   const { userId } = await whopSdk.verifyUserToken(request.headers);
   if (!userId) {
@@ -53,7 +62,7 @@ export const requireUser = async (request: Request, companyId: string) => {
   const { userId } = await verifyWhopToken(request);
 
   // Check if user has access to the company (bizz)
-  const access = await hasAccess({ request, companyId });
+  const access = await hasAccess({ request, companyId }); // ACCESS TO THE COMPANY NOT PRODUCT SO ONLY ADMINS AND OWNER
   if (!access) {
     throw new Response('Access denied', { status: 403 });
   }
@@ -191,7 +200,7 @@ function shouldCheckMembershipStatus(organization: { lastMembershipCheck?: strin
   const now = new Date();
   const hoursSinceLastCheck = (now.getTime() - lastCheck.getTime()) / (1000 * 60 * 60);
 
-  return hoursSinceLastCheck >= 1; // Check every hour
+  return hoursSinceLastCheck >= 12; // Check every 12 hours
 }
 
 /**

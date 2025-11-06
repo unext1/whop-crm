@@ -1,6 +1,7 @@
-import { CheckSquare, DollarSign, Mail, MessageCircle, MoreHorizontal, Trash2 } from 'lucide-react';
+import { CheckSquare, DollarSign, Mail, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { useFetcher } from 'react-router';
+import { QuickTodoDialog } from './kanban/quick-todo-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,7 +26,6 @@ import {
 import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Textarea } from './ui/textarea';
-import { QuickTodoDialog } from './kanban/quick-todo-dialog';
 
 interface QuickActionsMenuProps {
   type: 'person' | 'company' | 'task';
@@ -42,7 +42,7 @@ export function QuickActionsMenu({
   type,
   entityId,
   entityName,
-  hasWhopId,
+  hasWhopId: _hasWhopId,
   primaryEmail,
   userId,
   onDelete,
@@ -72,12 +72,12 @@ export function QuickActionsMenu({
           <DropdownMenuSeparator />
 
           {/* Send DM - Only for people with Whop ID */}
-          {type === 'person' && hasWhopId && (
+          {/* {type === 'person' && hasWhopId && (
             <DropdownMenuItem onClick={() => setDmOpen(true)}>
               <MessageCircle className="mr-2 h-4 w-4" />
               Send DM
             </DropdownMenuItem>
-          )}
+          )} */}
 
           {/* Send Email */}
           {primaryEmail && (
@@ -110,7 +110,7 @@ export function QuickActionsMenu({
               <DropdownMenuGroup>
                 <DropdownMenuItem
                   onClick={() => setDeleteOpen(true)}
-                  className="text-destructive focus:text-destructive"
+                  className="text-destructive focus:text-foreground"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete

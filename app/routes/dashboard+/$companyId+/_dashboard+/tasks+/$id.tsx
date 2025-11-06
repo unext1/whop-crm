@@ -1,6 +1,6 @@
 import { parseWithZod } from '@conform-to/zod';
 import { and, eq } from 'drizzle-orm';
-import { Building2, Edit, FileText, Menu, MoreHorizontal, Paperclip, Plus, User, X } from 'lucide-react';
+import { Building2, Edit, FileText, Menu, Paperclip, Plus, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
 import { z } from 'zod';
@@ -414,9 +414,6 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
         >
           <X className="h-4 w-4" />
         </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
       </div>
 
       <div className="p-4">
@@ -642,17 +639,6 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {task.ownerId === user.id && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-8 text-xs bg-transparent"
-                onClick={() => setManageUsersOpen(true)}
-              >
-                <User className="mr-1.5 h-3.5 w-3.5" />
-                Manage Users
-              </Button>
-            )}
             <QuickActionsMenu
               type="task"
               entityId={task.id}

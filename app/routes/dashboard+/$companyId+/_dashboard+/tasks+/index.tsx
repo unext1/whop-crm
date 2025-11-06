@@ -1,19 +1,19 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { ArrowUpDown, CheckSquare, ListFilter } from 'lucide-react';
-import { useRef } from 'react';
+import { CheckSquare } from 'lucide-react';
+import React, { useRef, useState } from 'react';
 import { useFetchers } from 'react-router';
 import type { Route } from './+types/index';
 
 import Column from '~/components/kanban/column';
-import { Button } from '~/components/ui/button';
+import { KanbanFilterList } from '~/components/kanban/kanban-filter-list';
 import { db } from '~/db';
 import {
   boardColumnTable,
   boardTable,
   boardTaskTable,
-  taskCommentTable,
   companiesTable,
   peopleTable,
+  taskCommentTable,
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { logTaskActivity } from '~/utils/activity.server';
@@ -308,7 +308,42 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 const TasksPage = ({ loaderData }: Route.ComponentProps) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const { board, companies, people, user } = loaderData;
+  const [filteredTasks, setFilteredTasks] = useState(board?.tasks || []);
   const pendingItems = usePendingTasks();
+
+  // Memoize additionalFields to prevent infinite re-renders
+  const additionalFields = React.useMemo(
+    () => [
+      {
+        id: 'priority',
+        label: 'Priority',
+        variant: 'select' as const,
+        options: [
+          { value: 'low', label: 'Low' },
+          { value: 'medium', label: 'Medium' },
+          { value: 'high', label: 'High' },
+          { value: 'urgent', label: 'Urgent' },
+        ],
+      },
+      {
+        id: 'dueDate',
+        label: 'Due Date',
+        variant: 'date' as const,
+      },
+      {
+        id: 'status',
+        label: 'Status',
+        variant: 'select' as const,
+        options: [
+          { value: 'open', label: 'Open' },
+          { value: 'in_progress', label: 'In Progress' },
+          { value: 'completed', label: 'Completed' },
+          { value: 'cancelled', label: 'Cancelled' },
+        ],
+      },
+    ],
+    [],
+  );
 
   if (!board) {
     return (
@@ -318,8 +353,8 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
     );
   }
 
-  type TaskRecord = (typeof board.tasks)[number];
-  const tasksById = new Map<string, TaskRecord>(board.tasks.map((item) => [item.id, item]));
+  type TaskRecord = (typeof filteredTasks)[number];
+  const tasksById = new Map<string, TaskRecord>(filteredTasks.map((item) => [item.id, item]));
 
   for (const pendingItem of pendingItems) {
     const item = tasksById.get(pendingItem.id);
@@ -417,14 +452,13 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
       {/* Secondary Action Bar */}
       <div className="flex h-10 items-center justify-between border-b border-border px-4 bg-muted/20">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" className="h-7 text-xs">
-            <ListFilter className="h-3.5 w-3.5 mr-1.5" />
-            Filter
-          </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs">
-            <ArrowUpDown className="h-3.5 w-3.5 mr-1.5" />
-            Sort
-          </Button>
+          <KanbanFilterList
+            tasks={board.tasks}
+            companies={companies}
+            people={people}
+            onFilteredTasksChange={setFilteredTasks}
+            additionalFields={additionalFields}
+          />
         </div>
         <div className="flex items-center gap-2">
           <p className="text-xs text-muted-foreground">Preset columns: Todo, In Progress, Done</p>

@@ -27,6 +27,9 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     where: eq(organizationTable.id, companyId),
   });
 
+  if (!organization) {
+    return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
+  }
   // Check if user exists
   const user = await db.query.userTable.findFirst({
     where: eq(userTable.whopUserId, userId),
@@ -34,24 +37,22 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 
   // If organization exists, check if it has premium access
   // Organizations must pay for premium access - no individual access allowed
-  if (organization) {
-    const hasOrgPremium = await hasOrganizationPremiumAccess(companyId);
-    if (!hasOrgPremium) {
-      // Check if organization ever had premium access
-      const everHadPremium = organization.hadPremiumBefore;
 
-      if (everHadPremium) {
-        // Organization had premium before but lost it - redirect to billing
-        const billingPath = href('/dashboard/:companyId/billing', { companyId });
-        if (new URL(request.url).pathname !== billingPath) {
-          return redirect(billingPath);
-        }
-      } else {
-        // Organization never had premium - redirect to onboarding
-        const onboardingPath = href('/dashboard/:companyId/onboarding/new', { companyId });
-        if (new URL(request.url).pathname !== onboardingPath) {
-          return redirect(onboardingPath);
-        }
+  const hasOrgPremium = await hasOrganizationPremiumAccess(companyId);
+  if (!hasOrgPremium) {
+    const everHadPremium = organization.hadPremiumBefore;
+
+    if (everHadPremium) {
+      // Organization had premium before but lost it - redirect to billing
+      const billingPath = href('/dashboard/:companyId/billing', { companyId });
+      if (new URL(request.url).pathname !== billingPath) {
+        return redirect(billingPath);
+      }
+    } else {
+      // Organization never had premium - redirect to onboarding
+      const onboardingPath = href('/dashboard/:companyId/onboarding/new', { companyId });
+      if (new URL(request.url).pathname !== onboardingPath) {
+        return redirect(onboardingPath);
       }
     }
   }
@@ -80,6 +81,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     {
       user,
       toastData,
+      organization,
       selectedOrganization: companyId,
     },
     { headers },
@@ -87,7 +89,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 };
 
 const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
-  const { user, toastData } = loaderData;
+  const { user, toastData, organization } = loaderData;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -102,7 +104,7 @@ const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
 
   return (
     <SidebarProvider>
-      {user && <AppSidebar user={user} />}
+      {user && <AppSidebar user={user} organization={organization} />}
       <div
         id="content"
         className={cn(

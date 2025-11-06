@@ -61,26 +61,10 @@ interface ColumnProps {
   userId?: string;
 }
 
-const COLUMN_COLORS = [
-  { name: 'blue', value: 'bg-blue-500' },
-  { name: 'pink', value: 'bg-pink-500' },
-  { name: 'green', value: 'bg-green-500' },
-  { name: 'red', value: 'bg-red-500' },
-  { name: 'yellow', value: 'bg-yellow-500' },
-  { name: 'purple', value: 'bg-purple-500' },
-  { name: 'orange', value: 'bg-orange-500' },
-  { name: 'cyan', value: 'bg-cyan-500' },
-];
-
-const getColumnColor = (order: number) => {
-  return COLUMN_COLORS[order % COLUMN_COLORS.length];
-};
-
 const Column = ({
   name,
   columnId,
   tasks,
-  order,
   disableEdit = false,
   taskType = 'pipeline',
   companies = [],
@@ -88,7 +72,6 @@ const Column = ({
   boardId,
   userId,
 }: ColumnProps) => {
-  const colorConfig = getColumnColor(order);
   const submit = useSubmit();
 
   const listRef = useRef<HTMLUListElement>(null);
@@ -137,19 +120,20 @@ const Column = ({
     >
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className={`h-2 w-2 rounded-full shrink-0 ${colorConfig.value}`} />
           {disableEdit ? (
-            <h3 className="text-sm font-semibold truncate">{name}</h3>
+            <h3 className="text-xs py-2 font-semibold truncate">{name}</h3>
           ) : (
-            <EditableText
-              fieldName="name"
-              value={name}
-              inputLabel="Edit column name"
-              buttonLabel={`Edit column "${name}" name`}
-            >
-              <input type="hidden" name="intent" value="updateColumn" />
-              <input type="hidden" name="columnId" value={columnId} />
-            </EditableText>
+            <div className="w-[300px]">
+              <EditableText
+                fieldName="name"
+                value={name}
+                inputLabel="Edit column name"
+                buttonLabel={`Edit column "${name}" name`}
+              >
+                <input type="hidden" name="intent" value="updateColumn" />
+                <input type="hidden" name="columnId" value={columnId} />
+              </EditableText>
+            </div>
           )}
         </div>
         {tasks.length > 0 && (
