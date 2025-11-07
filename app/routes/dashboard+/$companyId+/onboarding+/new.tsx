@@ -113,7 +113,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         name: 'Pipeline',
         type: 'pipeline',
         companyId: org[0].id,
-        ownerId: userId,
+        // ownerId will be set when user is created in step 2
       })
       .returning();
 
@@ -149,6 +149,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       .returning();
 
     await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
+
+    // Update the default board to set the owner
+    await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
 
     return data({ success: true, step: 2, message: 'Profile created' } as const);
   }
