@@ -113,7 +113,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         name: 'Pipeline',
         type: 'pipeline',
         companyId: org[0].id,
-        // ownerId will be set when user is created in step 2
       })
       .returning();
 
