@@ -1,13 +1,15 @@
 import { and, eq, or } from 'drizzle-orm';
 import {
+  ActivityIcon,
   BriefcaseBusinessIcon,
+  Building2,
   Calendar,
   CheckCircle2,
   CheckSquare,
   Circle,
-  Clock,
   FileText,
   Globe,
+  LayoutDashboardIcon,
   Linkedin,
   Mail,
   MapPin,
@@ -27,6 +29,7 @@ import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Card } from '~/components/ui/card';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
@@ -73,7 +76,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   // Fetch associated tasks
   const tasks = await db.query.boardTaskTable.findMany({
-    where: eq(boardTaskTable.personId, personId),
+    where: and(eq(boardTaskTable.personId, personId), eq(boardTaskTable.type, 'tasks')),
     with: {
       column: true,
     },
@@ -791,7 +794,8 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
 };
 
 const tabs = [
-  { id: 'timeline', label: 'Timeline', icon: Clock },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'files', label: 'Files', icon: Paperclip },
@@ -805,7 +809,7 @@ function cn(...classes: (string | boolean | undefined)[]) {
 
 const PersonPage = () => {
   const { person, tasksByColumn, allCompanies, user, organizationId } = useLoaderData<typeof loader>();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -858,7 +862,7 @@ const PersonPage = () => {
         </Button>
       </div>
 
-      <div className="overflow-auto p-4">
+      <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
@@ -1163,12 +1167,83 @@ const PersonPage = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4 scrollbar-thin">
-          {activeTab === 'timeline' && (
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                {person.createdAt
-                  ? new Date(person.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
-                  : 'Recent'}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Key Stats */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <LayoutDashboardIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Overview</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Job Title */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Job Title</p>
+                        <p className="text-sm font-medium">{person.jobTitle || 'Not specified'}</p>
+                      </div>
+                      <BriefcaseBusinessIcon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+
+                  {/* Companies */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Companies</p>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{person.companiesPeople.length} companies</span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Tasks Count */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
+                        <p className="text-sm font-medium">{Object.values(tasksByColumn).flat().length} total</p>
+                      </div>
+                      <CheckSquare className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ActivityIcon className="h-4 w-4" />
+                    <h2 className="text-sm font-semibold">Recent Activity</h2>
+                  </div>
+                </div>
+                <ActivityTimeline
+                  activities={person.activities?.slice(0, 5) || []}
+                  fallbackCreatedAt={person.createdAt}
+                  fallbackUpdatedAt={person.updatedAt}
+                  fallbackName={person.name}
+                  fallbackType="Person"
+                />
+
+                {(!person.activities || person.activities.length === 0) && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                    <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                    <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <ActivityIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">All Activity</h2>
+                </div>
               </div>
               <ActivityTimeline
                 activities={person.activities}
@@ -1177,6 +1252,13 @@ const PersonPage = () => {
                 fallbackName={person.name}
                 fallbackType="Person"
               />
+
+              {(!person.activities || person.activities.length === 0) && (
+                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                </div>
+              )}
             </div>
           )}
 

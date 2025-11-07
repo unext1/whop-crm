@@ -1,8 +1,20 @@
 import { parseWithZod } from '@conform-to/zod';
-import { and, eq } from 'drizzle-orm';
-import { Building2, Edit, FileText, Menu, Paperclip, Plus, User, X } from 'lucide-react';
-import { useState } from 'react';
-import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
+import { and, eq, inArray } from 'drizzle-orm';
+import {
+  ActivityIcon,
+  Building2,
+  FileText,
+  LayoutDashboardIcon,
+  Menu,
+  MessagesSquareIcon,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  User,
+  X,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { data, Form, Link, redirect, useFetcher, useNavigate, useNavigation, useSubmit } from 'react-router';
 import { z } from 'zod';
 import { EditableDateField } from '~/components/editable-date-field';
 import { EditableSelectField } from '~/components/editable-select-field';
@@ -10,17 +22,22 @@ import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { EditableText } from '~/components/kanban/editible-text';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
-import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
-import { Dialog, DialogClose, DialogContent, DialogTitle } from '~/components/ui/dialog';
-import { Label } from '~/components/ui/label';
+import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Textarea } from '~/components/ui/textarea';
 import { db } from '~/db/index';
 import {
   activitiesTable,
+  boardColumnTable,
   boardTaskTable,
   companiesTable,
   peopleTable,
@@ -179,15 +196,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data(submission.reply(), { status: 400 });
     }
 
-    // Get the task to check ownership
-    const task = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
-    });
-
-    if (!task || task.ownerId !== user.id) {
-      return data({ error: 'Unauthorized' }, { status: 403 });
-    }
-
     // Get user info before removing for activity log
     const removedUser = await db.query.userTable.findFirst({
       where: eq(userTable.id, submission.value.userId),
@@ -215,15 +223,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
     if (!userId) {
       return data({ error: 'User ID required' }, { status: 400 });
-    }
-
-    // Get the task to check ownership
-    const task = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
-    });
-
-    if (!task || task.ownerId !== user.id) {
-      return data({ error: 'Unauthorized' }, { status: 403 });
     }
 
     // Check if user is already assigned
@@ -258,6 +257,71 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return {};
   }
 
+  if (intent === 'updateAssignees') {
+    const assigneeIds = formData.getAll('assigneeIds') as string[];
+
+    // Get current assignees
+    const currentAssignees = await db.query.taskAssigneesTable.findMany({
+      where: eq(taskAssigneesTable.taskId, taskId),
+    });
+
+    const currentAssigneeIds = currentAssignees.map((a) => a.userId);
+    const newAssigneeIds = assigneeIds.filter(Boolean);
+
+    // Find users to add and remove
+    const toAdd = newAssigneeIds.filter((id) => !currentAssigneeIds.includes(id));
+    const toRemove = currentAssigneeIds.filter((id) => !newAssigneeIds.includes(id));
+
+    // Add new assignees
+    if (toAdd.length > 0) {
+      await db.insert(taskAssigneesTable).values(
+        toAdd.map((userId) => ({
+          taskId,
+          userId,
+        })),
+      );
+
+      // Log activity for added users
+      for (const userId of toAdd) {
+        const addedUser = await db.query.userTable.findFirst({
+          where: eq(userTable.id, userId),
+        });
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'assignee_added',
+          relatedEntityId: userId,
+          relatedEntityType: 'user',
+          description: addedUser ? `${addedUser.name} was assigned` : 'User was assigned',
+        });
+      }
+    }
+
+    // Remove old assignees
+    if (toRemove.length > 0) {
+      await db
+        .delete(taskAssigneesTable)
+        .where(and(eq(taskAssigneesTable.taskId, taskId), inArray(taskAssigneesTable.userId, toRemove)));
+
+      // Log activity for removed users
+      for (const userId of toRemove) {
+        const removedUser = await db.query.userTable.findFirst({
+          where: eq(userTable.id, userId),
+        });
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'assignee_removed',
+          relatedEntityId: userId,
+          relatedEntityType: 'user',
+          description: removedUser ? `${removedUser.name} was unassigned` : 'User was unassigned',
+        });
+      }
+    }
+
+    return {};
+  }
+
   if (intent === 'updateTaskField') {
     const fieldName = formData.get('fieldName')?.toString();
     const fieldValue = formData.get('fieldValue')?.toString();
@@ -266,7 +330,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data({ error: 'Field name required' }, { status: 400 });
     }
 
-    const allowedFields = ['priority', 'dueDate'];
+    const allowedFields = ['priority', 'dueDate', 'status', 'attachmentType'];
     if (!allowedFields.includes(fieldName)) {
       return data({ error: 'Invalid field' }, { status: 400 });
     }
@@ -277,6 +341,25 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         updateData.dueDate = fieldValue || null;
       } else if (fieldName === 'priority') {
         updateData.priority = fieldValue || null;
+      } else if (fieldName === 'status') {
+        // For status updates, fieldValue should be the columnId
+        updateData.columnId = fieldValue || null;
+      } else if (fieldName === 'attachmentType') {
+        // For attachment type, fieldValue should be in format "type:id" (e.g., "company:123" or "person:456")
+        if (fieldValue && fieldValue !== 'none') {
+          const [type, id] = fieldValue.split(':');
+          if (type === 'company') {
+            updateData.companyId = id;
+            updateData.personId = null;
+          } else if (type === 'person') {
+            updateData.personId = id;
+            updateData.companyId = null;
+          }
+        } else {
+          // Clear both (when 'none' is selected or empty)
+          updateData.companyId = null;
+          updateData.personId = null;
+        }
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
@@ -295,15 +378,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   }
 
   if (intent === 'removeTask') {
-    // Get the task to check ownership
-    const task = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
-    });
-
-    if (!task || task.ownerId !== user.id) {
-      return data({ error: 'Unauthorized' }, { status: 403 });
-    }
-
     await db.delete(boardTaskTable).where(eq(boardTaskTable.id, taskId));
     return redirect(`/dashboard/${companyId}/tasks`);
   }
@@ -368,6 +442,25 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: userTable.name,
   });
 
+  // Fetch available columns for status changes
+  const columns = task.boardId
+    ? await db.query.boardColumnTable.findMany({
+        where: eq(boardColumnTable.boardId, task.boardId),
+        orderBy: (boardColumnTable, { asc }) => [asc(boardColumnTable.order)],
+      })
+    : [];
+
+  // Fetch all companies and people in the organization for attachment selection
+  const allCompanies = await db.query.companiesTable.findMany({
+    where: eq(companiesTable.organizationId, companyId),
+    orderBy: companiesTable.name,
+  });
+
+  const allPeople = await db.query.peopleTable.findMany({
+    where: eq(peopleTable.organizationId, companyId),
+    orderBy: peopleTable.name,
+  });
+
   // Fetch activities for this task
   const activities = await db.query.activitiesTable.findMany({
     where: and(eq(activitiesTable.entityType, 'task'), eq(activitiesTable.entityId, taskId)),
@@ -377,32 +470,44 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { task: { ...task, company, person, activities }, user, users };
+  return { task: { ...task, company, person, activities }, user, users, columns, allCompanies, allPeople };
 }
 
 const tabs = [
-  { id: 'overview', label: 'Overview', icon: FileText },
-  { id: 'comments', label: 'Comments', icon: FileText },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
+  { id: 'comments', label: 'Comments', icon: MessagesSquareIcon },
   { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
 const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
-  const { task, user, users } = loaderData;
+  const { task, user, users, allCompanies, allPeople } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
+  const submit = useSubmit();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [manageUsersOpen, setManageUsersOpen] = useState(false);
-  const [isEditingContent, setIsEditingContent] = useState(false);
-  const [contentValue, setContentValue] = useState(task.content || '');
 
-  // Get assigned user IDs
-  const assignedUserIds = new Set(task.assignees?.map((a) => a.userId) || []);
+  // Prepare options for the assignee combobox
+  const userOptions = users.map((u) => ({
+    id: u.id,
+    name: u.name || 'Unknown User',
+    profilePictureUrl: u.profilePictureUrl || '',
+  }));
 
-  // Filter out already assigned users
-  const availableUsers = users.filter((u) => !assignedUserIds.has(u.id));
+  const selectedAssigneeIds = task.assignees?.map((a) => a.userId) || [];
 
-  // Sidebar JSX
+  const handleAssigneeChange = (ids: string[]) => {
+    const formData = new FormData();
+    formData.append('intent', 'updateAssignees');
+    ids.forEach((id) => {
+      formData.append('assigneeIds', id);
+    });
+    submit(formData, { method: 'post' });
+  };
+
+  const navigation = useNavigation();
+
   const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
@@ -416,33 +521,49 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
         </Button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
             {task.name?.charAt(0) || 'T'}
           </div>
-          <h2 className="text-lg font-semibold">{task.name || 'Unnamed Task'}</h2>
-          {task.column && (
-            <Badge variant="secondary" className="mt-1.5 text-xs capitalize">
-              {task.column.name}
-            </Badge>
-          )}
+          <EditableText
+            size="lg"
+            fieldName="name"
+            value={task.name}
+            inputLabel="Edit task name"
+            buttonLabel={`Edit task "${task.name}" name`}
+          >
+            <input type="hidden" name="intent" value="updateTask" />
+            <input type="hidden" name="taskId" value={task.id} />
+          </EditableText>
         </div>
 
         {/* Details Section */}
         <div className="space-y-4">
           <div>
-            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Status</h3>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attach to</h3>
             <div className="space-y-2">
-              {task.column && (
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="mt-0.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{task.column.name}</p>
-                  </div>
-                </div>
-              )}
+              <EditableSelectField
+                value={
+                  task.companyId ? `company:${task.companyId}` : task.personId ? `person:${task.personId}` : 'none'
+                }
+                fieldName="fieldValue"
+                intent="updateTaskField"
+                fieldNameParam="attachmentType"
+                placeholder="Select attachment..."
+                options={[
+                  { value: 'none', label: 'None' },
+                  ...allCompanies.map((company) => ({
+                    value: `company:${company.id}`,
+                    label: `${company.name}`,
+                  })),
+                  ...allPeople.map((person) => ({
+                    value: `person:${person.id}`,
+                    label: `${person.name}`,
+                  })),
+                ]}
+              />
             </div>
           </div>
 
@@ -451,7 +572,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           {task.company && (
             <>
               <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Company</h3>
+                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attached to Company</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <Building2 className="h-4 w-4 text-muted-foreground" />
                   <span className="text-foreground">{task.company.name || 'Unnamed Company'}</span>
@@ -464,7 +585,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           {task.person && (
             <>
               <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Person</h3>
+                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attached to Person</h3>
                 <div className="flex items-center gap-2 text-sm">
                   <User className="h-4 w-4 text-muted-foreground" />
                   <span className="text-foreground">{task.person.name || 'Unnamed Person'}</span>
@@ -475,32 +596,19 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           )}
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
+            <div className="mb-2">
               <h3 className="text-xs font-medium text-muted-foreground">Assignees</h3>
-              {task.ownerId === user.id && (
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setManageUsersOpen(true)}>
-                  <Edit className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
-            <div className="space-y-2">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => (
-                  <div key={assignee.userId} className="flex items-center gap-2 text-sm">
-                    <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
-                      <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
-                        {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 overflow-hidden">
-                      <p className="truncate text-foreground">{assignee.user.name || 'Unassigned'}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground">No assignees</p>
-              )}
+              <div>
+                <ComboboxMultiple
+                  options={userOptions}
+                  selectedIds={selectedAssigneeIds}
+                  onSelectionChange={handleAssigneeChange}
+                  placeholder="Select assignees..."
+                  searchPlaceholder="Search users..."
+                  emptyText="No users found."
+                  className="w-full"
+                />
+              </div>
             </div>
           </div>
 
@@ -559,7 +667,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 </div>
               )}
               <div>
-                <p className="text-muted-foreground mb-1">Due Date</p>
+                <p className="text-muted-foreground">Due Date</p>
                 <EditableDateField
                   value={task.dueDate}
                   fieldName="fieldValue"
@@ -569,7 +677,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 />
               </div>
               <div>
-                <p className="text-muted-foreground mb-1">Priority</p>
+                <p className="text-muted-foreground">Priority</p>
                 <EditableSelectField
                   value={task.priority}
                   fieldName="fieldValue"
@@ -589,6 +697,16 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
       </div>
     </div>
   );
+
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const isAdding = navigation.state === 'submitting' && navigation.formData?.get('intent') === 'insertComment';
+
+  useEffect(() => {
+    if (isAdding) {
+      formRef.current?.reset();
+    }
+  }, [isAdding]);
 
   return (
     <div className="flex flex-1 overflow-hidden bg-background">
@@ -625,17 +743,8 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
             <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
               {task.name?.charAt(0) || 'T'}
             </div>
-            <div>
-              <EditableText
-                size="md"
-                fieldName="name"
-                value={task.name}
-                inputLabel="Edit task name"
-                buttonLabel={`Edit task "${task.name}" name`}
-              >
-                <input type="hidden" name="intent" value="updateTask" />
-                <input type="hidden" name="taskId" value={task.id} />
-              </EditableText>
+            <div className="flex items-center gap-2 mb-1">
+              <h2 className="text-lg font-semibold">{task.name || 'Unnamed task'}</h2>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -680,75 +789,150 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
         <div className="flex-1 overflow-auto p-4">
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              {/* Content/Description */}
+              {/* Key Stats */}
               <div>
-                <div className="mb-3 flex items-center justify-between">
-                  <h2 className="text-sm font-semibold">Description</h2>
-                  {!isEditingContent && task.ownerId === user.id && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => {
-                        setIsEditingContent(true);
-                        setContentValue(task.content || '');
-                      }}
-                    >
-                      <Edit className="mr-1.5 h-3.5 w-3.5" />
-                      Edit
-                    </Button>
-                  )}
+                <div className="flex items-center gap-2 mb-4">
+                  <LayoutDashboardIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Overview</h2>
                 </div>
-                {isEditingContent ? (
-                  <Form method="post" onSubmit={() => setIsEditingContent(false)} className="space-y-3">
-                    <Textarea
-                      name="content"
-                      rows={6}
-                      value={contentValue}
-                      onChange={(e) => setContentValue(e.target.value)}
-                      placeholder="Add task description..."
-                      className="resize-none"
-                    />
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 text-xs"
-                        onClick={() => {
-                          setIsEditingContent(false);
-                          setContentValue(task.content || '');
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button type="submit" size="sm" className="h-8 text-xs">
-                        Save
-                      </Button>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Attached To */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Attached to</p>
+                      {task.company ? (
+                        <Link
+                          to={`/dashboard/${task.board?.companyId || ''}/company/${task.company.id}`}
+                          className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
+                        >
+                          <Building2 className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-foreground">{task.company.name}</span>
+                        </Link>
+                      ) : task.person ? (
+                        <Link
+                          to={`/dashboard/${task.board?.companyId || ''}/people/${task.person.id}`}
+                          className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
+                        >
+                          <User className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-foreground">{task.person.name}</span>
+                        </Link>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Not attached</p>
+                      )}
                     </div>
-                    <input type="hidden" name="intent" value="updateContent" />
-                    <input type="hidden" name="taskId" value={task.id} />
-                  </Form>
-                ) : (
-                  <Card className="p-4 bg-card shadow-sm">
-                    <p className="text-sm text-foreground whitespace-pre-wrap">
-                      {task.content || <span className="text-muted-foreground">No description</span>}
-                    </p>
                   </Card>
-                )}
+
+                  {/* Assignees */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
+                      <div className="flex flex-wrap gap-2">
+                        {task.assignees && task.assignees.length > 0 ? (
+                          <>
+                            {task.assignees.slice(0, 2).map((assignee) => (
+                              <Link
+                                to={`/dashboard/${task.board?.companyId || ''}/users/${assignee.userId}`}
+                                key={assignee.userId}
+                                className="flex items-center gap-2 text-xs"
+                              >
+                                <Avatar className="h-6 w-6 shrink-0">
+                                  <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
+                                  <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+                                    {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-foreground">{assignee.user.name}</span>
+                              </Link>
+                            ))}
+                            {task.assignees.length > 2 && (
+                              <div className="flex items-center justify-center h-6 px-2 bg-muted rounded text-xs font-medium text-muted-foreground">
+                                +{task.assignees.length - 2} more
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No assignees</p>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Comments Count */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
+                        <p className="text-xs font-medium">{task.comments?.length || 0} comments</p>
+                      </div>
+                      <MessagesSquareIcon className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+                </div>
               </div>
 
-              {/* Timeline */}
+              {/* Description */}
               <div>
-                <h2 className="mb-3 text-sm font-semibold">Activity Timeline</h2>
-                <ActivityTimeline
-                  activities={task.activities}
-                  fallbackCreatedAt={task.createdAt}
-                  fallbackUpdatedAt={task.updatedAt}
-                  fallbackName={task.name}
-                  fallbackType="Task"
-                />
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold">Description</h2>
+                </div>
+                <EditableText
+                  size="md"
+                  fieldName="content"
+                  value={task.content || 'No description yet'}
+                  inputLabel="Edit task description"
+                  buttonLabel={`Edit task "${task.name || 'Unnamed'}" description`}
+                >
+                  <input type="hidden" name="intent" value="updateContent" />
+                  <input type="hidden" name="taskId" value={task.id} />
+                </EditableText>
+                <div className="space-y-4 mt-6">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ActivityIcon className="h-4 w-4" />
+                      <h2 className="text-sm font-semibold">Recent Activity</h2>
+                    </div>
+                  </div>
+                  <ActivityTimeline
+                    activities={task.activities?.slice(0, 5) || []}
+                    fallbackCreatedAt={task.createdAt}
+                    fallbackUpdatedAt={task.updatedAt}
+                    fallbackName={task.name}
+                    fallbackType="Task"
+                  />
+
+                  {(!task.activities || task.activities.length === 0) && (
+                    <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                      <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                      <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                    </div>
+                  )}
+                </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <ActivityIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Recent Activity</h2>
+                </div>
+              </div>
+              <ActivityTimeline
+                activities={task.activities}
+                fallbackCreatedAt={task.createdAt}
+                fallbackUpdatedAt={task.updatedAt}
+                fallbackName={task.name}
+                fallbackType="Task"
+              />
+
+              {(!task.activities || task.activities.length === 0) && (
+                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                </div>
+              )}
             </div>
           )}
 
@@ -756,9 +940,8 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
             <div className="space-y-4">
               {/* Comment Form */}
               <Card className="p-4 bg-muted/30 backdrop-blur-md border-none shadow-sm">
-                <Form method="post" className="space-y-3">
-                  <Label className="text-xs font-semibold text-muted-foreground">Add Comment</Label>
-                  <div className="flex gap-2 mt-4">
+                <Form method="post" className="space-y-3" ref={formRef}>
+                  <div className="flex gap-2">
                     <Avatar className="h-8 w-8 shrink-0">
                       <AvatarImage src={user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-xs bg-primary text-primary-foreground">
@@ -768,13 +951,14 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                     <div className="flex-1 space-y-2">
                       <Textarea
                         name="description"
-                        rows={3}
+                        rows={2}
                         placeholder="Write a comment..."
                         className="text-sm resize-none"
+                        disabled={isAdding}
                       />
-                      <div className="flex justify-end">
-                        <Button type="submit" variant="outline" size="sm" className="h-8 text-xs bg-transparent">
-                          Post
+                      <div className="flex justify-start">
+                        <Button type="submit" variant="default" size="sm" className="h-8 text-xs" disabled={isAdding}>
+                          {isAdding ? 'Posting...' : 'Post'}
                         </Button>
                       </div>
                     </div>
@@ -805,22 +989,28 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                                 year: 'numeric',
                               })}
                             </span>
+                            {comment.userId === user.id && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto">
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-32">
+                                  <Form method="post">
+                                    <input type="hidden" name="intent" value="removeComment" />
+                                    <input type="hidden" name="commentId" value={comment.id} />
+                                    <DropdownMenuItem asChild>
+                                      <button type="submit" className="w-full">
+                                        Delete
+                                      </button>
+                                    </DropdownMenuItem>
+                                  </Form>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </div>
                           <p className="text-sm text-foreground whitespace-pre-wrap">{comment.description}</p>
-                          {comment.userId === user.id && (
-                            <fetcher.Form method="post" className="mt-2">
-                              <input type="hidden" name="intent" value="removeComment" />
-                              <input type="hidden" name="commentId" value={comment.id} />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-xs text-muted-foreground hover:text-destructive"
-                              >
-                                Delete
-                              </Button>
-                            </fetcher.Form>
-                          )}
                         </div>
                       </div>
                     </Card>
@@ -856,95 +1046,6 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           )}
         </div>
       </div>
-
-      {/* Manage Users Dialog */}
-      <Dialog open={manageUsersOpen} onOpenChange={setManageUsersOpen}>
-        <DialogContent
-          className="sm:max-w-xl p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
-          showCloseButton={false}
-        >
-          {/* Header */}
-          <div className="flex h-14 items-center justify-between border-b border-border px-6 bg-muted/40">
-            <DialogTitle className="text-sm font-semibold m-0">Manage Users</DialogTitle>
-            <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-            </DialogClose>
-          </div>
-          {/* Content */}
-          <div className="overflow-auto max-h-[calc(100vh-180px)] p-6">
-            <div className="space-y-3">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => {
-                  return (
-                    <div
-                      key={assignee.userId}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
-                          <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                            {assignee.user.name ? assignee.user.name[0].toUpperCase() : ''}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-medium">{assignee.user.name || 'Unknown'}</span>
-                      </div>
-                      {task.ownerId === user.id ? (
-                        <fetcher.Form method="post">
-                          <input type="hidden" name="intent" value="removeUser" />
-                          <input type="hidden" name="userId" value={assignee.userId} />
-                          <Button type="submit" variant="ghost" size="sm" className="h-7 w-7 text-xs">
-                            ×
-                          </Button>
-                        </fetcher.Form>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">No users assigned</p>
-              )}
-
-              {/* Add User Section */}
-              {task.ownerId === user.id && availableUsers.length > 0 && (
-                <>
-                  <Separator className="my-4" />
-                  <div>
-                    <h3 className="mb-3 text-sm font-medium">Add User</h3>
-                    <div className="space-y-2">
-                      {availableUsers.map((availableUser) => (
-                        <fetcher.Form
-                          key={availableUser.id}
-                          method="post"
-                          className="flex items-center justify-between"
-                        >
-                          <div className="flex items-center gap-2">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={availableUser.profilePictureUrl || ''} alt="avatar" />
-                              <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                                {availableUser.name ? availableUser.name[0].toUpperCase() : 'U'}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span className="text-sm font-medium">{availableUser.name || 'Unknown'}</span>
-                          </div>
-                          <input type="hidden" name="intent" value="addUser" />
-                          <input type="hidden" name="userId" value={availableUser.id} />
-                          <Button type="submit" variant="outline" size="sm" className="h-7 text-xs">
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </fetcher.Form>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

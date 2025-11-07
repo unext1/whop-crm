@@ -248,7 +248,7 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                         <Bell className="h-4 w-4" />
                         Subscription & Billing
                       </Label>
-                      <Card className="p-4 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+                      <Card className="p-4 bg-linear-to-r from-primary/5 to-primary/10 border-primary/20">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="text-sm font-medium capitalize">{organization.plan || 'Free'} Plan</div>
@@ -433,21 +433,6 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                           </p>
                         </div>
                       </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium mb-3">Security</Label>
-                      <Card className="p-4 bg-muted/30">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-medium">Password</div>
-                            <div className="text-xs text-muted-foreground">Last updated recently</div>
-                          </div>
-                          <Button variant="outline" size="sm">
-                            Change Password
-                          </Button>
-                        </div>
-                      </Card>
                     </div>
                   </div>
                 </div>

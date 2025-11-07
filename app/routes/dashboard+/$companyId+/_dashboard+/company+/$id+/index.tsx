@@ -1,14 +1,15 @@
 import { and, eq, or } from 'drizzle-orm';
 import {
+  ActivityIcon,
   Building2,
   Calendar,
   CheckCircle2,
   CheckSquare,
   Circle,
-  Clock,
   Eye,
   FileText,
   Globe,
+  LayoutDashboardIcon,
   Linkedin,
   Mail,
   MapPin,
@@ -17,7 +18,6 @@ import {
   Paperclip,
   Phone,
   Plus,
-  Trash2,
   Twitter,
   Users,
   X,
@@ -28,19 +28,9 @@ import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '~/components/ui/alert-dialog';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Card } from '~/components/ui/card';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
 import {
   DropdownMenu,
@@ -101,7 +91,6 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     },
     orderBy: boardTaskTable.order,
   });
-
   // Group tasks by column
   const tasksByColumn = tasks.reduce(
     (acc, task) => {
@@ -433,7 +422,8 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
 };
 
 const tabs = [
-  { id: 'timeline', label: 'Timeline', icon: Clock },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'team', label: 'Team', icon: Users },
@@ -448,7 +438,7 @@ function cn(...classes: (string | boolean | undefined)[]) {
 
 const CompanyPage = () => {
   const { company, allPeople, tasksByColumn, userId, organizationId } = useLoaderData<typeof loader>();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
   const submit = useSubmit();
@@ -484,39 +474,6 @@ const CompanyPage = () => {
         >
           <X className="h-4 w-4" />
         </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete Company</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to delete {company.name}? This action cannot be undone and will permanently remove
-                this company and all associated data.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => {
-                  const formData = new FormData();
-                  formData.append('intent', 'delete');
-                  submit(formData, { method: 'post' });
-                }}
-              >
-                Delete
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
       </div>
 
       <div className="overflow-auto p-4">
@@ -769,12 +726,83 @@ const CompanyPage = () => {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4">
-          {activeTab === 'timeline' && (
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                {company.createdAt
-                  ? new Date(company.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })
-                  : 'Recent'}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Key Stats */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <LayoutDashboardIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Overview</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Industry */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Industry</p>
+                        <p className="text-sm font-medium">{company.industry || 'Not specified'}</p>
+                      </div>
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+
+                  {/* Team Size */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Team</p>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-sm font-medium">{company.companiesPeople.length} members</span>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Tasks Count */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
+                        <p className="text-sm font-medium">{Object.values(tasksByColumn).flat().length} total</p>
+                      </div>
+                      <CheckSquare className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Recent Activity */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ActivityIcon className="h-4 w-4" />
+                    <h2 className="text-sm font-semibold">Recent Activity</h2>
+                  </div>
+                </div>
+                <ActivityTimeline
+                  activities={company.activities?.slice(0, 5) || []}
+                  fallbackCreatedAt={company.createdAt}
+                  fallbackUpdatedAt={company.updatedAt}
+                  fallbackName={company.name}
+                  fallbackType="Company"
+                />
+
+                {(!company.activities || company.activities.length === 0) && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                    <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                    <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <ActivityIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">All Activity</h2>
+                </div>
               </div>
               <ActivityTimeline
                 activities={company.activities}
@@ -783,6 +811,13 @@ const CompanyPage = () => {
                 fallbackName={company.name}
                 fallbackType="Company"
               />
+
+              {(!company.activities || company.activities.length === 0) && (
+                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                </div>
+              )}
             </div>
           )}
           {activeTab === 'tasks' && (

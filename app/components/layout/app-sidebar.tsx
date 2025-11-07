@@ -160,7 +160,7 @@ export function AppSidebar({
         <NavUser
           user={{
             name: user.name ?? 'Anonymous',
-            email: user.username ?? 'Anonymous',
+            email: user.lastName ?? 'Anonymous',
             avatar:
               user.profilePictureUrl ??
               'https://static-00.iconduck.com/assets.00/avatar-default-symbolic-icon-479x512-n8sg74wg.png',

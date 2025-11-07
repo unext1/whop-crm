@@ -46,7 +46,7 @@ export function EditableText({
   const buttonRef = useRef<HTMLButtonElement>(null);
 
   if (fetcher.formData?.has(fieldName)) {
-    value = String(fetcher.formData.get('name'));
+    value = String(fetcher.formData.get(fieldName));
   }
 
   return edit ? (
@@ -69,8 +69,8 @@ export function EditableText({
         type="text"
         className={cn(
           size === 'sm' && 'w-full h-8 text-xs font-semibold',
-          size === 'md' && 'w-full h-8 text-xs font-semibold',
-          size === 'lg' && 'w-full h-12 text-sm font-semibold',
+          size === 'md' && 'w-full h-8 text-xs md:text-xs font-semibold',
+          size === 'lg' && 'w-full h-12 text-base md:text-xl font-semibold px-0 md:px-0',
           size === undefined && 'w-full h-8 md:text-xs text-xs font-semibold',
         )}
         aria-label={inputLabel}
@@ -100,7 +100,7 @@ export function EditableText({
       className={cn(
         size === 'sm' && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
         size === 'md' && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
-        size === 'lg' && 'text-xl justify-start h-12 w-full px-[13px] font-semibold ',
+        size === 'lg' && 'text-base md:text-xl justify-start h-12 w-full px-0 md:px-0 font-semibold ',
         size === undefined && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
         'hover:bg-muted',
       )}

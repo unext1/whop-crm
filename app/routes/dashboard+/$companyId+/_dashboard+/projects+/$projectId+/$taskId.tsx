@@ -1,6 +1,6 @@
 import { parseWithZod } from '@conform-to/zod';
 import { and, eq } from 'drizzle-orm';
-import { CheckSquare, Clock, Edit, FileText, Menu, Paperclip, Plus, X } from 'lucide-react';
+import { ActivityIcon, CheckSquare, Edit, FileText, LayoutDashboardIcon, Menu, Paperclip, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
 import { z } from 'zod';
@@ -253,7 +253,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 }
 
 const tabs = [
-  { id: 'timeline', label: 'Timeline', icon: Clock },
+  { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
+  { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: FileText },
   { id: 'tasks', label: 'Sub-tasks', icon: CheckSquare },
   { id: 'files', label: 'Files', icon: Paperclip },
@@ -263,7 +264,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
   const { task, user, projectId, companyId } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [manageUsersOpen, setManageUsersOpen] = useState(false);
 
@@ -516,10 +517,119 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
         {/* Content */}
         <div className="flex-1 overflow-auto p-4">
-          {activeTab === 'timeline' && (
-            <div className="space-y-3">
-              <div className="text-xs font-medium text-muted-foreground">
-                {new Date(task.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'long' })}
+          {activeTab === 'overview' && (
+            <div className="space-y-6">
+              {/* Key Stats */}
+              <div>
+                <div className="flex items-center gap-2 mb-4">
+                  <LayoutDashboardIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Overview</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Status */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+                        {task.column && (
+                          <div className="flex items-center gap-2 text-sm">
+                            <div className="mt-0.5 h-2 w-2 rounded-full bg-primary shrink-0" />
+                            <p className="text-foreground">{task.column.name}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Assignees */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div>
+                      <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
+                      <div className="space-y-2">
+                        {task.assignees && task.assignees.length > 0 ? (
+                          task.assignees.map((assignee) => (
+                            <div key={assignee.userId} className="flex items-center gap-2 text-sm">
+                              <Avatar className="h-6 w-6 shrink-0">
+                                <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
+                                <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
+                                  {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 overflow-hidden">
+                                <p className="truncate text-foreground">{assignee.user.name || 'Unassigned'}</p>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-xs text-muted-foreground">No assignees</p>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Comments Count */}
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <div className="flex items-center justify-between text-xs">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
+                        <p className="text-sm font-medium">{task.comments?.length || 0} comments</p>
+                      </div>
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <div className="mb-3">
+                  <h2 className="text-sm font-semibold">Description</h2>
+                </div>
+                {task.content ? (
+                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                    <p className="text-sm text-foreground whitespace-pre-wrap">{task.content}</p>
+                  </Card>
+                ) : (
+                  <Card className="p-8 bg-muted/30 shadow-s border-0 shadow-sm text-center">
+                    <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">No description</p>
+                  </Card>
+                )}
+              </div>
+
+              {/* Recent Activity */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ActivityIcon className="h-4 w-4" />
+                    <h2 className="text-sm font-semibold">Recent Activity</h2>
+                  </div>
+                </div>
+                <ActivityTimeline
+                  activities={task.activities?.slice(0, 5) || []}
+                  fallbackCreatedAt={task.createdAt}
+                  fallbackUpdatedAt={task.updatedAt}
+                  fallbackName={task.name}
+                  fallbackType="Task"
+                />
+
+                {(!task.activities || task.activities.length === 0) && (
+                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                    <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                    <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'activity' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 mb-2">
+                  <ActivityIcon className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">All Activity</h2>
+                </div>
               </div>
               <ActivityTimeline
                 activities={task.activities}
@@ -528,6 +638,13 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 fallbackName={task.name}
                 fallbackType="Task"
               />
+
+              {(!task.activities || task.activities.length === 0) && (
+                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
+                </div>
+              )}
             </div>
           )}
 

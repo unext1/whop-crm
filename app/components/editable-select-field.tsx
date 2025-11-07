@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom';
 import { useFetcher } from 'react-router';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { cn } from '~/utils';
+import { Building2, User } from 'lucide-react';
 
 interface EditableSelectFieldProps {
   value: string | null | undefined;
@@ -24,7 +25,7 @@ export function EditableSelectField({
   className,
 }: EditableSelectFieldProps) {
   const fetcher = useFetcher();
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(true);
   const displayRef = useRef<HTMLButtonElement>(null);
 
   // Use optimistic value from formData if available (like EditableField)
@@ -48,7 +49,7 @@ export function EditableSelectField({
         className="flex-1"
         onSubmit={() => {
           flushSync(() => {
-            setIsEditing(false);
+            setIsEditing(true);
           });
           displayRef.current?.focus();
         }}
@@ -71,7 +72,7 @@ export function EditableSelectField({
               fetcher.submit(formData, { method: 'post' });
             }
             flushSync(() => {
-              setIsEditing(false);
+              setIsEditing(true);
             });
           }}
         >
@@ -81,7 +82,12 @@ export function EditableSelectField({
           <SelectContent>
             {options.map((option) => (
               <SelectItem key={option.value} value={option.value}>
-                {option.label}
+                {option.value.includes('company') ? (
+                  <Building2 className="h-3 w-3 text-muted-foreground" />
+                ) : option.value.includes('person') ? (
+                  <User className="h-3 w-3 text-muted-foreground" />
+                ) : null}
+                <span className="text-xs">{option.label}</span>
               </SelectItem>
             ))}
           </SelectContent>

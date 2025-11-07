@@ -75,7 +75,7 @@ export function ComboboxMultiple({
                           <AvatarFallback className="text-[10px]">{option.name[0]}</AvatarFallback>
                         </Avatar>
                       )}
-                      <span className="truncate max-w-20">{option.name}</span>
+                      <span className="truncate max-w-20 text-xs">{option.name}</span>
                       <button
                         type="button"
                         onClick={(e) => {
@@ -101,7 +101,7 @@ export function ComboboxMultiple({
         </PopoverTrigger>
         <PopoverContent className="w-(--radix-popover-trigger-width) p-0" align="start">
           <Command className="bg-muted/30 backdrop-blur-sm shadow-s">
-            <CommandInput placeholder={searchPlaceholder} />
+            <CommandInput placeholder={searchPlaceholder} className="text-xs" />
             <CommandList>
               <ScrollArea className="max-h-[300px] [&>div]:block!">
                 <CommandEmpty>{emptyText}</CommandEmpty>
@@ -116,7 +116,7 @@ export function ComboboxMultiple({
                           </Avatar>
                         )}
                         <span className="flex flex-col">
-                          <span className="font-medium">{option.name}</span>
+                          <span className="font-medium text-xs">{option.name}</span>
                           {option.email && <span className="text-muted-foreground text-sm">{option.email}</span>}
                         </span>
                       </span>
