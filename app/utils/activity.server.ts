@@ -1,5 +1,6 @@
+import { eq } from 'drizzle-orm';
 import { db } from '~/db';
-import { activitiesTable } from '~/db/schema';
+import { activitiesTable, userTable } from '~/db/schema';
 
 type ActivityType =
   | 'created'
@@ -50,10 +51,21 @@ export async function logActivity({
   tx?: Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 }) {
   try {
+    let validUserId = userId;
+    if (userId) {
+      const dbToUse = tx || db;
+      const userExists = await dbToUse.query.userTable.findFirst({
+        where: eq(userTable.id, userId),
+      });
+      if (!userExists) {
+        validUserId = null;
+      }
+    }
+
     const values = {
       entityType,
       entityId,
-      userId,
+      userId: validUserId,
       activityType,
       description: description || generateActivityDescription(activityType, metadata, relatedEntityType),
       metadata: metadata ? JSON.stringify(metadata) : null,

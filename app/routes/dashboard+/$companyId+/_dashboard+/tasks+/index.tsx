@@ -31,7 +31,7 @@ export interface RenderedItem {
 
 const ensureTasksBoard = async (companyId: string) => {
   const existingBoard = await db.query.boardTable.findFirst({
-    where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'tasks')),
+    where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'tasks'), eq(boardTable.name, 'Tasks')),
   });
 
   if (existingBoard) {

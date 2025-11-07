@@ -247,7 +247,7 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     // Helper to ensure tasks board exists
     const ensureTasksBoard = async (orgId: string) => {
       const existingBoard = await db.query.boardTable.findFirst({
-        where: and(eq(boardTable.companyId, orgId), eq(boardTable.type, 'tasks')),
+        where: and(eq(boardTable.companyId, orgId), eq(boardTable.type, 'tasks'), eq(boardTable.name, 'Tasks')),
       });
 
       if (existingBoard) {

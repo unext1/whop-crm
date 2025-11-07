@@ -15,12 +15,12 @@ import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
-import { logCompanyActivity } from '~/utils/activity.server';
 import { db } from '~/db';
 import { companiesTable, type CompanyType } from '~/db/schema';
 import { useDataTable } from '~/hooks/use-data-table';
 import { putToast } from '~/services/cookie.server';
-import { verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { requireUser } from '~/services/whop.server';
+import { logCompanyActivity } from '~/utils/activity.server';
 import {
   buildOrderByClause,
   buildWhereClause,
@@ -168,8 +168,8 @@ const columns: ColumnDef<CompanyType>[] = [
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId } = params;
-  const { userId } = await verifyWhopToken(request);
-  const { access_level } = await whopSdk.users.checkAccess(companyId, { id: userId });
+
+  const { user } = await requireUser(request, companyId);
 
   // Parse data table state from URL
   const url = new URL(request.url);
@@ -212,17 +212,18 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const totalCount = Number(count);
 
   return {
-    userId,
-    access_level,
     companyId,
     companies,
     totalCount,
     pageCount: Math.ceil(totalCount / perPage),
+    user,
   };
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
-  const { userId } = await verifyWhopToken(request);
+  const { companyId: organizationId } = params;
+  const { user } = await requireUser(request, organizationId);
+  const userId = user.id;
   const formData = await request.formData();
   const intent = formData.get('intent');
 
@@ -259,11 +260,10 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           phone,
           linkedin,
           twitter,
-          organizationId: params.companyId,
+          organizationId: organizationId,
         })
         .returning();
 
-      // Log activity for company creation
       await logCompanyActivity({
         companyId: newCompany.id,
         userId,
@@ -298,14 +298,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 };
 
 const DashboardPage = () => {
-  const {
-    userId: _userId,
-    access_level: _access_level,
-    companyId: _companyId,
-    companies,
-    totalCount,
-    pageCount,
-  } = useLoaderData<typeof loader>();
+  const { companyId: _companyId, companies, totalCount, pageCount } = useLoaderData<typeof loader>();
 
   const { table } = useDataTable({
     data: companies,

@@ -91,6 +91,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     },
     orderBy: boardTaskTable.order,
   });
+
   // Group tasks by column
   const tasksByColumn = tasks.reduce(
     (acc, task) => {
@@ -254,7 +255,7 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
           name: 'Tasks',
           type: 'tasks',
           companyId: orgId,
-          ownerId: null,
+          ownerId: userId,
         })
         .returning();
 
@@ -303,7 +304,7 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
             boardId: tasksBoard.id,
             content,
             type: 'tasks',
-            status: 'open',
+            status: 'Todo',
             companyId: relatedCompanyId || companyId,
           })
           .returning();
