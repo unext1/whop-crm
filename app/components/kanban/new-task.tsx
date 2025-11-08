@@ -40,7 +40,7 @@ export function NewTask({
         <Button
           variant="secondary"
           size="sm"
-          className="h-8 text-xs w-full bg-transparent hover:bg-muted/50 border-dashed border border-border"
+          className="h-8 cursor-pointer text-xs w-full bg-transparent hover:bg-muted/50 border-dashed border border-border"
         >
           + New Task
         </Button>

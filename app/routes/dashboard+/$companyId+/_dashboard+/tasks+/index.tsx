@@ -119,55 +119,6 @@ export async function action({ request, params }: Route.ActionArgs) {
           description: `Task "${name}" was created`,
           tx,
         });
-
-        // Log company/person associations if any
-        if (relatedCompanyId) {
-          await logTaskActivity({
-            taskId: task[0].id,
-            userId: user.id,
-            activityType: 'company_linked',
-            relatedEntityId: relatedCompanyId,
-            relatedEntityType: 'company',
-            tx,
-          });
-        }
-
-        if (relatedPersonId) {
-          await logTaskActivity({
-            taskId: task[0].id,
-            userId: user.id,
-            activityType: 'person_linked',
-            relatedEntityId: relatedPersonId,
-            relatedEntityType: 'person',
-            tx,
-          });
-        }
-
-        if (dueDate) {
-          await logTaskActivity({
-            taskId: task[0].id,
-            userId: user.id,
-            activityType: 'due_date_changed',
-            metadata: {
-              field: 'dueDate',
-              newValue: dueDate,
-            },
-            tx,
-          });
-        }
-
-        if (priority) {
-          await logTaskActivity({
-            taskId: task[0].id,
-            userId: user.id,
-            activityType: 'priority_changed',
-            metadata: {
-              field: 'priority',
-              newValue: priority,
-            },
-            tx,
-          });
-        }
       });
       return {};
     }
@@ -175,6 +126,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       const taskId = String(formData.get('taskId') || 0);
       return db.delete(boardTaskTable).where(eq(boardTaskTable.id, taskId));
     }
+    
     case 'moveTask': {
       const order = Number(formData.get('order') || 0);
       const columnId = String(formData.get('columnId') || 0);

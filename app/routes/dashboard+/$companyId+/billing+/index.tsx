@@ -26,14 +26,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   // Fetch the organization's membership to the app (if it exists)
-  let appMembership = null;
-  if (organization?.membershipId) {
-    try {
-      appMembership = await whopSdk.memberships.retrieve(organization.membershipId);
-    } catch {
-      // Failed to fetch app membership
-    }
-  }
+  const appMembership = await whopSdk.memberships.retrieve(organization?.membershipId || '');
 
   const monthlyCheckoutSession = await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId);
   const annualCheckoutSession = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);

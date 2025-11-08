@@ -24,23 +24,23 @@ export function DataTableViewOptions<TData>({ table, ...props }: DataTableViewOp
           role="combobox"
           variant="outline"
           size="sm"
-          className="ml-auto hidden h-8 font-normal lg:flex"
+          className="ml-auto hidden h-8 font-normal lg:flex shadow-s shadow-sm border-0"
         >
           <Settings2 className="text-muted-foreground" />
-          View
+          <span className="text-xs">View</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-44 p-0" {...props}>
-        <Command>
+      <PopoverContent className="w-44 p-0 " {...props}>
+        <Command className="bg-muted/30 backdrop-blur-md border-none shadow-lg text-xs">
           <CommandInput placeholder="Search columns..." />
           <CommandList>
             <CommandEmpty>No columns found.</CommandEmpty>
             <CommandGroup>
               {columns.map((column) => (
                 <CommandItem key={column.id} onSelect={() => column.toggleVisibility(!column.getIsVisible())}>
-                  <span className="truncate">{column.columnDef.meta?.label ?? column.id}</span>
+                  <span className="truncate text-xs">{column.columnDef.meta?.label ?? column.id}</span>
                   <Check
-                    className={cn('ml-auto size-4 shrink-0', column.getIsVisible() ? 'opacity-100' : 'opacity-0')}
+                    className={cn('ml-auto size-3 shrink-0', column.getIsVisible() ? 'opacity-100' : 'opacity-0')}
                   />
                 </CommandItem>
               ))}

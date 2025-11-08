@@ -1,5 +1,6 @@
-import { ChevronRight } from 'lucide-react';
+import { CheckCircle2, ChevronRight, FileText, Mail, Phone, Users } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { Badge } from '../ui/badge';
 
 interface ActivityItem {
   id: string;
@@ -23,6 +24,58 @@ interface ActivityTimelineProps {
   onViewAll?: () => void;
   showViewAll?: boolean;
 }
+
+interface ActivityType {
+  value: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  color: string;
+  bgColor: string;
+  borderColor: string;
+}
+
+const activityTypes: ActivityType[] = [
+  {
+    value: 'meeting',
+    label: 'Meeting',
+    icon: Users,
+    color: 'text-purple-700',
+    bgColor: 'bg-purple-50',
+    borderColor: 'border-purple-300',
+  },
+  {
+    value: 'email',
+    label: 'Email',
+    icon: Mail,
+    color: 'text-blue-700',
+    bgColor: 'bg-blue-50',
+    borderColor: 'border-blue-300',
+  },
+  {
+    value: 'call',
+    label: 'Call',
+    icon: Phone,
+    color: 'text-green-700',
+    bgColor: 'bg-green-50',
+    borderColor: 'border-green-300',
+  },
+  {
+    value: 'note',
+    label: 'Note',
+    icon: FileText,
+    color: 'text-amber-700',
+    bgColor: 'bg-amber-50',
+    borderColor: 'border-amber-300',
+  },
+  {
+    value: 'task',
+    label: 'Task',
+    icon: CheckCircle2,
+    color: 'text-emerald-700',
+    bgColor: 'bg-emerald-50',
+    borderColor: 'border-emerald-300',
+  },
+];
 
 function formatRelativeTime(date: string): string {
   // Ensure proper date parsing - if date doesn't have timezone info, treat as UTC
@@ -174,20 +227,6 @@ export function ActivityTimeline({
   // Combine activities with creation date if available
   const allItems: Array<{ id: string; createdAt: string; type: 'activity' | 'creation'; activity?: ActivityItem }> = [];
 
-  // Add creation date as the first item if available and it's not already in activities
-  if (fallbackCreatedAt) {
-    const hasCreationActivity = activities?.some(
-      (a) => a.description?.toLowerCase().includes('created') || a.description?.toLowerCase().includes('was created'),
-    );
-    if (!hasCreationActivity) {
-      allItems.push({
-        id: 'creation',
-        createdAt: fallbackCreatedAt,
-        type: 'creation',
-      });
-    }
-  }
-
   // Add all activities
   if (activities && activities.length > 0) {
     activities.forEach((activity) => {
@@ -200,92 +239,184 @@ export function ActivityTimeline({
     });
   }
 
-  // Sort by date (newest first)
-  allItems.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  // Add creation date as the last item only if there are no activities at all
+  if (allItems.length === 0 && fallbackCreatedAt) {
+    allItems.push({
+      id: 'creation',
+      createdAt: fallbackCreatedAt,
+      type: 'creation',
+    });
+  }
+
+  // Sort by date (newest first) - handle dates with/without timezone info like formatRelativeTime
+  allItems.sort((a, b) => {
+    const parseDate = (date: string) => {
+      // Check if date has timezone info (Z for UTC, or +/-HH:MM pattern)
+      const hasTimezone = date.includes('Z') || /[+-]\d{2}:\d{2}$/.test(date);
+      if (hasTimezone) {
+        // Date has timezone info, parse normally
+        return new Date(date);
+      }
+      // Date doesn't have timezone info, assume UTC and append 'Z'
+      return new Date(date.endsWith('Z') ? date : `${date}Z`);
+    };
+
+    const dateA = parseDate(a.createdAt);
+    const dateB = parseDate(b.createdAt);
+    return dateB.getTime() - dateA.getTime();
+  });
 
   // If we have items (activities or creation), show them
   if (allItems.length > 0) {
     return (
-      <div className="relative">
-        <div className="space-y-3">
-          {allItems.map((item, index) => {
-            const isLast = index === allItems.length - 1;
-
-            if (item.type === 'creation') {
-              const initial = (fallbackName || fallbackType).charAt(0).toUpperCase();
-              const entityType = fallbackType.toLowerCase();
-
-              return (
-                <div key={item.id} className="relative flex items-center gap-3 text-sm">
-                  {/* Vertical line */}
-                  {!isLast && <div className="absolute left-[11px] top-6 bottom-[-12px] w-px bg-border" />}
-
-                  {/* Avatar */}
-                  <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
-                    {initial}
-                  </div>
-
-                  {/* Content */}
-                  <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-                    <span className="text-sm text-foreground">
-                      <span className="font-medium">You</span>{' '}
-                      <span className="text-muted-foreground">created {entityType}</span>
-                      {fallbackName && (
-                        <>
-                          {' '}
-                          <span className="font-medium">"{fallbackName}"</span>
-                        </>
-                      )}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(item.createdAt)}</span>
-                  </div>
-                </div>
-              );
-            }
-
-            const activity = item.activity;
-            if (!activity) return null;
-            const metadata = activity.metadata ? JSON.parse(activity.metadata) : null;
-            const userName = activity.user?.name || 'Unknown User';
-            const userInitial = userName.charAt(0).toUpperCase();
-
-            // Format the activity description
-            const formattedDescription = activity.description
-              ? formatActivityDescription(activity.description, userName, metadata)
-              : `${userName} performed an action`;
-
-            // Parse the formatted description to extract user name and action parts for styling
-            const parts = formattedDescription.split(/\s+(.+)/);
-            const displayUser = parts[0] || userName;
-            const action = parts[1] || 'performed an action';
+      <div className="relative space-y-0">
+        <div className="absolute left-4 top-6 bottom-6 w-px bg-border" />
+        {allItems.map((item) => {
+          if (item.type === 'creation') {
+            const initial = (fallbackName || fallbackType).charAt(0).toUpperCase();
+            const entityType = fallbackType.toLowerCase();
 
             return (
-              <div key={activity.id} className="relative flex items-center gap-3 text-sm">
-                {/* Vertical line */}
-                {!isLast && <div className="absolute left-[11px] top-6 bottom-[-12px] w-px bg-border" />}
-
-                {/* Avatar */}
-                <Avatar className="relative z-10 h-6 w-6 shrink-0">
-                  <AvatarImage src={activity.user?.profilePictureUrl || ''} alt={userName} />
-                  <AvatarFallback className="bg-primary text-[10px] font-medium text-primary-foreground">
-                    {userInitial}
-                  </AvatarFallback>
-                </Avatar>
-
-                {/* Content */}
-                <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-                  <span className="text-sm text-foreground min-w-0">
-                    <span className="font-medium">{displayUser}</span>{' '}
-                    <span className="text-muted-foreground">{action}</span>
-                  </span>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {formatRelativeTime(activity.createdAt)}
-                  </span>
+              <div key={item.id} className="relative">
+                <div className="flex gap-4 py-4">
+                  <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
+                    {initial}
+                  </div>
+                  <div className="flex flex-1 items-center justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm">
+                          <span className="font-semibold text-foreground">You</span>
+                          <span className="text-muted-foreground"> created {entityType}</span>
+                          {fallbackName && (
+                            <>
+                              <span className="text-muted-foreground"> </span>
+                              <span className="font-semibold text-foreground">"{fallbackName}"</span>
+                            </>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</p>
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
+          }
+
+          const activity = item.activity;
+          if (!activity) return null;
+          const metadata = activity.metadata ? JSON.parse(activity.metadata) : null;
+          const userName = activity.user?.name || 'Unknown User';
+
+          // Check if this is a manually logged activity (has metadata with name, description, type)
+          const isManualActivity = metadata && metadata.name && metadata.type;
+          const activityType = isManualActivity
+            ? activityTypes.find((type) => type.value === (metadata as { type: string }).type)
+            : null;
+
+          if (isManualActivity && activityType) {
+            // Render manual activity in slick timeline format
+            const Icon = activityType.icon;
+
+            return (
+              <div key={activity.id} className="relative">
+                <div className="flex gap-4 py-4">
+                  <div
+                    className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${activityType.bgColor} text-sm font-semibold ${activityType.color} ring-4 ring-background`}
+                  >
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <div className="flex flex-1 items-center justify-between gap-4">
+                    <div className="flex-1 space-y-2">
+                      {/* Main Activity */}
+                      <div className="flex items-baseline gap-2">
+                        <p className="text-sm">
+                          <span className="font-semibold text-foreground">{userName}</span>
+                          <span className="text-muted-foreground"> logged {activityType.label.toLowerCase()}</span>
+                          <span className="text-muted-foreground"> </span>
+                          <span className="font-semibold text-foreground">"{metadata.name}"</span>
+                        </p>
+                      </div>
+
+                      {/* Activity Details */}
+                      <div className="mt-3 rounded-xl duration-300 shadow-s bg-linear-to-bl from-muted to-muted/30 p-4 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <div className="h-full w-1 bg-primary rounded" />
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-foreground">{metadata.name}</p>
+                                <p className="mt-1 text-xs text-muted-foreground">
+                                  {formatRelativeTime(activity.createdAt)}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge
+                                  variant="secondary"
+                                  className={`${activityType.bgColor} ${activityType.color} ${activityType.borderColor} border`}
+                                >
+                                  {activityType.label}
+                                </Badge>
+                              </div>
+                            </div>
+                            {metadata.description && (
+                              <p className="text-sm text-muted-foreground">{metadata.description}</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          // Render system activity in slick timeline format
+          const userInitial = userName.charAt(0).toUpperCase();
+
+          // Format the activity description
+          const formattedDescription = activity.description
+            ? formatActivityDescription(activity.description, userName, metadata)
+            : `${userName} performed an action`;
+
+          // Parse the formatted description to extract user name and action parts for styling
+          const parts = formattedDescription.split(/\s+(.+)/);
+          const displayUser = parts[0] || userName;
+          const action = parts[1] || 'performed an action';
+
+          return (
+            <div key={activity.id} className="relative">
+              <div className="flex gap-4 py-4">
+                <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
+                  {activity.user?.profilePictureUrl ? (
+                    <Avatar className="h-8 w-8">
+                      <AvatarImage src={activity.user.profilePictureUrl} alt={userName} />
+                      <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground">
+                        {userInitial}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    userInitial
+                  )}
+                </div>
+                <div className="flex flex-1 items-center justify-between gap-4">
+                  <div className="flex-1 space-y-2">
+                    {/* Main Activity */}
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-sm">
+                        <span className="font-semibold text-foreground">{displayUser}</span>
+                        <span className="text-muted-foreground"> {action}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(activity.createdAt)}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
 
         {/* View all link */}
         {showViewAll && onViewAll && (
@@ -322,37 +453,35 @@ export function ActivityTimeline({
   }
 
   return (
-    <div className="relative">
-      <div className="space-y-3">
-        {items.map((item, index) => {
-          const isLast = index === items.length - 1;
-          const initial = (fallbackName || fallbackType).charAt(0).toUpperCase();
+    <div className="relative space-y-0">
+      <div className="absolute left-4 top-6 bottom-0 w-px bg-border" />
+      {items.map((item) => {
+        const initial = (fallbackName || fallbackType).charAt(0).toUpperCase();
 
-          return (
-            <div key={item.id} className="relative flex items-center gap-3 text-sm">
-              {/* Vertical line */}
-              {!isLast && <div className="absolute left-[11px] top-6 bottom-[-12px] w-px bg-border" />}
-
-              {/* Avatar */}
-              <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-medium text-primary-foreground">
+        return (
+          <div key={item.id} className="relative">
+            <div className="flex gap-4 py-4">
+              <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
                 {initial}
               </div>
-
-              {/* Content */}
-              <div className="flex flex-1 items-center justify-between gap-2 min-w-0">
-                <span className="text-sm text-foreground">
-                  <span className="font-medium">{fallbackName || fallbackType}</span>{' '}
-                  <span className="text-muted-foreground">
-                    {item.type === 'creation' ? 'was created by' : 'was updated'}
-                  </span>
-                  {item.type === 'creation' && <span className="font-medium"> You</span>}
-                </span>
-                <span className="text-xs text-muted-foreground shrink-0">{formatRelativeTime(item.createdAt)}</span>
+              <div className="flex flex-1 items-center justify-between gap-4">
+                <div className="flex-1 space-y-2">
+                  <div className="flex items-baseline gap-2">
+                    <p className="text-sm">
+                      <span className="font-semibold text-foreground">{fallbackName || fallbackType}</span>
+                      <span className="text-muted-foreground">
+                        {item.type === 'creation' ? ' was created by' : ' was updated'}
+                      </span>
+                      {item.type === 'creation' && <span className="font-semibold text-foreground"> You</span>}
+                    </p>
+                  </div>
+                </div>
+                <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</p>
               </div>
             </div>
-          );
-        })}
-      </div>
+          </div>
+        );
+      })}
 
       {/* View all link */}
       {showViewAll && onViewAll && (

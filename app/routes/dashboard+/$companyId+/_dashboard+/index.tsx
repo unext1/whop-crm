@@ -1,6 +1,15 @@
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
-import { ArrowDown, ArrowUp, Building2, CheckSquare, LayoutDashboardIcon, TrendingUp, User } from 'lucide-react';
-import { href, Link, useLoaderData } from 'react-router';
+import {
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  CheckSquare,
+  DollarSign,
+  LayoutDashboardIcon,
+  TrendingUp,
+  User,
+} from 'lucide-react';
+import { href, Link } from 'react-router';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -291,6 +300,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
     return {
       userId,
+      user,
       premiumAccess,
       companyId,
       stats: {
@@ -343,10 +353,9 @@ const chartConfig = {
   },
 } satisfies ChartConfig;
 
-const DashboardPage = () => {
-  const { stats, chartData, recentPeople, recentCompanies, recentTasks, recentDeals, companyId } =
-    useLoaderData<typeof loader>();
-
+const DashboardPage = ({
+  loaderData: { stats, chartData, recentPeople, recentCompanies, recentTasks, recentDeals, companyId, user },
+}: Route.ComponentProps) => {
   const statsCards = [
     {
       title: 'People',
@@ -395,8 +404,12 @@ const DashboardPage = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto">
-        <div className="p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4">
+        <div className="mb-6">
+          <h2 className="text-3xl font-semibold">Welcome back, {user.name} 👋</h2>
+          <p className="text-base text-muted-foreground">Here's a quick overview of your activity this month.</p>
+        </div>
+        <div className=" space-y-4">
           {/* Statistics Cards - 4 Columns */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4">
             {statsCards.map((stat) => {
@@ -405,7 +418,7 @@ const DashboardPage = () => {
               return (
                 <Card
                   key={stat.title}
-                  className="bg-muted/30 shadow-s col-span-2 border shadow-sm transition-all duration-300 transform hover:scale-105"
+                  className="bg-linear-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
                 >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -413,15 +426,17 @@ const DashboardPage = () => {
                         <Icon className="h-4 w-4 text-primary" />
                       </div>
                       {hasGrowth && (
-                        <Badge variant={stat.positive ? 'default' : 'destructive'} className="text-xs gap-1">
+                        <Badge variant={stat.positive ? 'default' : 'destructive'} className="text-xs gap-1 shadow-s">
                           {stat.positive ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />}
                           {Math.abs(stat.growth)}%
                         </Badge>
                       )}
                     </div>
                     <div className="space-y-1">
-                      <p className="text-xl font-bold tracking-tight">{formatNumber(stat.value)}</p>
-                      <p className="text-sm text-muted-foreground">{stat.title}</p>
+                      <div className="text-xl flex items-center gap-2 font-bold tracking-tight">
+                        {formatNumber(stat.value)}{' '}
+                        <span className="text-sm font-normal text-muted-foreground">{stat.title}</span>
+                      </div>
                       <p className="text-xs text-muted-foreground">
                         +
                         {formatNumber(
@@ -445,7 +460,7 @@ const DashboardPage = () => {
           {/* Chart and Recent Activity - 2 Columns */}
           <div className="grid grid-cols-1 lg:grid-cols-7 gap-4">
             {/* Growth Chart */}
-            <Card className="bg-muted/30 shadow-s border shadow-sm col-span-4">
+            <Card className="bg-muted/30 shadow-sm col-span-4">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <div>
@@ -532,12 +547,12 @@ const DashboardPage = () => {
             </Card>
 
             {/* Recent Activity */}
-            <Card className="bg-muted/30 shadow-s border shadow-sm col-span-3">
+            <Card className="bg-muted/30 border shadow-sm col-span-3">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
                   <Link to={href('/dashboard/:companyId/tasks', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow">
                       View all
                     </Button>
                   </Link>
@@ -546,40 +561,29 @@ const DashboardPage = () => {
               <CardContent className="space-y-3">
                 {[...recentTasks, ...recentDeals].slice(0, 4).map((item) => {
                   const isDeal = 'type' in item && item.type === 'pipeline';
-                  const itemWithRelations = item as typeof item & {
-                    company?: { id: string; name: string };
-                    person?: { id: string; name: string };
-                  };
+
                   return (
                     <div
                       key={item.id}
-                      className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors"
+                      className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                     >
                       <div
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
-                          isDeal ? 'bg-orange-500/10' : 'bg-blue-500/10'
+                          isDeal ? 'bg-primary/10' : 'bg-primary/10'
                         }`}
                       >
                         {isDeal ? (
-                          <TrendingUp className={`h-3.5 w-3.5 ${isDeal ? 'text-orange-600' : 'text-blue-600'}`} />
+                          <DollarSign className={`h-3.5 w-3.5 ${isDeal ? 'text-primary' : 'text-primary'}`} />
                         ) : (
-                          <CheckSquare className={`h-3.5 w-3.5 ${isDeal ? 'text-orange-600' : 'text-blue-600'}`} />
+                          <CheckSquare className={`h-3.5 w-3.5 ${isDeal ? 'text-primary' : 'text-primary'}`} />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           <p className="text-sm font-medium truncate">{item.name}</p>
-                          <Badge variant="outline" className="text-xs px-1.5">
-                            {isDeal ? 'Deal' : 'Task'}
-                          </Badge>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {item.column && (
-                            <Badge variant="secondary" className="h-4 text-[10px] px-1.5">
-                              {item.column.name}
-                            </Badge>
-                          )}
-                          {itemWithRelations.company && <span>at {itemWithRelations.company.name}</span>}
+                          {item.column && <span>{item.column.name}</span>}
                         </div>
                       </div>
                     </div>
@@ -599,12 +603,12 @@ const DashboardPage = () => {
           {/* Recent Companies, People, and Deals - 3 Columns */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Recent Companies */}
-            <Card className="bg-muted/30 shadow-s border shadow-sm flex flex-col h-full">
+            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Companies</CardTitle>
                   <Link to={href('/dashboard/:companyId/company', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow">
                       View all
                     </Button>
                   </Link>
@@ -615,7 +619,7 @@ const DashboardPage = () => {
                   <Link
                     key={company.id}
                     to={href('/dashboard/:companyId/company/:id', { companyId, id: company.id })}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                    className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
                       {company.name?.charAt(0) || 'C'}
@@ -644,12 +648,12 @@ const DashboardPage = () => {
             </Card>
 
             {/* Recent People */}
-            <Card className="bg-muted/30 shadow-s border shadow-sm flex flex-col h-full">
+            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent People</CardTitle>
                   <Link to={href('/dashboard/:companyId/people', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow-sm">
                       View all
                     </Button>
                   </Link>
@@ -660,7 +664,7 @@ const DashboardPage = () => {
                   <Link
                     key={person.id}
                     to={href('/dashboard/:companyId/people/:id', { companyId, id: person.id })}
-                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                    className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
                       {person.name?.charAt(0) || 'P'}
@@ -669,7 +673,6 @@ const DashboardPage = () => {
                       <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
                         {person.name || 'Unnamed Person'}
                       </p>
-                      {person.jobTitle && <p className="text-xs text-muted-foreground truncate">{person.jobTitle}</p>}
                     </div>
                   </Link>
                 ))}
@@ -690,12 +693,12 @@ const DashboardPage = () => {
             </Card>
 
             {/* Recent Deals */}
-            <Card className="bg-muted/30 shadow-s border shadow-sm flex flex-col h-full">
+            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Deals</CardTitle>
                   <Link to={href('/dashboard/:companyId/tasks', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow-sm">
                       View all
                     </Button>
                   </Link>
@@ -703,15 +706,11 @@ const DashboardPage = () => {
               </CardHeader>
               <CardContent className="flex-1 space-y-3">
                 {recentDeals.slice(0, 4).map((deal) => {
-                  const dealWithRelations = deal as typeof deal & {
-                    company?: { id: string; name: string };
-                    person?: { id: string; name: string };
-                  };
                   return (
                     <Link
                       key={deal.id}
                       to={href('/dashboard/:companyId/tasks', { companyId })}
-                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors group"
+                      className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10">
                         <TrendingUp className="h-3.5 w-3.5 text-orange-600" />
@@ -720,18 +719,6 @@ const DashboardPage = () => {
                         <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
                           {deal.name}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
-                          {deal.column && (
-                            <Badge variant="secondary" className="h-4 text-[10px] px-1.5">
-                              {deal.column.name}
-                            </Badge>
-                          )}
-                          {dealWithRelations.company && (
-                            <span className="text-xs text-muted-foreground truncate">
-                              {dealWithRelations.company.name}
-                            </span>
-                          )}
-                        </div>
                       </div>
                     </Link>
                   );

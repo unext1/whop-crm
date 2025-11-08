@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/no-autofocus */
-import { Building2, Calendar, CheckSquare, User, X } from 'lucide-react';
+import { Building2, CableIcon, Calendar, CheckSquare, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { Form, useSubmit } from 'react-router';
 import { useRef } from 'react';
@@ -13,6 +13,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 import { cn } from '~/utils';
+import { Switch } from '../ui/switch';
 
 type Company = {
   id: string;
@@ -53,6 +54,7 @@ export function NewTaskTodo({
   const [selectedRelationType, setSelectedRelationType] = useState<'none' | 'company' | 'person'>('none');
   const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
   const [selectedPersonId, setSelectedPersonId] = useState<string>('');
+  const [createMore, setCreateMore] = useState(false);
 
   const formatDate = (date: Date | undefined) => {
     if (!date) return '';
@@ -65,13 +67,13 @@ export function NewTaskTodo({
         <Button
           variant="secondary"
           size="sm"
-          className="h-8 text-xs w-full bg-transparent hover:bg-muted/50 border-dashed border border-border"
+          className="h-8 cursor-pointer text-xs w-full bg-transparent hover:bg-muted/50 border-dashed border border-border"
         >
           + New Task
         </Button>
       </DialogTrigger>
       <DialogContent
-        className="sm:max-w-[625px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
+        className="sm:max-w-[625px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg shadow-s"
         showCloseButton={false}
       >
         {/* Header */}
@@ -151,7 +153,9 @@ export function NewTaskTodo({
               setSelectedRelationType('none');
               setSelectedCompanyId('');
               setSelectedPersonId('');
-              setOpen(false);
+              if (!createMore) {
+                setOpen(false);
+              }
               onAddCard();
               onComplete();
             }}
@@ -162,62 +166,45 @@ export function NewTaskTodo({
 
             {/* Main Details */}
             <div className="space-y-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">
-                  Task name <span className="text-muted-foreground">(required)</span>
-                </Label>
-                <Input
-                  autoFocus
-                  required
-                  ref={inputRef}
-                  name="name"
-                  placeholder="Enter task name..."
-                  className="h-10"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Description</Label>
-                <Textarea
-                  ref={textAreaRef}
-                  name="content"
-                  placeholder="Add task details..."
-                  rows={4}
-                  className="resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Configuration Section */}
-            <div className="space-y-4 border-t border-border pt-4">
-              <h3 className="text-sm font-semibold text-foreground">Configuration</h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Due Date</Label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          'h-10 w-full justify-start text-left font-normal',
-                          !dueDate && 'text-muted-foreground',
-                        )}
-                      >
-                        <Calendar className="mr-2 h-4 w-4" />
-                        {dueDate ? formatDate(dueDate) : <span>Pick a date</span>}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <CalendarComponent mode="single" selected={dueDate} onSelect={setDueDate} />
-                    </PopoverContent>
-                  </Popover>
+              <div className="grid grid-cols-1 sm:grid-cols-7 gap-4">
+                <div className="space-y-2 col-span-3">
+                  <Label className="text-sm font-medium">
+                    Task name <span className="text-muted-foreground">(required)</span>
+                  </Label>
+                  <Input autoFocus required ref={inputRef} name="name" placeholder="Enter task name..." />
                 </div>
-
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-2">
+                  <Label className="text-sm font-medium">Status</Label>
+                  <Select name="status" defaultValue={columnName}>
+                    <SelectTrigger className="h-10 w-full">
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Todo">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-gray-400" />
+                          <span>Todo</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="In Progress">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-blue-500" />
+                          <span>In Progress</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="Done">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full bg-green-500" />
+                          <span>Done</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2 col-span-2">
                   <Label className="text-sm font-medium">Priority</Label>
                   <Select name="priority">
-                    <SelectTrigger className="h-10">
+                    <SelectTrigger className="h-10 w-full">
                       <SelectValue placeholder="Select priority..." />
                     </SelectTrigger>
                     <SelectContent>
@@ -245,32 +232,40 @@ export function NewTaskTodo({
               </div>
 
               <div className="space-y-2">
-                <Label className="text-sm font-medium">Status</Label>
-                <Select name="status" defaultValue={columnName}>
-                  <SelectTrigger className="h-10">
-                    <SelectValue placeholder="Select status..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Todo">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-gray-400" />
-                        <span>Todo</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="In Progress">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-blue-500" />
-                        <span>In Progress</span>
-                      </div>
-                    </SelectItem>
-                    <SelectItem value="Done">
-                      <div className="flex items-center gap-2">
-                        <div className="w-2 h-2 rounded-full bg-green-500" />
-                        <span>Done</span>
-                      </div>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label className="text-sm font-medium">Description</Label>
+                <Textarea
+                  ref={textAreaRef}
+                  name="content"
+                  placeholder="Add task details..."
+                  rows={2}
+                  className="resize-none"
+                />
+              </div>
+            </div>
+
+            {/* Configuration Section */}
+            <div className="space-y-4 border-t border-border pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Due Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          'h-10 w-full justify-start text-left font-normal',
+                          !dueDate && 'text-muted-foreground',
+                        )}
+                      >
+                        <Calendar className="mr-2 h-4 w-4" />
+                        {dueDate ? formatDate(dueDate) : <span>Pick a date</span>}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <CalendarComponent mode="single" selected={dueDate} onSelect={setDueDate} />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
             </div>
 
@@ -278,9 +273,12 @@ export function NewTaskTodo({
             <div className="space-y-4 border-t border-border pt-4">
               <h3 className="text-sm font-semibold text-foreground">Relations</h3>
 
-              <div className="space-y-3">
+              <div className="flex gap-4">
                 <div className="space-y-2">
-                  <Label className="text-sm font-medium">Link to</Label>
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <CableIcon className="h-4 w-4 text-muted-foreground" />
+                    Link to
+                  </Label>
                   <Select
                     value={selectedRelationType}
                     onValueChange={(value: 'none' | 'company' | 'person') => {
@@ -312,7 +310,7 @@ export function NewTaskTodo({
 
                 {/* Company Selection - Animated in */}
                 {selectedRelationType === 'company' && (
-                  <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-2">
                     <Label className="text-sm font-medium flex items-center gap-2">
                       <Building2 className="h-4 w-4 text-muted-foreground" />
                       Company
@@ -346,7 +344,7 @@ export function NewTaskTodo({
 
                 {/* Person Selection - Animated in */}
                 {selectedRelationType === 'person' && (
-                  <div className="space-y-2 animate-in slide-in-from-top-2 duration-200">
+                  <div className="space-y-2">
                     <Label className="text-sm font-medium flex items-center gap-2">
                       <User className="h-4 w-4 text-muted-foreground" />
                       Person
@@ -383,15 +381,23 @@ export function NewTaskTodo({
         </div>
 
         {/* Footer */}
-        <div className="flex h-14 items-center justify-end gap-2 border-t border-border px-6 bg-muted/30">
-          <DialogClose asChild>
-            <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
-              Cancel
+        <div className="flex h-14 items-center justify-between gap-2 border-t border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Switch id="create-more" checked={createMore} onCheckedChange={setCreateMore} />
+            <Label htmlFor="create-more" className="text-sm font-normal cursor-pointer">
+              Create more
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="submit" form="new-task-todo-form" size="sm" className="h-8 text-xs">
+              Create record
             </Button>
-          </DialogClose>
-          <Button type="submit" form="new-task-todo-form" size="sm" className="h-8 text-xs">
-            Create record
-          </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -163,7 +163,12 @@ export function DataTableFilterList<TData>({
     <Sortable value={filters} onValueChange={setFilters} getItemValue={(item) => item.filterId}>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="sm" className="h-8 text-xs font-normal" onKeyDown={onTriggerKeyDown}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs font-normal shadow-s shadow-sm border-0"
+            onKeyDown={onTriggerKeyDown}
+          >
             <ListFilter className="h-3.5 w-3.5 text-muted-foreground" />
             Filter
             {filters.length > 0 && (
@@ -177,7 +182,7 @@ export function DataTableFilterList<TData>({
           aria-describedby={descriptionId}
           aria-labelledby={labelId}
           align="start"
-          className="flex w-full max-w-(--radix-popover-content-available-width) flex-col gap-4 p-0 sm:min-w-[420px] bg-muted/30 backdrop-blur-md border-none shadow-lg"
+          className="flex w-full max-w-(--radix-popover-content-available-width) flex-col gap-4 p-0 sm:min-w-[420px] bg-muted/30 backdrop-blur-md border-none shadow-lg shadow-s"
           {...props}
         >
           {/* Header */}

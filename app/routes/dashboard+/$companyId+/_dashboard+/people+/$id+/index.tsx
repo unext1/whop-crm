@@ -543,13 +543,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
         .set({ [fieldName]: fieldValue || null })
         .where(and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)));
 
-      await logPersonActivity({
-        personId,
-        userId,
-        activityType: 'updated',
-        description: `Updated ${fieldName}`,
-      });
-
       return data({ success: true });
     } catch {
       return data({ error: 'Failed to update field' }, { status: 500 });
@@ -692,25 +685,14 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
               emailId = insert[0].id;
             }
 
-            // Check if relationship already exists
-            const existingRelation = await tx.query.peopleEmailsTable.findFirst({
-              where: and(eq(peopleEmailsTable.personId, personId), eq(peopleEmailsTable.emailId, emailId)),
+            // Log activity
+            await logPersonActivity({
+              personId,
+              userId,
+              activityType: 'updated',
+              description: `Added email ${email}`,
+              tx,
             });
-
-            if (!existingRelation) {
-              await tx.insert(peopleEmailsTable).values({
-                personId,
-                emailId,
-              });
-
-              // Log activity
-              await logPersonActivity({
-                personId,
-                userId,
-                activityType: 'updated',
-                description: `Added email ${email}`,
-              });
-            }
           }
         }
       });
@@ -1166,7 +1148,7 @@ const PersonPage = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4 scrollbar-thin">
+        <div className="flex-1 overflow-auto p-4 flex flex-col scrollbar-thin">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Key Stats */}
@@ -1177,7 +1159,7 @@ const PersonPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Job Title */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Job Title</p>
@@ -1188,7 +1170,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Companies */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Companies</p>
                       <div className="flex items-center gap-2">
@@ -1199,7 +1181,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Tasks Count */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
@@ -1263,7 +1245,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'tasks' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Tasks</h2>
                 <div className="flex items-center gap-2">
@@ -1280,18 +1262,10 @@ const PersonPage = () => {
                 </div>
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-8 text-center shadow-sm flex-1">
                   <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">No tasks yet</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4 h-8 text-xs"
-                    onClick={() => navigate(`/dashboard/${person.organizationId}/tasks`)}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Create first task
-                  </Button>
+                  <p className="mt-2 text-sm text-foreground">No tasks yet</p>
+                  <p className="text-xs text-muted-foreground">Create a task to get started</p>
                 </div>
               ) : (
                 <div className="space-y-4">

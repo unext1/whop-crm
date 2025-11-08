@@ -165,12 +165,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
 
-      await logTaskActivity({
-        taskId,
-        userId: user.id,
-        activityType: 'updated',
-        description: `Updated ${fieldName}`,
-      });
+      // Skip logging minor field updates - only log major task actions
 
       return data({ success: true });
     } catch {
@@ -282,7 +277,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
         </Button>
       </div>
 
-      <div className=" p-4">
+      <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
@@ -527,7 +522,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Status */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
@@ -542,7 +537,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Assignees */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm ">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
                       <div className="space-y-2">
@@ -568,7 +563,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Comments Count */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
@@ -586,7 +581,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   <h2 className="text-sm font-semibold">Description</h2>
                 </div>
                 {task.content ? (
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <p className="text-sm text-foreground whitespace-pre-wrap">{task.content}</p>
                   </Card>
                 ) : (

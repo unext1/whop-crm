@@ -36,7 +36,7 @@ import {
 } from '~/db/schema';
 import { useDataTable } from '~/hooks/use-data-table';
 import { putToast } from '~/services/cookie.server';
-import { getWhopCompanyMembers, verifyWhopToken, whopSdk } from '~/services/whop.server';
+import { getWhopCompanyMembers, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
 import {
   buildOrderByClause,
   buildWhereClause,
@@ -337,7 +337,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
-  const { userId } = await verifyWhopToken(request);
+  const { user } = await requireUser(request, params.companyId);
+  const userId = user.id;
   const formData = await request.formData();
   const intent = formData.get('intent');
 

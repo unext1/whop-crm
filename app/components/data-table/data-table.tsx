@@ -15,7 +15,7 @@ interface DataTableProps<TData> extends React.ComponentProps<'div'> {
 
 export function DataTable<TData>({ table, actionBar, children, className, loading, ...props }: DataTableProps<TData>) {
   return (
-    <div className={cn('flex w-full flex-col gap-3 overflow-auto', className)} {...props}>
+    <div className={cn('flex w-full flex-col gap-3 overflow-auto scrollbar-thin', className)} {...props}>
       {children}
       <div className="overflow-hidden rounded-lg border border-border bg-muted/30 shadow-sm">
         <Table>

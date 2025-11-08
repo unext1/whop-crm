@@ -26,6 +26,7 @@ import { useState } from 'react';
 import { data, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
+import { LogActivityDialog } from '~/components/log-activity-dialog';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Badge } from '~/components/ui/badge';
@@ -370,16 +371,132 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
         .set({ [fieldName]: fieldValue || null })
         .where(and(eq(companiesTable.id, companyId), eq(companiesTable.organizationId, organizationId)));
 
-      await logCompanyActivity({
-        companyId,
-        userId,
-        activityType: 'updated',
-        description: `Updated ${fieldName}`,
-      });
-
       return data({ success: true });
     } catch {
       return data({ error: 'Failed to update field' }, { status: 500 });
+    }
+  }
+
+  // Create Deal
+  if (intent === 'createDeal') {
+    const name = formData.get('name')?.toString();
+    const content = formData.get('content')?.toString();
+    const amount = formData.get('amount')?.toString();
+    const relatedCompanyId = formData.get('companyId')?.toString();
+
+    if (!name) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Deal name is required',
+        variant: 'destructive',
+      });
+      return data({ error: 'Deal name required' }, { headers, status: 400 });
+    }
+
+    try {
+      // Helper to ensure pipeline board exists
+      const ensurePipelineBoard = async (orgId: string) => {
+        const existingBoard = await db.query.boardTable.findFirst({
+          where: and(eq(boardTable.companyId, orgId), eq(boardTable.type, 'pipeline')),
+        });
+
+        if (existingBoard) {
+          return existingBoard;
+        }
+
+        const newBoard = await db
+          .insert(boardTable)
+          .values({
+            name: 'Pipeline',
+            type: 'pipeline',
+            companyId: orgId,
+            ownerId: userId,
+          })
+          .returning();
+
+        await db.insert(boardColumnTable).values([
+          { name: '👋 Lead', order: 1, boardId: newBoard[0].id },
+          { name: '👍 Qualified', order: 2, boardId: newBoard[0].id },
+          { name: '💡 Proposal', order: 3, boardId: newBoard[0].id },
+          { name: '💬 Negotiation', order: 4, boardId: newBoard[0].id },
+          { name: '🎉 Won', order: 5, boardId: newBoard[0].id },
+        ]);
+
+        return newBoard[0];
+      };
+
+      const pipelineBoard = await ensurePipelineBoard(organizationId);
+
+      // Find the first column (Lead)
+      const firstColumn = await db.query.boardColumnTable.findFirst({
+        where: eq(boardColumnTable.boardId, pipelineBoard.id),
+        orderBy: (columns, { asc }) => [asc(columns.order)],
+      });
+
+      if (!firstColumn) {
+        return data({ error: 'No columns found' }, { status: 500 });
+      }
+
+      // Get the highest order in the first column
+      const maxOrderTask = await db.query.boardTaskTable.findFirst({
+        where: eq(boardTaskTable.columnId, firstColumn.id),
+        orderBy: (tasks, { desc }) => [desc(tasks.order)],
+      });
+
+      const nextOrder = maxOrderTask?.order ? maxOrderTask.order + 1 : 1;
+
+      await db.transaction(async (tx) => {
+        const task = await tx
+          .insert(boardTaskTable)
+          .values({
+            columnId: firstColumn.id,
+            name,
+            order: nextOrder,
+            ownerId: userId,
+            boardId: pipelineBoard.id,
+            content,
+            type: 'pipeline',
+            status: 'open',
+            companyId: relatedCompanyId || companyId,
+            amount: amount ? Number.parseInt(amount, 10) : null,
+          })
+          .returning();
+
+        await logTaskActivity({
+          taskId: task[0].id,
+          userId,
+          activityType: 'created',
+          description: `Deal "${name}" was created`,
+          tx,
+        });
+
+        if (relatedCompanyId || companyId) {
+          await logCompanyActivity({
+            companyId: relatedCompanyId || companyId,
+            userId,
+            activityType: 'task_created',
+            description: `Created deal "${name}"`,
+            relatedEntityId: task[0].id,
+            relatedEntityType: 'task',
+            tx,
+          });
+        }
+      });
+
+      const headers = await putToast({
+        title: 'Success',
+        message: 'Deal created successfully',
+        variant: 'default',
+      });
+
+      return data({ success: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to create deal',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to create deal' }, { headers, status: 500 });
     }
   }
 
@@ -426,11 +543,11 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-  { id: 'notes', label: 'Notes', icon: FileText },
+  // { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'team', label: 'Team', icon: Users },
-  { id: 'files', label: 'Files', icon: Paperclip },
-  { id: 'emails', label: 'Emails', icon: Mail },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
+  // { id: 'files', label: 'Files', icon: Paperclip },
+  // { id: 'emails', label: 'Emails', icon: Mail },
+  // { id: 'calendar', label: 'Calendar', icon: Calendar },
 ];
 
 function cn(...classes: (string | boolean | undefined)[]) {
@@ -477,7 +594,7 @@ const CompanyPage = () => {
         </Button>
       </div>
 
-      <div className="overflow-auto p-4">
+      <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
@@ -737,7 +854,7 @@ const CompanyPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Industry */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Industry</p>
@@ -748,22 +865,22 @@ const CompanyPage = () => {
                   </Card>
 
                   {/* Team Size */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
-                    <div>
-                      <p className="text-xs font-medium text-muted-foreground mb-2">Team</p>
-                      <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{company.companiesPeople.length} members</span>
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Team</p>
+                        <p className="text-sm font-medium">{company.companiesPeople.length} Members</p>
                       </div>
+                      <Users className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </Card>
 
                   {/* Tasks Count */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
-                        <p className="text-sm font-medium">{Object.values(tasksByColumn).flat().length} total</p>
+                        <p className="text-sm font-medium">{Object.values(tasksByColumn).flat().length} Total</p>
                       </div>
                       <CheckSquare className="h-4 w-4 text-muted-foreground" />
                     </div>
@@ -804,6 +921,7 @@ const CompanyPage = () => {
                   <ActivityIcon className="h-4 w-4" />
                   <h2 className="text-sm font-semibold">All Activity</h2>
                 </div>
+                <LogActivityDialog entityId={company.id} entityType="company" organizationId={organizationId} />
               </div>
               <ActivityTimeline
                 activities={company.activities}

@@ -1,10 +1,24 @@
-import { AlertCircle, Building2, Calendar, Circle, Clock, MessageCircle, RotateCcw, User, Users } from 'lucide-react';
+import { Building2, Calendar, Circle, Clock, MessageCircle, RotateCcw, User, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { Link, useParams, useSubmit } from 'react-router';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
+import { Badge } from '../ui/badge';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import type { TaskType } from './column';
+
+export const getPriorityColor = (priority: string | null | undefined) => {
+  switch (priority) {
+    case 'high':
+      return 'text-red-400 bg-red-400/10';
+    case 'medium':
+      return 'text-yellow-500 bg-yellow-500/10';
+    case 'low':
+      return 'text-green-500 bg-green-500/10';
+    default:
+      return 'text-muted-foreground bg-muted-foreground/10';
+  }
+};
 
 const TaskTodo = ({
   name,
@@ -63,19 +77,6 @@ const TaskTodo = ({
       'application/remix-card',
       JSON.stringify({ id, name, columnId, ownerId, boardId, content, createdAt }),
     );
-  };
-
-  const getPriorityColor = (priority: string | null | undefined) => {
-    switch (priority) {
-      case 'high':
-        return 'text-red-400';
-      case 'medium':
-        return 'text-yellow-500';
-      case 'low':
-        return 'text-green-500';
-      default:
-        return 'text-muted-foreground';
-    }
   };
 
   const isOverdue =
@@ -197,16 +198,26 @@ const TaskTodo = ({
         <motion.div
           layout
           layoutId={String(id)}
-          className="bg-card p-3 flex flex-col gap-2.5 rounded-md active:cursor-grabbing border border-border hover:border-primary/50 transition-colors shadow-sm"
+          className="bg-linear-to-b from-muted to-muted/30 shadow-s p-3 flex flex-col gap-2.5 rounded-md active:cursor-grabbing hover:border-primary/50 transition-colors shadow-sm border-transparent border"
           draggable="true"
           onDragStart={(e: DragEvent) => handleDragStart(e, { name, id, columnId, ownerId, content, createdAt })}
         >
           {/* Title Row */}
+
           <div className="flex items-center gap-2">
             <div className="h-6 w-6 flex items-center justify-center rounded bg-primary text-xs font-semibold ">
               <Circle className="h-3 w-3 text-foreground shrink-0" />
             </div>
-            <h3 className="flex-1 text-sm font-semibold line-clamp-1">{name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="flex-1 text-sm font-semibold line-clamp-1">{name}</h3>{' '}
+              {priority && (
+                <div className="flex items-center gap-2">
+                  <Badge className={`flex items-center gap-1 ${getPriorityColor(priority)}`}>
+                    <span className="text-xs capitalize">{priority}</span>
+                  </Badge>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Created By */}
@@ -317,14 +328,7 @@ const TaskTodo = ({
           )}
 
           {/* Status Row */}
-          {priority && (
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1">
-                <AlertCircle className={'h-3 w-3 text-muted-foreground'} />
-                <span className={`text-xs capitalize ${getPriorityColor(priority)}`}>{priority}</span>
-              </div>
-            </div>
-          )}
+
           {dueDate && (
             <TooltipProvider>
               <Tooltip>

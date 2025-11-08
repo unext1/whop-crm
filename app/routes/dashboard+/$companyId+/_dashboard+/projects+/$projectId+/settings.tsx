@@ -191,7 +191,7 @@ function SortableColumn({ column, onDelete }: { column: Column; onDelete: (colum
   };
 
   return (
-    <Card ref={setNodeRef} style={style} className="p-3">
+    <Card ref={setNodeRef} style={style} className="p-3 bg-muted backdrop-blur-md border-none shadow-s">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button {...attributes} {...listeners} className="cursor-grab hover:bg-muted rounded p-1">
@@ -290,7 +290,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
         </Button>
       </div>
 
-      <div className="p-4">
+      <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Project Info */}
         <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">

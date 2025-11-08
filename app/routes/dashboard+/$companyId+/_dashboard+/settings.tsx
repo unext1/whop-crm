@@ -1,14 +1,13 @@
 import { eq } from 'drizzle-orm';
 import { Bell, Globe, Mail, Palette, Settings as SettingsIcon, Shield, User, Users } from 'lucide-react';
 import { useState } from 'react';
-import { data, useNavigate } from 'react-router';
-import { EditableField } from '~/components/editable-field';
+import { data, Form, useNavigate, useNavigation } from 'react-router';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
+import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Switch } from '~/components/ui/switch';
 import { db } from '~/db';
 import { organizationTable, userTable } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
@@ -19,12 +18,10 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId } = params;
   const { user } = await requireUser(request, organizationId);
 
-  // Fetch organization details
   const organization = await db.query.organizationTable.findFirst({
     where: eq(organizationTable.id, organizationId),
   });
 
-  // Fetch all users in the organization (team members)
   const teamMembers = await db.query.userTable.findMany({
     where: eq(userTable.organizationId, organizationId),
     orderBy: userTable.name,
@@ -51,25 +48,14 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
   const intent = formData.get('intent');
 
   if (intent === 'updateOrganizationField') {
-    const fieldName = formData.get('fieldName')?.toString();
-    const fieldValue = formData.get('fieldValue')?.toString();
+    const fieldName = formData.get('organizationName')?.toString();
 
     if (!fieldName) {
       return data({ error: 'Field name required' }, { status: 400 });
     }
 
-    const allowedFields = ['name'];
-    if (!allowedFields.includes(fieldName)) {
-      return data({ error: 'Invalid field' }, { status: 400 });
-    }
-
     try {
-      await db
-        .update(organizationTable)
-        .set({ [fieldName]: fieldValue || null })
-        .where(eq(organizationTable.id, organizationId));
-
-      // TODO: Add organization activity logging if needed
+      await db.update(organizationTable).set({ name: fieldName }).where(eq(organizationTable.id, organizationId));
 
       const headers = await putToast({
         title: 'Success',
@@ -89,23 +75,15 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
   }
 
   if (intent === 'updateUserField') {
-    const fieldName = formData.get('fieldName')?.toString();
-    const fieldValue = formData.get('fieldValue')?.toString();
+    const firstName = formData.get('firstName')?.toString();
+    const lastName = formData.get('lastName')?.toString();
 
-    if (!fieldName) {
-      return data({ error: 'Field name required' }, { status: 400 });
-    }
-
-    const allowedFields = ['name', 'lastName'];
-    if (!allowedFields.includes(fieldName)) {
-      return data({ error: 'Invalid field' }, { status: 400 });
+    if (!firstName || !lastName) {
+      return data({ error: 'First name and last name are required' }, { status: 400 });
     }
 
     try {
-      await db
-        .update(userTable)
-        .set({ [fieldName]: fieldValue || null })
-        .where(eq(userTable.id, userId));
+      await db.update(userTable).set({ name: firstName, lastName: lastName }).where(eq(userTable.id, userId));
 
       const headers = await putToast({
         title: 'Success',
@@ -141,6 +119,8 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
   const { organization, organizationId, teamMembers, user } = loaderData;
   const [activeTab, setActiveTab] = useState('general');
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state === 'submitting';
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
@@ -202,19 +182,27 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                         <Globe className="h-4 w-4" />
                         Organization Name
                       </Label>
-                      <EditableField
-                        value={organization.name}
-                        fieldName="fieldValue"
-                        intent="updateOrganizationField"
-                        fieldNameParam="name"
-                        placeholder="Enter organization name..."
-                      />
-                      <p className="text-xs text-muted-foreground mt-2">
-                        This name appears throughout your workspace and is visible to team members.
-                      </p>
+
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="updateOrganizationField" />
+                        <input type="hidden" name="fieldName" value="name" />
+                        <Input
+                          type="text"
+                          name="organizationName"
+                          placeholder="Enter organization name..."
+                          defaultValue={organization.name || ''}
+                        />
+                        <p className="text-xs text-muted-foreground mb-3 mt-1">
+                          This name appears throughout your workspace and is visible to team members.
+                        </p>
+
+                        <Button type="submit" size="sm" disabled={isSubmitting}>
+                          {isSubmitting ? 'Saving...' : 'Save'}
+                        </Button>
+                      </Form>
                     </div>
 
-                    <div>
+                    {/* <div>
                       <Label className="text-sm font-medium flex items-center gap-2 mb-3">
                         <Shield className="h-4 w-4" />
                         Workspace Preferences
@@ -239,7 +227,7 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                           <Switch defaultChecked />
                         </div>
                       </div>
-                    </div>
+                    </div> */}
                   </div>
 
                   <div className="space-y-6 mt-6">
@@ -248,14 +236,12 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                         <Bell className="h-4 w-4" />
                         Subscription & Billing
                       </Label>
-                      <Card className="p-4 bg-linear-to-r from-primary/5 to-primary/10 border-primary/20">
+                      <Card className="p-4 ">
                         <div className="flex items-center justify-between">
                           <div>
                             <div className="text-sm font-medium capitalize">{organization.plan || 'Free'} Plan</div>
                             <div className="text-xs text-muted-foreground">
-                              {organization.plan === 'premium'
-                                ? 'Full access to all features'
-                                : 'Basic features included'}
+                              {organization.plan === 'premium' ? 'Full access' : 'Basic features included'}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
@@ -265,7 +251,7 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                           </div>
                         </div>
                         <Button
-                          variant="outline"
+                          variant="default"
                           size="sm"
                           className="w-full mt-4"
                           onClick={() => navigate(`/dashboard/${organizationId}/billing`)}
@@ -336,68 +322,34 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
 
                 <div className="">
                   <div className="space-y-6 mb-6">
-                    <div>
-                      <Label className="text-sm font-medium mb-3">Basic Information</Label>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="firstName" className="text-xs text-muted-foreground mb-1 block">
-                            First Name
-                          </Label>
-                          <EditableField
-                            value={user.name}
-                            fieldName="fieldValue"
-                            intent="updateUserField"
-                            fieldNameParam="name"
-                            placeholder="Enter your first name..."
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="lastName" className="text-xs text-muted-foreground mb-1 block">
-                            Last Name
-                          </Label>
-                          <EditableField
-                            value={user.lastName}
-                            fieldName="fieldValue"
-                            intent="updateUserField"
-                            fieldNameParam="lastName"
-                            placeholder="Enter your last name..."
-                          />
-                        </div>
+                    <Form method="post" className="space-y-4">
+                      <input type="hidden" name="intent" value="updateUserField" />
+                      <div>
+                        <Label htmlFor="firstName" className="text-xs text-muted-foreground mb-1 block">
+                          First Name
+                        </Label>
+                        <Input
+                          type="text"
+                          name="firstName"
+                          placeholder="Enter your first name..."
+                          defaultValue={user.name || ''}
+                        />
                       </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium mb-3">Account Preferences</Label>
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                          <div>
-                            <div className="text-sm font-medium">Email Notifications</div>
-                            <div className="text-xs text-muted-foreground">
-                              Receive notifications about your tasks and updates
-                            </div>
-                          </div>
-                          <Switch defaultChecked />
-                        </div>
-                        <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                          <div>
-                            <div className="text-sm font-medium">Desktop Notifications</div>
-                            <div className="text-xs text-muted-foreground">
-                              Show browser notifications for important events
-                            </div>
-                          </div>
-                          <Switch />
-                        </div>
-                        <div className="flex items-center justify-between p-3 border border-border rounded-lg">
-                          <div>
-                            <div className="text-sm font-medium">Weekly Summary</div>
-                            <div className="text-xs text-muted-foreground">
-                              Receive a weekly summary of your activity
-                            </div>
-                          </div>
-                          <Switch defaultChecked />
-                        </div>
+                      <div>
+                        <Label htmlFor="lastName" className="text-xs text-muted-foreground mb-1 block">
+                          Last Name
+                        </Label>
+                        <Input
+                          type="text"
+                          name="lastName"
+                          placeholder="Enter your last name..."
+                          defaultValue={user.lastName || ''}
+                        />
                       </div>
-                    </div>
+                      <Button type="submit" size="sm" disabled={isSubmitting}>
+                        {isSubmitting ? 'Saving...' : 'Save'}
+                      </Button>
+                    </Form>
                   </div>
 
                   <div className="space-y-6">
@@ -418,18 +370,6 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                           </div>
                           <p className="text-xs text-muted-foreground mt-2">
                             Email is managed through your Whop account and cannot be changed here.
-                          </p>
-                        </div>
-
-                        <div>
-                          <Label className="text-xs text-muted-foreground mb-1 block">Whop Username</Label>
-                          <div className="flex items-center gap-2 p-3 border border-border rounded-lg bg-muted/30">
-                            <Badge variant="outline" className="text-xs">
-                              Whop Account
-                            </Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-2">
-                            Your username is managed through your Whop account.
                           </p>
                         </div>
                       </div>
@@ -454,10 +394,6 @@ const SettingsPage = ({ loaderData }: Route.ComponentProps) => {
                       <p className="text-sm text-muted-foreground">Manage team members and their access levels</p>
                     </div>
                   </div>
-                  <Button variant="outline">
-                    <User className="h-4 w-4 mr-2" />
-                    Invite Member
-                  </Button>
                 </div>
 
                 <div className="space-y-4">

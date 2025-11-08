@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { Check, ChevronsUpDown, User, X } from 'lucide-react';
 import * as React from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
@@ -61,7 +61,7 @@ export function ComboboxMultiple({
             variant="outline"
             role="combobox"
             aria-expanded={open}
-            className="w-full justify-between hover:bg-transparent p-1.5 has-[>svg]:px-1"
+            className="w-full justify-between hover:bg-transparent p-1.5 has-[>svg]:px-1 text-xs"
             disabled={disabled}
           >
             <div className="flex gap-1 flex-1 min-w-0 overflow-x-scroll scrollbar-thin">
@@ -69,11 +69,13 @@ export function ComboboxMultiple({
                 <>
                   {visibleOptions.map((option) => (
                     <div key={option.id} className="flex items-center gap-1 bg-muted rounded px-2 py-1 text-xs">
-                      {option.profilePictureUrl && (
+                      {option.profilePictureUrl ? (
                         <Avatar className="size-3">
                           <AvatarImage src={option.profilePictureUrl} alt={option.name} />
                           <AvatarFallback className="text-[10px]">{option.name[0]}</AvatarFallback>
                         </Avatar>
+                      ) : (
+                        <User className="size-3" />
                       )}
                       <span className="truncate max-w-20 text-xs">{option.name}</span>
                       <button
@@ -93,7 +95,7 @@ export function ComboboxMultiple({
                   )}
                 </>
               ) : (
-                <span className="text-muted-foreground">{placeholder}</span>
+                <span className="text-muted-foreground text-xs px-2">{placeholder}</span>
               )}
             </div>
             <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
@@ -109,11 +111,13 @@ export function ComboboxMultiple({
                   {options.map((option) => (
                     <CommandItem key={option.id} value={option.name} onSelect={() => toggleSelection(option.id)}>
                       <span className="flex items-center gap-2 flex-1">
-                        {option.profilePictureUrl && (
+                        {option.profilePictureUrl ? (
                           <Avatar className="size-7">
                             <AvatarImage src={option.profilePictureUrl} alt={option.name} />
                             <AvatarFallback>{option.name[0]}</AvatarFallback>
                           </Avatar>
+                        ) : (
+                          <User className="size-3" />
                         )}
                         <span className="flex flex-col">
                           <span className="font-medium text-xs">{option.name}</span>

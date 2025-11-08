@@ -6,6 +6,8 @@ import { formatCurrency } from '~/utils';
 import { Avatar, AvatarFallback, AvatarImage } from '../ui/avatar';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import type { TaskType } from './column';
+import { getPriorityColor } from './task-todo';
+import { Badge } from '../ui/badge';
 
 const TaskDeal = ({
   name,
@@ -22,6 +24,7 @@ const TaskDeal = ({
   company,
   person,
   amount,
+  priority,
   commentsCount = 0,
 }: TaskType & {
   previousOrder: number;
@@ -180,7 +183,7 @@ const TaskDeal = ({
         <motion.div
           layout
           layoutId={String(id)}
-          className="bg-card p-3 flex flex-col gap-2.5 rounded-md active:cursor-grabbing border border-border hover:border-primary/50 transition-colors shadow-sm"
+          className="bg-linear-to-b from-muted to-muted/30 shadow-s p-3 flex flex-col gap-2.5 rounded-md active:cursor-grabbing hover:border-primary/50 transition-colors shadow-sm border-transparent border"
           draggable="true"
           onDragStart={(e: DragEvent) => handleDragStart(e, { name, id, columnId, ownerId, content, createdAt })}
         >
@@ -189,7 +192,17 @@ const TaskDeal = ({
             <div className="h-6 w-6 flex items-center justify-center rounded bg-primary text-xs font-semibold ">
               <DollarSign className="h-3 w-3 text-foreground shrink-0" />
             </div>
-            <h3 className="flex-1 text-sm font-semibold line-clamp-1">{name}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="flex-1 text-sm font-semibold line-clamp-1">{name}</h3>
+
+              {priority && (
+                <div className="flex items-center gap-2">
+                  <Badge className={`flex items-center gap-1 ${getPriorityColor(priority)}`}>
+                    <span className="text-xs capitalize">{priority}</span>
+                  </Badge>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Created By */}

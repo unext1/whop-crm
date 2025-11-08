@@ -53,7 +53,7 @@ export function NewColumn({
           type="text"
           name="name"
           placeholder="Set Column name..."
-          className="h-8 text-xs"
+          className="h-8 text-xs md:text-xs"
           onKeyDown={(event) => {
             if (event.key === 'Escape') {
               setEditing(false);

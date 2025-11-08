@@ -24,6 +24,7 @@ import {
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
+import { logActivity } from '~/utils/activity.server';
 
 export interface RenderedItem {
   id: string;
@@ -85,7 +86,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       const relatedCompanyId = formData.get('relatedCompanyId') ? String(formData.get('relatedCompanyId')) : null;
       const relatedPersonId = formData.get('relatedPersonId') ? String(formData.get('relatedPersonId')) : null;
 
-      await db
+      const [task] = await db
         .insert(boardTaskTable)
         .values({
           columnId,
@@ -101,6 +102,15 @@ export async function action({ request, params }: Route.ActionArgs) {
         })
         .returning();
 
+      await logActivity({
+        userId: user.id,
+        activityType: 'task_created',
+        description: `Created Deal "${name}"`,
+        relatedEntityId: task.id,
+        relatedEntityType: 'task',
+        entityType: 'task',
+        entityId: task.id,
+      });
       return {};
     }
     case 'removeColumn': {

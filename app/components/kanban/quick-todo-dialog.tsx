@@ -19,11 +19,11 @@ interface QuickTodoDialogProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-export function QuickTodoDialog({ 
-  companyId, 
-  personId, 
-  parentTaskId, 
-  userId, 
+export function QuickTodoDialog({
+  companyId,
+  personId,
+  parentTaskId,
+  userId,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -32,7 +32,7 @@ export function QuickTodoDialog({
   const inputRef = useRef<HTMLInputElement>(null);
   const submit = useSubmit();
   const [internalOpen, setInternalOpen] = useState(false);
-  
+
   // Use controlled state if provided, otherwise use internal state
   const isControlled = controlledOpen !== undefined;
   const open = isControlled ? controlledOpen : internalOpen;

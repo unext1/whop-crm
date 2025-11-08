@@ -183,6 +183,7 @@ const Column = ({
                 company={task.company}
                 person={task.person}
                 amount={task.amount}
+                priority={task.priority}
               />
             );
           })}

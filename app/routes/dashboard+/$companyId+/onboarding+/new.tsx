@@ -2,7 +2,7 @@ import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
 import { Check, CheckSquare } from 'lucide-react';
 import { useState } from 'react';
-import { data, Form, href, redirect, useActionData, useNavigation, useParams } from 'react-router';
+import { data, Form, href, redirect, useActionData, useNavigate, useNavigation, useParams } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
@@ -18,13 +18,17 @@ import {
   getPublicUser,
   hasOrganizationPremiumAccess,
   verifyWhopToken,
+  whopSdk,
 } from '~/services/whop.server';
 import type { Route } from './+types/new';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
   const { userId } = await verifyWhopToken(request);
+
   const authorizedUser = await getAuthorizedUserId({ companyId, regularUserId: userId });
+  const whopCompany = await whopSdk.companies.retrieve(companyId);
   // Check if organization exists
   const existingOrg = await db.select().from(organizationTable).where(eq(organizationTable.id, companyId)).limit(1);
 
@@ -37,11 +41,6 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   // Check if organization already has premium access
   const hasPremiumAccess = hasOrg ? await hasOrganizationPremiumAccess(companyId) : false;
 
-  // If both exist, redirect to dashboard (onboarding complete)
-  // if (hasOrg && hasUser) {
-  //   throw redirect(href('/dashboard/:companyId', { companyId }));
-  // }
-
   // Determine starting step based on what exists
   let initialStep = 1;
   if (hasOrg && !hasUser) {
@@ -52,6 +51,10 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     }
     initialStep = 3; // Org and user exist but no premium - go to payment
   }
+  // If both exist, redirect to dashboard (onboarding complete)
+  // if (hasOrg && hasUser && hasPremiumAccess) {
+  //   throw redirect(href('/dashboard/:companyId', { companyId }));
+  // }
 
   const monthlyCheckout = await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId);
   const annualCheckout = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
@@ -70,6 +73,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     monthlyCheckout,
     annualCheckout,
     whopAppId: env.WHOP_APP_ID,
+    whopCompany,
   };
 };
 
@@ -85,7 +89,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   if (intent === 'createOrg') {
     const name = formData.get('name')?.toString();
     const teamSize = formData.get('teamSize')?.toString();
-    const industry = formData.get('industry')?.toString();
 
     if (!name || name.trim().length === 0) {
       return data({ error: 'Organization name is required', step: 1 } as const, { status: 400 });
@@ -93,10 +96,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
     if (!teamSize) {
       return data({ error: 'Team size is required', step: 1 } as const, { status: 400 });
-    }
-
-    if (!industry) {
-      return data({ error: 'Industry is required', step: 1 } as const, { status: 400 });
     }
 
     const org = await db
@@ -196,14 +195,13 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   return data({ error: 'Invalid intent' } as const, { status: 400 });
 };
 
-// Mockup Components
 const DashboardMockup = ({ orgName }: { orgName: string }) => (
   <div className="w-full max-w-2xl space-y-4">
     {/* Header */}
     <div className="flex h-14 items-center justify-between border border-border/40 bg-muted/10 px-4 rounded-lg">
       <div className="flex items-center gap-2">
         <div className="h-7 w-7 rounded bg-primary/80 flex items-center justify-center">
-          <span className="text-primary-foreground font-bold text-xs">W</span>
+          <span className="text-primary-foreground font-bold text-xs">{orgName?.charAt(0) || 'W'}</span>
         </div>
         <span className="text-sm font-semibold">{orgName || 'Your Company'}</span>
       </div>
@@ -310,10 +308,9 @@ const SalesFeaturesMockup = (_props?: { orgName?: string }) => (
 const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const params = useParams();
   const step = loaderData.initialStep;
-  const [orgName, setOrgName] = useState('');
+  const [orgName, setOrgName] = useState(loaderData.whopCompany?.title);
   const [teamSize, setTeamSize] = useState('');
-  const [industry, setIndustry] = useState('');
-  const [firstName, setFirstName] = useState('');
+  const [firstName, setFirstName] = useState(loaderData.whopUser?.name || '');
   const [lastName, setLastName] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -322,6 +319,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === 'submitting';
+  const navigate = useNavigate();
 
   const handlePayment = async (plan: 'monthly' | 'annual') => {
     setIsProcessingPayment(true);
@@ -348,10 +346,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
         }
       }
 
-      // Payment successful - redirect to dashboard
-      setTimeout(() => {
-        window.location.href = href('/dashboard/:companyId', { companyId: params.companyId as string });
-      }, 2000);
+      navigate(href('/dashboard/:companyId', { companyId: params.companyId as string }), { replace: true });
     } catch (error) {
       setPaymentResult({ status: 'error', error: String(error) });
     } finally {
@@ -403,6 +398,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                       <Input
                         id="name"
                         name="name"
+                        defaultValue={loaderData.whopCompany.title}
                         value={orgName}
                         onChange={(e) => setOrgName(e.target.value)}
                         placeholder="Acme Corp"
@@ -416,57 +412,24 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                       <Label htmlFor="teamSize" className="text-sm font-semibold text-foreground">
                         How big is your team?
                       </Label>
-                      <select
-                        id="teamSize"
-                        name="teamSize"
-                        value={teamSize}
-                        onChange={(e) => setTeamSize(e.target.value)}
-                        required
-                        className="h-10 px-3 text-sm border border-border rounded-md bg-background"
-                      >
-                        <option value="">Select team size</option>
-                        <option value="1-5">1-5 people</option>
-                        <option value="6-10">6-10 people</option>
-                        <option value="11-25">11-25 people</option>
-                        <option value="26-50">26-50 people</option>
-                        <option value="51-100">51-100 people</option>
-                        <option value="100+">100+ people</option>
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <Label htmlFor="industry" className="text-sm font-semibold text-foreground">
-                        Industry
-                      </Label>
-                      <select
-                        id="industry"
-                        name="industry"
-                        value={industry}
-                        onChange={(e) => setIndustry(e.target.value)}
-                        required
-                        className="h-10 px-3 text-sm border border-border rounded-md bg-background"
-                      >
-                        <option value="">Select industry</option>
-                        <option value="technology">Technology</option>
-                        <option value="healthcare">Healthcare</option>
-                        <option value="finance">Finance</option>
-                        <option value="education">Education</option>
-                        <option value="retail">Retail</option>
-                        <option value="manufacturing">Manufacturing</option>
-                        <option value="consulting">Consulting</option>
-                        <option value="real-estate">Real Estate</option>
-                        <option value="other">Other</option>
-                      </select>
+                      <Select value={teamSize} onValueChange={(value) => setTeamSize(value)} name="teamSize">
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select team size" className="w-full" />
+                        </SelectTrigger>
+                        <SelectContent className="w-full">
+                          <SelectItem value="1-5">1-5 people</SelectItem>
+                          <SelectItem value="6-10">6-10 people</SelectItem>
+                          <SelectItem value="11-25">11-25 people</SelectItem>
+                          <SelectItem value="26-50">26-50 people</SelectItem>
+                          <SelectItem value="51-100">51-100 people</SelectItem>
+                          <SelectItem value="100+">100+ people</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-
-                  {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 1 && (
-                    <p className="text-sm text-destructive">{actionData.error}</p>
-                  )}
-
                   <Button
                     type="submit"
-                    disabled={isSubmitting || !orgName.trim() || !teamSize || !industry}
+                    disabled={isSubmitting || !orgName?.trim() || !teamSize?.trim()}
                     className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
                   >
                     {isSubmitting ? 'Creating...' : 'Continue'}
@@ -582,8 +545,8 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                           <div className="flex items-center justify-center gap-1.5">
                             <div className="text-xs font-medium text-muted-foreground">Annual</div>
                             <Badge
-                              variant="secondary"
-                              className="text-xs h-4 bg-primary/20 text-primary hover:bg-primary/30"
+                              variant="default"
+                              className="absolute left-1/2 -translate-x-1/2 -top-3.5 text-xs h-6  text-primary-foreground"
                             >
                               Save 17%
                             </Badge>
@@ -600,7 +563,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                     </div>
 
                     {/* Trust badges */}
-                    <div className="flex  items-center  gap-2 pt-2">
+                    <div className="flex justify-center items-center  gap-2 mb-2">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                         <Check className="h-3.5 w-3.5 text-primary/60" />
                         Access to all team members

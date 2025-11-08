@@ -3,7 +3,6 @@ import { data, href, Outlet, redirect } from 'react-router';
 
 import { AppSidebar } from '~/components/layout/app-sidebar';
 import { Header } from '~/components/layout/header';
-import { ThemeToggle } from '~/components/theme-switcher';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { useToast } from '~/components/ui/use-toast';
 import { popToast } from '~/services/cookie.server';
@@ -17,6 +16,7 @@ import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/serv
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
   const { userId } = await verifyWhopToken(request);
+
   const access = await hasAccess({ request, companyId });
   if (!access) {
     throw new Response('Access denied', { status: 403 });
@@ -118,9 +118,9 @@ const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
         )}
       >
         <Header fixed className=" pr-4  px-2 rounded-none border-b">
-          <div className="ml-auto flex items-center space-x-4">
+          {/* <div className="ml-auto flex items-center space-x-4">
             <ThemeToggle />
-          </div>
+          </div> */}
         </Header>
 
         <main className="flex-1 min-h-0 mt-13 flex flex-col">

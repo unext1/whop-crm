@@ -63,7 +63,7 @@ export function QuickActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" className="h-8 w-8">
+          <Button variant="outline" size="icon" className="h-8 w-8 border-0 shadow-s shadow-sm">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -96,7 +96,7 @@ export function QuickActionsMenu({
           )}
 
           {/* Create Deal */}
-          {type === 'person' && (
+          {(type === 'person' || type === 'company') && (
             <DropdownMenuItem onClick={() => setDealOpen(true)}>
               <DollarSign className="mr-2 h-4 w-4" />
               Create Deal

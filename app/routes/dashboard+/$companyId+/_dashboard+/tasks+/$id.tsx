@@ -121,27 +121,12 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
-    // Get old content for activity log
-    const oldTask = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
-    });
-
     await db
       .update(boardTaskTable)
       .set({ content: submission.value.content || null })
       .where(eq(boardTaskTable.id, taskId));
 
-    // Log activity
-    await logTaskActivity({
-      taskId,
-      userId: user.id,
-      activityType: 'content_changed',
-      metadata: {
-        field: 'content',
-        oldValue: oldTask?.content || null,
-        newValue: submission.value.content || null,
-      },
-    });
+    // Skip logging content/description changes - only log major task actions
 
     return {};
   }
@@ -345,9 +330,10 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         // For status updates, fieldValue should be the columnId
         updateData.columnId = fieldValue || null;
       } else if (fieldName === 'attachmentType') {
-        // For attachment type, fieldValue should be in format "type:id" (e.g., "company:123" or "person:456")
+        let attachmentType: string | null = null;
         if (fieldValue && fieldValue !== 'none') {
           const [type, id] = fieldValue.split(':');
+          attachmentType = type;
           if (type === 'company') {
             updateData.companyId = id;
             updateData.personId = null;
@@ -356,20 +342,22 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             updateData.companyId = null;
           }
         } else {
-          // Clear both (when 'none' is selected or empty)
           updateData.companyId = null;
           updateData.personId = null;
         }
+
+        // Log attachment changes as these are significant relationships
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'updated',
+          description: fieldValue === 'none' ? 'Removed attachment' : `Attached to ${attachmentType}`,
+        });
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
 
-      await logTaskActivity({
-        taskId,
-        userId: user.id,
-        activityType: 'updated',
-        description: `Updated ${fieldName}`,
-      });
+      // Skip logging minor field updates (priority, dueDate, status) - only log major task actions
 
       return data({ success: true });
     } catch {
@@ -797,7 +785,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Attached To */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Attached to</p>
                       {task.company ? (
@@ -823,7 +811,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Assignees */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
                       <div className="flex flex-wrap gap-2">
@@ -858,7 +846,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Comments Count */}
-                  <Card className="p-4 bg-muted/30 shadow-s border-0 shadow-sm">
+                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
