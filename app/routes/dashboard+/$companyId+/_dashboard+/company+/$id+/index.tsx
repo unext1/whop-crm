@@ -27,6 +27,7 @@ import { data, Form, Link, redirect, useLoaderData, useNavigate, useNavigation, 
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { LogActivityDialog } from '~/components/log-activity-dialog';
+import { MeetingDialog } from '~/components/meetings/meeting-dialog';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Badge } from '~/components/ui/badge';
@@ -50,12 +51,15 @@ import {
   boardTaskTable,
   companiesPeopleTable,
   companiesTable,
+  meetingsTable,
+  meetingsCompaniesTable,
   peopleTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
+import { MeetingList } from '~/components/meetings/meeting-list';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: companyId } = params;
@@ -121,7 +125,39 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { userId, organizationId, company: { ...company, activities }, allPeople, tasksByColumn };
+  // Fetch meetings for this company
+  const companyMeetings = await db.query.meetingsTable.findMany({
+    where: and(eq(meetingsTable.organizationId, organizationId), eq(meetingsCompaniesTable.companyId, companyId)),
+    with: {
+      meetingsPeople: {
+        with: {
+          person: true,
+        },
+      },
+      meetingsCompanies: {
+        with: {
+          company: true,
+        },
+      },
+    },
+    orderBy: (meetingsTable, { asc }) => [asc(meetingsTable.startDate)],
+  });
+
+  // Fetch all companies for the meeting dialog
+  const allCompanies = await db.query.companiesTable.findMany({
+    where: eq(companiesTable.organizationId, organizationId),
+    orderBy: companiesTable.name,
+  });
+
+  return {
+    userId,
+    organizationId,
+    company: { ...company, activities },
+    allPeople,
+    tasksByColumn,
+    companyMeetings,
+    allCompanies,
+  };
 };
 
 export const action = async ({ params, request }: Route.ActionArgs) => {
@@ -560,7 +596,8 @@ function cn(...classes: (string | boolean | undefined)[]) {
 }
 
 const CompanyPage = () => {
-  const { company, allPeople, tasksByColumn, userId, organizationId } = useLoaderData<typeof loader>();
+  const { company, allPeople, tasksByColumn, userId, organizationId, companyMeetings, allCompanies } =
+    useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
@@ -775,9 +812,7 @@ const CompanyPage = () => {
   return (
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        {sidebarContent}
-      </div>
+      <div className="hidden lg:flex lg:min-w-80 lg:border-border lg:border-r lg:bg-muted/30">{sidebarContent}</div>
 
       {/* Mobile Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -1230,16 +1265,29 @@ const CompanyPage = () => {
             <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Upcoming Meetings</h2>
-                <Button size="sm" className="h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Schedule
-                </Button>
+                <MeetingDialog
+                  defaultCompanyId={company.id}
+                  userId={userId}
+                  organizationId={organizationId}
+                  companies={allCompanies}
+                  people={allPeople}
+                  trigger={
+                    <Button size="sm" className="h-8 text-xs">
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Schedule Meeting
+                    </Button>
+                  }
+                />
               </div>
-              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-foreground">No meetings scheduled</p>
-                <p className="text-xs text-muted-foreground">Schedule a meeting to get started</p>
-              </div>
+              {companyMeetings.length === 0 ? (
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
+                  <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-foreground">No meetings scheduled</p>
+                  <p className="text-xs text-muted-foreground">Schedule a meeting to get started</p>
+                </div>
+              ) : (
+                <MeetingList meetings={companyMeetings} />
+              )}
             </div>
           )}
         </div>

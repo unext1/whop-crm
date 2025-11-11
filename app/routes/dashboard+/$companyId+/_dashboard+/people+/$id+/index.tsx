@@ -1,4 +1,4 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import {
   ActivityIcon,
   BriefcaseBusinessIcon,
@@ -22,13 +22,17 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useState } from 'react';
-import { data, Form, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { useEffect, useState } from 'react';
+import { data, Form, Link, redirect, useFetcher, useLoaderData, useNavigate, useSubmit } from 'react-router';
 import { AddEmailDialog } from '~/components/add-email-dialog';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
+import { LogActivityDialog } from '~/components/log-activity-dialog';
+import { MeetingDialog } from '~/components/meetings/meeting-dialog';
+import { MeetingList } from '~/components/meetings/meeting-list';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
+import { RichTextEditor } from '~/components/tiptap/rich-text-editor';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
@@ -50,6 +54,7 @@ import {
   companiesPeopleTable,
   companiesTable,
   emailsTable,
+  meetingsTable,
   peopleEmailsTable,
   peopleTable,
 } from '~/db/schema';
@@ -57,7 +62,6 @@ import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
-import { LogActivityDialog } from '~/components/log-activity-dialog';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
@@ -117,6 +121,12 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     orderBy: companiesTable.name,
   });
 
+  // Fetch all people in the organization for the meeting dialog
+  const allPeople = await db.query.peopleTable.findMany({
+    where: eq(peopleTable.organizationId, organizationId),
+    orderBy: peopleTable.name,
+  });
+
   // Fetch activities for this person
   const activities = await db.query.activitiesTable.findMany({
     where: and(eq(activitiesTable.entityType, 'person'), eq(activitiesTable.entityId, personId)),
@@ -126,6 +136,27 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
+  // Fetch meetings for this person
+  const meetings = await db.query.meetingsTable.findMany({
+    where: eq(meetingsTable.organizationId, organizationId),
+    with: {
+      meetingsPeople: {
+        with: {
+          person: true,
+        },
+      },
+      meetingsCompanies: {
+        with: {
+          company: true,
+        },
+      },
+    },
+    orderBy: (meetingsTable, { asc }) => [asc(meetingsTable.startDate)],
+  });
+
+  // Filter meetings to only those linked to this person
+  const personMeetings = meetings.filter((meeting) => meeting.meetingsPeople?.some((mp) => mp.person.id === personId));
+
   return {
     user,
     organizationId,
@@ -133,6 +164,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     tasks,
     tasksByColumn,
     allCompanies,
+    allPeople,
+    personMeetings,
   };
 };
 
@@ -786,6 +819,32 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     }
   }
 
+  // Update notes
+  if (intent === 'update-notes') {
+    const notes = formData.get('notes')?.toString() || '';
+
+    try {
+      await db
+        .update(peopleTable)
+        .set({
+          notes,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)));
+
+      await logPersonActivity({
+        personId,
+        userId,
+        activityType: 'updated',
+        description: 'Updated notes',
+      });
+
+      return data({ success: true });
+    } catch {
+      return data({ error: 'Failed to update notes' }, { status: 500 });
+    }
+  }
+
   return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
@@ -803,8 +862,57 @@ function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
+function NotesTab({ initialNotes }: { initialNotes: string }) {
+  const fetcher = useFetcher();
+  const [notes, setNotes] = useState(initialNotes);
+  const [lastSavedNotes, setLastSavedNotes] = useState(initialNotes);
+
+  // Update local state when initialNotes changes (e.g., after page refresh)
+  useEffect(() => {
+    setNotes(initialNotes);
+    setLastSavedNotes(initialNotes);
+  }, [initialNotes]);
+
+  const hasUnsavedChanges = notes !== lastSavedNotes;
+  const isSaving = fetcher.state === 'submitting';
+  const isSaved = fetcher.state === 'idle' && !hasUnsavedChanges && fetcher.data?.success;
+
+  const handleSave = () => {
+    if (!hasUnsavedChanges || isSaving) return;
+
+    const formData = new FormData();
+    formData.set('intent', 'update-notes');
+    formData.set('notes', notes);
+    fetcher.submit(formData, { method: 'post' });
+    setLastSavedNotes(notes);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden">
+      <div className="mb-4 flex items-center justify-between min-w-0">
+        <h2 className="text-sm font-semibold">Notes</h2>
+        <div className="flex items-center gap-2 shrink-0">
+          {hasUnsavedChanges && !isSaving && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
+          {isSaving && <span className="text-xs text-muted-foreground">Saving...</span>}
+          {isSaved && <span className="text-xs text-muted-foreground">Saved</span>}
+          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
+            {isSaving ? 'Saving...' : 'Save'}
+          </Button>
+        </div>
+      </div>
+      <RichTextEditor
+        value={notes}
+        onChange={setNotes}
+        placeholder="Start writing notes about this person..."
+        className="flex-1 rounded-xl max-h-[calc(100dvh-14rem)] min-w-0 max-w-full"
+      />
+    </div>
+  );
+}
+
 const PersonPage = () => {
-  const { person, tasksByColumn, allCompanies, user, organizationId } = useLoaderData<typeof loader>();
+  const { person, tasksByColumn, allCompanies, allPeople, user, organizationId, personMeetings } =
+    useLoaderData<typeof loader>();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
   const navigate = useNavigate();
@@ -1071,11 +1179,9 @@ const PersonPage = () => {
   );
 
   return (
-    <div className="flex flex-1 overflow-hidden bg-background">
+    <div className="flex flex-1 overflow-x-hidden bg-background max-w-full">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        {sidebarContent}
-      </div>
+      <div className="hidden lg:flex lg:min-w-80 lg:border-border lg:border-r lg:bg-muted/30">{sidebarContent}</div>
 
       {/* Mobile Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
@@ -1088,10 +1194,10 @@ const PersonPage = () => {
       </Sheet>
 
       {/* Middle Panel - Timeline/Activity */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col min-w-0 max-w-full overflow-x-hidden">
         {/* Header */}
-        <div className="flex h-14 items-center justify-between border-b border-border px-4">
-          <div className="flex items-center gap-3">
+        <div className="flex h-14 items-center justify-between border-b border-border px-4 min-w-0 max-w-full overflow-x-hidden">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button
               variant="ghost"
               size="sm"
@@ -1104,8 +1210,8 @@ const PersonPage = () => {
             <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
               {person.name?.charAt(0) || 'P'}
             </div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold">{person.name || 'Unnamed Person'}</h1>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base font-semibold truncate">{person.name || 'Unnamed Person'}</h1>
               {person.whopUserId && (
                 <Badge variant="outline" className="h-5 text-[10px] px-2 bg-primary">
                   Whop
@@ -1162,9 +1268,9 @@ const PersonPage = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4 flex flex-col scrollbar-thin">
+        <div className="flex-1 overflow-auto flex p-4 flex-col scrollbar-thin min-w-0 max-w-full">
           {activeTab === 'overview' && (
-            <div className="space-y-6">
+            <div className="space-y-6 max-w-full overflow-x-hidden">
               {/* Key Stats */}
               <div>
                 <div className="flex items-center gap-2 mb-4">
@@ -1234,7 +1340,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'activity' && (
-            <div className="space-y-4">
+            <div className="space-y-4 max-w-full overflow-x-hidden">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ActivityIcon className="h-4 w-4" />
@@ -1260,7 +1366,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'tasks' && (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Tasks</h2>
                 <div className="flex items-center gap-2">
@@ -1406,31 +1512,13 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'notes' && (
-            <div className="flex-1 flex flex-col">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Notes</h2>
-                <Button size="sm" className="h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New Note
-                </Button>
-              </div>
-
-              {person.notes ? (
-                <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
-                  <p className="text-sm whitespace-pre-wrap">{person.notes}</p>
-                </div>
-              ) : (
-                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                  <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-foreground">No notes yet</p>
-                  <p className="text-xs text-muted-foreground">Create a note to get started</p>
-                </div>
-              )}
+            <div className="max-w-full overflow-x-hidden">
+              <NotesTab initialNotes={person.notes || ''} />
             </div>
           )}
 
           {activeTab === 'files' && (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1447,7 +1535,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'emails' && (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Email History</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1464,19 +1552,32 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'calendar' && (
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col px-4 max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Upcoming Meetings</h2>
-                <Button size="sm" className="h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Schedule
-                </Button>
+                <MeetingDialog
+                  defaultPersonId={person.id}
+                  userId={user.id}
+                  organizationId={organizationId}
+                  companies={allCompanies}
+                  people={allPeople}
+                  trigger={
+                    <Button size="sm" className="h-8 text-xs">
+                      <Plus className="mr-1.5 h-3.5 w-3.5" />
+                      Schedule Meeting
+                    </Button>
+                  }
+                />
               </div>
-              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-foreground">No meetings scheduled</p>
-                <p className="text-xs text-muted-foreground">Schedule a meeting to get started</p>
-              </div>
+              {personMeetings.length === 0 ? (
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
+                  <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-foreground">No meetings scheduled</p>
+                  <p className="text-xs text-muted-foreground">Schedule a meeting to get started</p>
+                </div>
+              ) : (
+                <MeetingList meetings={personMeetings} />
+              )}
             </div>
           )}
         </div>

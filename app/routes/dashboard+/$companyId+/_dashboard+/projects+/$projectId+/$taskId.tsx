@@ -827,9 +827,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
   return (
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:min-w-72 lg:w-96 lg:border-r lg:border-border lg:bg-muted/30">
-        {sidebarContent}
-      </div>
+      <div className="hidden lg:flex lg:min-w-80 lg:border-border lg:border-r lg:bg-muted/30">{sidebarContent}</div>
 
       {/* Mobile Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

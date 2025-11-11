@@ -2,6 +2,7 @@ import { relations, sql } from 'drizzle-orm';
 import { sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { organizationTable } from './organization';
 import { companiesPeopleTable } from './companies-poeple';
+import { meetingsCompaniesTable } from './meetings-companies';
 
 export const companiesTable = sqliteTable('companies', {
   id: text('id').primaryKey().default(sql`(uuid4())`).notNull(),
@@ -28,6 +29,7 @@ export const companiesRelations = relations(companiesTable, ({ one, many }) => (
     references: [organizationTable.id],
   }),
   companiesPeople: many(companiesPeopleTable),
+  meetingsCompanies: many(meetingsCompaniesTable),
 }));
 
 export type CompanyType = typeof companiesTable.$inferSelect;

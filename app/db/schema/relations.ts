@@ -4,6 +4,7 @@ import { emailsTable } from './emails';
 import { organizationTable } from './organization';
 import { peopleTable } from './people';
 import { peopleEmailsTable } from './people-emails';
+import { meetingsTable } from './meetings';
 import { boardTable } from '../kanban-schemas/board';
 
 // Organization relations
@@ -11,6 +12,7 @@ export const organizationRelations = relations(organizationTable, ({ one, many }
   companies: many(companiesTable),
   emails: many(emailsTable),
   people: many(peopleTable),
+  meetings: many(meetingsTable),
   boards: one(boardTable, {
     fields: [organizationTable.id],
     references: [boardTable.companyId],

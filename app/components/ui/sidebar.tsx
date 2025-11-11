@@ -16,7 +16,7 @@ import { cn } from '~/utils';
 const SIDEBAR_WIDTH = '14rem';
 const SIDEBAR_WIDTH_MOBILE = '16rem';
 const SIDEBAR_WIDTH_ICON = '3rem';
-const SIDEBAR_KEYBOARD_SHORTCUT = 'b';
+const SIDEBAR_KEYBOARD_SHORTCUT = 'o';
 
 interface SidebarContextType {
   state: 'expanded' | 'collapsed';

@@ -19,7 +19,7 @@ type ActivityType =
   | 'subtask_created'
   | 'deleted';
 
-type EntityType = 'task' | 'person' | 'company';
+type EntityType = 'task' | 'person' | 'company' | 'meeting';
 
 interface LogActivityParams {
   entityType: EntityType;
@@ -157,4 +157,13 @@ export async function logCompanyActivity(
   },
 ) {
   await logActivity({ ...params, entityType: 'company', entityId: params.companyId, tx: params.tx });
+}
+
+export async function logMeetingActivity(
+  params: Omit<LogActivityParams, 'entityType' | 'entityId'> & {
+    meetingId: string;
+    tx?: Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
+  },
+) {
+  await logActivity({ ...params, entityType: 'meeting', entityId: params.meetingId, tx: params.tx });
 }
