@@ -25,6 +25,7 @@ const TaskDeal = ({
   person,
   amount,
   priority,
+  dueDate,
   commentsCount = 0,
 }: TaskType & {
   previousOrder: number;
@@ -324,6 +325,24 @@ const TaskDeal = ({
                   <div className="space-y-1">
                     <p className="font-medium">Deal Value</p>
                     <p className="text-xs opacity-90">${formatCurrency(amount)}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+          {dueDate && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground cursor-default">
+                    <Clock className="h-3 w-3" />
+                    <span className="truncate">{dueDate}</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start">
+                  <div className="space-y-1">
+                    <p className="font-medium">Due Date</p>
+                    <p className="text-xs opacity-90">{dueDate}</p>
                   </div>
                 </TooltipContent>
               </Tooltip>

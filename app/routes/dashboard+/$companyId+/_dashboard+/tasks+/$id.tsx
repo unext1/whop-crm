@@ -8,8 +8,6 @@ import {
   Menu,
   MessagesSquareIcon,
   MoreHorizontal,
-  Paperclip,
-  Plus,
   User,
   X,
 } from 'lucide-react';
@@ -331,15 +329,27 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         updateData.columnId = fieldValue || null;
       } else if (fieldName === 'attachmentType') {
         let attachmentType: string | null = null;
+        let attachmentName: string | null = null;
+
         if (fieldValue && fieldValue !== 'none') {
           const [type, id] = fieldValue.split(':');
           attachmentType = type;
           if (type === 'company') {
             updateData.companyId = id;
             updateData.personId = null;
+            // Get company name for better logging
+            const company = await db.query.companiesTable.findFirst({
+              where: eq(companiesTable.id, id),
+            });
+            attachmentName = company?.name || 'company';
           } else if (type === 'person') {
             updateData.personId = id;
             updateData.companyId = null;
+            // Get person name for better logging
+            const person = await db.query.peopleTable.findFirst({
+              where: eq(peopleTable.id, id),
+            });
+            attachmentName = person?.name || 'person';
           }
         } else {
           updateData.companyId = null;
@@ -347,17 +357,76 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         }
 
         // Log attachment changes as these are significant relationships
+        let description: string;
+        if (fieldValue === 'none') {
+          description = 'Removed attachment';
+        } else {
+          description = `Linked to ${attachmentName}`;
+        }
+
         await logTaskActivity({
           taskId,
           userId: user.id,
           activityType: 'updated',
-          description: fieldValue === 'none' ? 'Removed attachment' : `Attached to ${attachmentType}`,
+          description,
+          relatedEntityId: fieldValue && fieldValue !== 'none' ? fieldValue.split(':')[1] : undefined,
+          relatedEntityType: attachmentType as 'company' | 'person' | undefined,
+        });
+      }
+
+      // Get old task data for logging status changes
+      let oldTask = null;
+      if (fieldName === 'status') {
+        oldTask = await db.query.boardTaskTable.findFirst({
+          where: eq(boardTaskTable.id, taskId),
+          with: {
+            column: true,
+          },
         });
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
 
-      // Skip logging minor field updates (priority, dueDate, status) - only log major task actions
+      // Log status changes
+      if (fieldName === 'status' && oldTask) {
+        const oldColumnId = oldTask.columnId;
+        const newColumnId = fieldValue;
+
+        // Get column names for logging
+        let oldColumnName = 'None';
+        let newColumnName = 'None';
+
+        if (oldColumnId) {
+          const oldColumn = await db.query.boardColumnTable.findFirst({
+            where: eq(boardColumnTable.id, oldColumnId),
+          });
+          oldColumnName = oldColumn?.name || 'Unknown';
+        }
+
+        if (newColumnId) {
+          const newColumn = await db.query.boardColumnTable.findFirst({
+            where: eq(boardColumnTable.id, newColumnId),
+          });
+          newColumnName = newColumn?.name || 'Unknown';
+        }
+
+        // Only log if status actually changed
+        if (oldColumnId !== newColumnId) {
+          await logTaskActivity({
+            taskId,
+            userId: user.id,
+            activityType: 'status_changed',
+            description: `Status changed from ${oldColumnName} to ${newColumnName}`,
+            metadata: {
+              field: 'status',
+              oldValue: oldColumnName,
+              newValue: newColumnName,
+              oldColumnId,
+              newColumnId,
+            },
+          });
+        }
+      }
 
       return data({ success: true });
     } catch {
@@ -465,11 +534,11 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: MessagesSquareIcon },
-  { id: 'files', label: 'Files', icon: Paperclip },
+  // { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
 const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
-  const { task, user, users, allCompanies, allPeople } = loaderData;
+  const { task, user, users, allCompanies, allPeople, columns } = loaderData;
   const navigate = useNavigate();
   const fetcher = useFetcher();
   const submit = useSubmit();
@@ -529,59 +598,79 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
 
         {/* Details Section */}
         <div className="space-y-4">
+          <Separator />
+
           <div>
-            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attach to</h3>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Properties</h3>
             <div className="space-y-2">
-              <EditableSelectField
-                value={
-                  task.companyId ? `company:${task.companyId}` : task.personId ? `person:${task.personId}` : 'none'
-                }
-                fieldName="fieldValue"
-                intent="updateTaskField"
-                fieldNameParam="attachmentType"
-                placeholder="Select attachment..."
-                options={[
-                  { value: 'none', label: 'None' },
-                  ...allCompanies.map((company) => ({
-                    value: `company:${company.id}`,
-                    label: `${company.name}`,
-                  })),
-                  ...allPeople.map((person) => ({
-                    value: `person:${person.id}`,
-                    label: `${person.name}`,
-                  })),
-                ]}
-              />
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Status</p>
+                <EditableSelectField
+                  value={task.columnId || ''}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="status"
+                  placeholder="Set status..."
+                  options={columns.map((column) => ({
+                    value: column.id,
+                    label: column.name,
+                  }))}
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Due Date</p>
+                <EditableDateField
+                  value={task.dueDate}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="dueDate"
+                  placeholder="Set due date..."
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Priority</p>
+                <EditableSelectField
+                  value={task.priority}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="priority"
+                  placeholder="Set priority..."
+                  options={[
+                    { value: 'low', label: 'Low' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'high', label: 'High' },
+                  ]}
+                />
+              </div>
+              <div>
+                <h3 className="mb-2 text-xs text-muted-foreground">Attach to</h3>
+                <div className="space-y-2">
+                  <EditableSelectField
+                    value={
+                      task.companyId ? `company:${task.companyId}` : task.personId ? `person:${task.personId}` : 'none'
+                    }
+                    fieldName="fieldValue"
+                    intent="updateTaskField"
+                    fieldNameParam="attachmentType"
+                    placeholder="Select attachment..."
+                    options={[
+                      { value: 'none', label: 'None' },
+                      ...allCompanies.map((company) => ({
+                        value: `company:${company.id}`,
+                        label: `${company.name}`,
+                      })),
+                      ...allPeople.map((person) => ({
+                        value: `person:${person.id}`,
+                        label: `${person.name}`,
+                      })),
+                    ]}
+                  />
+                </div>
+              </div>
             </div>
           </div>
 
           <Separator />
-
-          {task.company && (
-            <>
-              <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attached to Company</h3>
-                <div className="flex items-center gap-2 text-sm">
-                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-foreground">{task.company.name || 'Unnamed Company'}</span>
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
-
-          {task.person && (
-            <>
-              <div>
-                <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attached to Person</h3>
-                <div className="flex items-center gap-2 text-sm">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  <span className="text-foreground">{task.person.name || 'Unnamed Person'}</span>
-                </div>
-              </div>
-              <Separator />
-            </>
-          )}
 
           <div>
             <div className="mb-2">
@@ -654,31 +743,6 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   </p>
                 </div>
               )}
-              <div>
-                <p className="text-muted-foreground">Due Date</p>
-                <EditableDateField
-                  value={task.dueDate}
-                  fieldName="fieldValue"
-                  intent="updateTaskField"
-                  fieldNameParam="dueDate"
-                  placeholder="Set due date..."
-                />
-              </div>
-              <div>
-                <p className="text-muted-foreground">Priority</p>
-                <EditableSelectField
-                  value={task.priority}
-                  fieldName="fieldValue"
-                  intent="updateTaskField"
-                  fieldNameParam="priority"
-                  placeholder="Set priority..."
-                  options={[
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' },
-                  ]}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -1013,7 +1077,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
             </div>
           )}
 
-          {activeTab === 'files' && (
+          {/* {activeTab === 'files' && (
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
@@ -1031,7 +1095,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 </Button>
               </div>
             </div>
-          )}
+          )} */}
         </div>
       </div>
     </div>

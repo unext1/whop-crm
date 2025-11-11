@@ -49,6 +49,7 @@ import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
+import { LogActivityDialog } from '~/components/log-activity-dialog';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
@@ -1222,10 +1223,11 @@ const PersonPage = () => {
           {activeTab === 'activity' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <ActivityIcon className="h-4 w-4" />
                   <h2 className="text-sm font-semibold">All Activity</h2>
                 </div>
+                <LogActivityDialog entityId={person.id} entityType="person" organizationId={organizationId} />
               </div>
               <ActivityTimeline
                 activities={person.activities}
@@ -1337,6 +1339,7 @@ const PersonPage = () => {
                   New Note
                 </Button>
               </div>
+
               {person.notes ? (
                 <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
                   <p className="text-sm whitespace-pre-wrap">{person.notes}</p>

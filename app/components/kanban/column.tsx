@@ -184,6 +184,7 @@ const Column = ({
                 person={task.person}
                 amount={task.amount}
                 priority={task.priority}
+                dueDate={task.dueDate}
               />
             );
           })}

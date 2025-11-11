@@ -14,6 +14,7 @@ import {
   companiesTable,
   peopleTable,
   taskCommentTable,
+  userTable,
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { logTaskActivity } from '~/utils/activity.server';
@@ -126,7 +127,7 @@ export async function action({ request, params }: Route.ActionArgs) {
       const taskId = String(formData.get('taskId') || 0);
       return db.delete(boardTaskTable).where(eq(boardTaskTable.id, taskId));
     }
-    
+
     case 'moveTask': {
       const order = Number(formData.get('order') || 0);
       const columnId = String(formData.get('columnId') || 0);
@@ -254,12 +255,17 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: peopleTable.name,
   });
 
-  return { board, companyId, user, companies, people };
+  const users = await db.query.userTable.findMany({
+    where: eq(userTable.organizationId, companyId),
+    orderBy: userTable.name,
+  });
+
+  return { board, companyId, user, companies, people, users };
 }
 
 const TasksPage = ({ loaderData }: Route.ComponentProps) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { board, companies, people, user } = loaderData;
+  const { board, companies, people, users, user } = loaderData;
   const [filteredTasks, setFilteredTasks] = useState(board?.tasks || []);
   const pendingItems = usePendingTasks();
 
@@ -408,6 +414,7 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
             tasks={board.tasks}
             companies={companies}
             people={people}
+            users={users}
             onFilteredTasksChange={setFilteredTasks}
             additionalFields={additionalFields}
           />

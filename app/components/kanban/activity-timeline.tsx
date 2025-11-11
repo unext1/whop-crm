@@ -1,10 +1,12 @@
-import { CheckCircle2, ChevronRight, FileText, Mail, Phone, Users } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { activityTypesOptions } from '../log-activity-dialog';
 import { Badge } from '../ui/badge';
 
 interface ActivityItem {
   id: string;
   createdAt: string;
+  activityDate?: string | null;
   description?: string | null;
   metadata?: string | null;
   user?: {
@@ -24,58 +26,6 @@ interface ActivityTimelineProps {
   onViewAll?: () => void;
   showViewAll?: boolean;
 }
-
-interface ActivityType {
-  value: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  color: string;
-  bgColor: string;
-  borderColor: string;
-}
-
-const activityTypes: ActivityType[] = [
-  {
-    value: 'meeting',
-    label: 'Meeting',
-    icon: Users,
-    color: 'text-purple-700',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-300',
-  },
-  {
-    value: 'email',
-    label: 'Email',
-    icon: Mail,
-    color: 'text-blue-700',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-300',
-  },
-  {
-    value: 'call',
-    label: 'Call',
-    icon: Phone,
-    color: 'text-green-700',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-300',
-  },
-  {
-    value: 'note',
-    label: 'Note',
-    icon: FileText,
-    color: 'text-amber-700',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-300',
-  },
-  {
-    value: 'task',
-    label: 'Task',
-    icon: CheckCircle2,
-    color: 'text-emerald-700',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-300',
-  },
-];
 
 function formatRelativeTime(date: string): string {
   // Ensure proper date parsing - if date doesn't have timezone info, treat as UTC
@@ -225,7 +175,13 @@ export function ActivityTimeline({
   showViewAll = false,
 }: ActivityTimelineProps) {
   // Combine activities with creation date if available
-  const allItems: Array<{ id: string; createdAt: string; type: 'activity' | 'creation'; activity?: ActivityItem }> = [];
+  const allItems: Array<{
+    id: string;
+    createdAt: string;
+    activityDate?: string | null;
+    type: 'activity' | 'creation';
+    activity?: ActivityItem;
+  }> = [];
 
   // Add all activities
   if (activities && activities.length > 0) {
@@ -233,6 +189,7 @@ export function ActivityTimeline({
       allItems.push({
         id: activity.id,
         createdAt: activity.createdAt,
+        activityDate: activity.activityDate,
         type: 'activity',
         activity,
       });
@@ -297,7 +254,9 @@ export function ActivityTimeline({
                         </p>
                       </div>
                     </div>
-                    <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</p>
+                    <p className="shrink-0 text-xs text-muted-foreground">
+                      {formatRelativeTime(item.activityDate || item.createdAt)}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -312,7 +271,7 @@ export function ActivityTimeline({
           // Check if this is a manually logged activity (has metadata with name, description, type)
           const isManualActivity = metadata && metadata.name && metadata.type;
           const activityType = isManualActivity
-            ? activityTypes.find((type) => type.value === (metadata as { type: string }).type)
+            ? activityTypesOptions.find((type) => type.value === (metadata as { type: string }).type)
             : null;
 
           if (isManualActivity && activityType) {
@@ -348,14 +307,11 @@ export function ActivityTimeline({
                               <div className="flex-1">
                                 <p className="text-sm font-medium text-foreground">{metadata.name}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
-                                  {formatRelativeTime(activity.createdAt)}
+                                  {formatRelativeTime(activity.activityDate || activity.createdAt)}
                                 </p>
                               </div>
                               <div className="flex items-center gap-2">
-                                <Badge
-                                  variant="secondary"
-                                  className={`${activityType.bgColor} ${activityType.color} ${activityType.borderColor} border`}
-                                >
+                                <Badge variant="default" className="capitalize">
                                   {activityType.label}
                                 </Badge>
                               </div>
@@ -411,7 +367,9 @@ export function ActivityTimeline({
                       </p>
                     </div>
                   </div>
-                  <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(activity.createdAt)}</p>
+                  <p className="shrink-0 text-xs text-muted-foreground">
+                    {formatRelativeTime(activity.activityDate || activity.createdAt)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -446,10 +404,10 @@ export function ActivityTimeline({
 
   const items = [];
   if (fallbackCreatedAt) {
-    items.push({ id: 'creation', createdAt: fallbackCreatedAt, type: 'creation' as const });
+    items.push({ id: 'creation', createdAt: fallbackCreatedAt, activityDate: null, type: 'creation' as const });
   }
   if (fallbackUpdatedAt && fallbackUpdatedAt !== fallbackCreatedAt) {
-    items.push({ id: 'update', createdAt: fallbackUpdatedAt, type: 'update' as const });
+    items.push({ id: 'update', createdAt: fallbackUpdatedAt, activityDate: null, type: 'update' as const });
   }
 
   return (
@@ -476,7 +434,9 @@ export function ActivityTimeline({
                     </p>
                   </div>
                 </div>
-                <p className="shrink-0 text-xs text-muted-foreground">{formatRelativeTime(item.createdAt)}</p>
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {item.activityDate ? formatRelativeTime(item.activityDate) : formatRelativeTime(item.createdAt)}
+                </p>
               </div>
             </div>
           </div>

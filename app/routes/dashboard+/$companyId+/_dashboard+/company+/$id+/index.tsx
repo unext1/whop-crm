@@ -843,7 +843,7 @@ const CompanyPage = () => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 flex flex-col scrollbar-thin">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Key Stats */}
@@ -917,7 +917,7 @@ const CompanyPage = () => {
           {activeTab === 'activity' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <ActivityIcon className="h-4 w-4" />
                   <h2 className="text-sm font-semibold">All Activity</h2>
                 </div>
@@ -940,7 +940,7 @@ const CompanyPage = () => {
             </div>
           )}
           {activeTab === 'tasks' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Tasks</h2>
                 <div className="flex items-center gap-2">
@@ -957,18 +957,10 @@ const CompanyPage = () => {
                 </div>
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-8 text-center shadow-sm flex-1">
                   <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">No tasks yet</p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4 h-8 text-xs"
-                    onClick={() => navigate(`/dashboard/${company.organizationId}/tasks`)}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Create first task
-                  </Button>
+                  <p className="mt-2 text-sm text-foreground">No tasks yet</p>
+                  <p className="text-xs text-muted-foreground">Create a task to get started</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1072,7 +1064,7 @@ const CompanyPage = () => {
           )}
 
           {activeTab === 'team' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Team</h2>
                 <ComboboxMultiple
@@ -1086,7 +1078,7 @@ const CompanyPage = () => {
                 />
               </div>
               {company.companiesPeople.length === 0 ? (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-8 text-center shadow-sm flex-1">
                   <Users className="mx-auto h-12 w-12 text-muted-foreground" />
                   <p className="mt-2 text-sm text-muted-foreground">No team members yet</p>
                   <p className="text-xs text-muted-foreground mt-2">Use the dropdown above to add team members</p>

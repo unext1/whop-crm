@@ -21,6 +21,7 @@ import {
   companiesTable,
   peopleTable,
   taskCommentTable,
+  userTable,
 } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
@@ -234,11 +235,16 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: peopleTable.name,
   });
 
-  return { project: project[0], companyId, projectId, user, projects, companies, people };
+  const users = await db.query.userTable.findMany({
+    where: eq(userTable.organizationId, companyId),
+    orderBy: userTable.name,
+  });
+
+  return { project: project[0], companyId, projectId, user, projects, companies, people, users };
 }
 
 const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
-  const { project, companyId, projectId, user, projects, companies, people } = loaderData;
+  const { project, companyId, projectId, user, projects, companies, people, users } = loaderData;
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = useState(project.id);
@@ -415,6 +421,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
             tasks={project.tasks}
             companies={companies}
             people={people}
+            users={users}
             onFilteredTasksChange={setFilteredTasks}
             additionalFields={additionalFields}
           />
@@ -433,9 +440,9 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
 
       {/* Create Project Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[425px] shadow-s p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg">
+        <DialogContent className="sm:max-w-[425px] border-0 p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg shadow-s">
           {/* Header */}
-          <div className="flex h-14 items-center justify-between border-b border-border px-6 bg-muted/40">
+          <div className="flex h-14 items-center justify-between border-b border-border px-6">
             <DialogTitle className="text-sm font-semibold m-0">Create Project</DialogTitle>
           </div>
 
@@ -465,7 +472,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
           </div>
 
           {/* Footer */}
-          <div className="flex h-14 items-center justify-end gap-2 border-t border-border px-6 bg-muted/40">
+          <div className="flex h-14 items-center justify-end gap-2 border-t border-border px-6">
             <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs">
               {createFetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
             </Button>

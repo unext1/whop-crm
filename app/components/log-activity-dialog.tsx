@@ -14,6 +14,7 @@ import {
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Textarea } from '~/components/ui/textarea';
+import { DateTimePicker24h } from './ui/calendar-time';
 
 interface ActivityType {
   value: string;
@@ -24,46 +25,46 @@ interface ActivityType {
   borderColor: string;
 }
 
-const activityTypes: ActivityType[] = [
+export const activityTypesOptions: ActivityType[] = [
   {
     value: 'meeting',
     label: 'Meeting',
     icon: Users,
-    color: 'text-purple-700',
-    bgColor: 'bg-purple-50',
-    borderColor: 'border-purple-300',
+    color: 'text-purple-500',
+    bgColor: 'bg-muted',
+    borderColor: 'border-muted',
   },
   {
     value: 'email',
     label: 'Email',
     icon: Mail,
-    color: 'text-blue-700',
-    bgColor: 'bg-blue-50',
-    borderColor: 'border-blue-300',
+    color: 'text-blue-500',
+    bgColor: 'bg-muted',
+    borderColor: 'border-muted',
   },
   {
     value: 'call',
     label: 'Call',
     icon: Phone,
-    color: 'text-green-700',
-    bgColor: 'bg-green-50',
-    borderColor: 'border-green-300',
+    color: 'text-green-500',
+    bgColor: 'bg-muted',
+    borderColor: 'border-muted',
   },
   {
     value: 'note',
     label: 'Note',
     icon: FileText,
-    color: 'text-amber-700',
-    bgColor: 'bg-amber-50',
-    borderColor: 'border-amber-300',
+    color: 'text-primary',
+    bgColor: 'bg-muted',
+    borderColor: 'border-muted',
   },
   {
     value: 'task',
     label: 'Task',
     icon: CheckCircle2,
-    color: 'text-emerald-700',
-    bgColor: 'bg-emerald-50',
-    borderColor: 'border-emerald-300',
+    color: 'text-emerald-500',
+    bgColor: 'bg-muted',
+    borderColor: 'border-muted',
   },
 ];
 
@@ -89,6 +90,10 @@ export function LogActivityDialog({ entityId, entityType, organizationId, trigge
     formData.append('entityId', entityId);
     formData.append('entityType', entityType);
     formData.append('activityType', selectedType.value);
+
+    // Log the selected time
+    const activityDateTime = formData.get('activityDateTime');
+    console.log('Activity DateTime:', activityDateTime);
 
     fetcher.submit(formData, {
       method: 'post',
@@ -120,9 +125,8 @@ export function LogActivityDialog({ entityId, entityType, organizationId, trigge
         <fetcher.Form onSubmit={handleSubmit} className="space-y-6">
           {/* Activity Type Selection */}
           <div className="space-y-3">
-            <Label htmlFor="activityType">Activity Type</Label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {activityTypes.map((type) => {
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {activityTypesOptions.map((type) => {
                 const Icon = type.icon;
                 const isSelected = selectedType?.value === type.value;
                 return (
@@ -130,15 +134,16 @@ export function LogActivityDialog({ entityId, entityType, organizationId, trigge
                     key={type.value}
                     type="button"
                     onClick={() => setSelectedType(type)}
-                    className={`p-3 rounded-lg border-2 transition-all hover:border-primary/50 ${
-                      isSelected ? 'border-primary bg-primary/5' : 'border-border bg-card hover:bg-accent/50'
-                    }`}
+                    className={`
+                      relative p-4 rounded-xl transition-all duration-300 bg-linear-to-bl from-muted to-muted/30 shadow-s hover:bg-muted cursor-pointer
+                      ${isSelected ? 'ring-1 ring-primary' : 'border-transparent hover:border-border/50'}
+                    `}
                   >
                     <div className="flex flex-col items-center gap-2">
-                      <div className={`p-2 rounded-full ${type.bgColor} ${type.borderColor} border`}>
-                        <Icon className={`h-4 w-4 ${type.color}`} />
-                      </div>
-                      <span className="text-sm font-medium">{type.label}</span>
+                      <Icon className={`h-5 w-5 ${type.color} ${isSelected ? 'opacity-100' : 'opacity-60'}`} />
+                      <span className={`text-xs font-medium ${isSelected ? 'opacity-100' : 'opacity-60'}`}>
+                        {type.label}
+                      </span>
                     </div>
                   </button>
                 );
@@ -169,27 +174,9 @@ export function LogActivityDialog({ entityId, entityType, organizationId, trigge
           </div>
 
           {/* Date and Time */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="activityDate">Date</Label>
-              <Input
-                id="activityDate"
-                name="activityDate"
-                type="date"
-                defaultValue={new Date().toISOString().split('T')[0]}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="activityTime">Time</Label>
-              <Input
-                id="activityTime"
-                name="activityTime"
-                type="time"
-                defaultValue={new Date().toTimeString().slice(0, 5)}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="activityDateTime">Date & Time</Label>
+            <DateTimePicker24h name="activityDateTime" placeholder="Select date and time" />
           </div>
 
           <DialogFooter>

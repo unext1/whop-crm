@@ -44,6 +44,7 @@ import {
   getPaginationParams,
   parseDataTableSearchParams,
 } from '~/utils/data-table.server';
+import type { ExtendedColumnFilter } from '~/components/data-table/types/data-table';
 import type { Route } from './+types';
 
 type PeopleWithCompany = PeopleType & {
@@ -276,8 +277,58 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     createdAt: peopleTable.createdAt,
   };
 
+  // Custom column handlers for complex relationships
+  const customColumnHandlers = {
+    emails: (filter: ExtendedColumnFilter<PeopleWithCompany>) => {
+      const { operator, value } = filter;
+
+      // Handle empty operators
+      if (operator === 'isEmpty') {
+        // People with no emails - use NOT IN subquery
+        return sql`${peopleTable.id} NOT IN (SELECT person_id FROM people_emails)`;
+      }
+      if (operator === 'isNotEmpty') {
+        // People with at least one email - use IN subquery
+        return sql`${peopleTable.id} IN (SELECT person_id FROM people_emails)`;
+      }
+
+      // Skip if value is empty
+      if (!value || (Array.isArray(value) && value.length === 0)) {
+        return undefined;
+      }
+
+      // For other operators, use IN subqueries (no correlation needed)
+      if (operator === 'iLike') {
+        return sql`${peopleTable.id} IN (
+          SELECT pe.person_id FROM people_emails pe
+          INNER JOIN emails e ON pe.email_id = e.id
+          WHERE e.email LIKE ${`%${value}%`}
+        )`;
+      }
+
+      if (operator === 'notILike') {
+        return sql`${peopleTable.id} NOT IN (
+          SELECT pe.person_id FROM people_emails pe
+          INNER JOIN emails e ON pe.email_id = e.id
+          WHERE e.email LIKE ${`%${value}%`}
+        )`;
+      }
+
+      if (operator === 'eq') {
+        return sql`${peopleTable.id} IN (
+          SELECT pe.person_id FROM people_emails pe
+          INNER JOIN emails e ON pe.email_id = e.id
+          WHERE e.email = ${value as string}
+        )`;
+      }
+
+      // For other operators, you could add more logic here
+      return undefined;
+    },
+  };
+
   // Build query conditions
-  const filterWhere = buildWhereClause(filters, joinOperator, columnMap);
+  const filterWhere = buildWhereClause(filters, joinOperator, columnMap, customColumnHandlers);
   const orderBy = buildOrderByClause(sorting, columnMap);
   const { offset, limit } = getPaginationParams(page, perPage);
 
@@ -775,8 +826,8 @@ const DashboardPage = () => {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 text-xs shadow-s">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
-                Add Person
+                <Plus className="md:mr-1.5 h-3.5 w-3.5" />
+                <span className="hidden md:block">Add Person</span>
               </Button>
             </DialogTrigger>
             <DialogContent
@@ -804,7 +855,7 @@ const DashboardPage = () => {
                 <Form method="post" id="person-form" className="space-y-4 p-6">
                   <input type="hidden" name="intent" value="createPerson" />
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="name" className="text-sm text-muted-foreground">
                         Person name <span className="text-muted-foreground">(required)</span>
@@ -896,13 +947,6 @@ const DashboardPage = () => {
                       </Label>
                       <Input id="twitter" name="twitter" placeholder="Set Twitter..." className="h-9" />
                     </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="notes" className="text-sm text-muted-foreground">
-                      Notes
-                    </Label>
-                    <Textarea id="notes" name="notes" placeholder="Set Notes..." rows={3} className="resize-none" />
                   </div>
                 </Form>
               </div>

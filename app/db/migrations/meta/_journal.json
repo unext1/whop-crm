@@ -15,6 +15,13 @@
       "when": 1762302233834,
       "tag": "0001_lush_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1762780371001,
+      "tag": "0002_unusual_warstar",
+      "breakpoints": true
     }
   ]
 }

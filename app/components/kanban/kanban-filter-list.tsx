@@ -21,6 +21,7 @@ import { Input } from '~/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '~/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Sortable, SortableContent, SortableItem, SortableItemHandle, SortableOverlay } from '~/components/ui/sortable';
+import type { CompanyType, PeopleType, UserType } from '~/db/schema';
 import { useDebouncedCallback } from '~/hooks/use-debounced-callback';
 import { cn } from '~/utils';
 import { dataTableConfig } from '../data-table/config/data-table';
@@ -28,14 +29,23 @@ import { formatDate } from '../data-table/format';
 import { generateId } from '../data-table/id';
 import { getDefaultFilterOperator, getFilterOperators } from '../data-table/lib/data-table';
 import { getFiltersStateParser } from '../data-table/parsers';
-import type { FilterOperator, JoinOperator } from '../data-table/types/data-table';
+import type { FilterOperator, JoinOperator, Option, FilterVariant } from '../data-table/types/data-table';
+import type { BoardTaskType, BoardTaskWithRelations } from '~/db/kanban-schemas/board-task';
 
 interface KanbanColumnFilter {
   id: string;
   value: string | string[];
-  variant: 'text' | 'number' | 'date' | 'dateRange' | 'boolean' | 'select' | 'multiSelect';
+  variant: FilterVariant;
   operator: FilterOperator;
   filterId: string;
+}
+
+interface KanbanFilterableField {
+  id: string;
+  label: string;
+  variant: FilterVariant;
+  placeholder?: string;
+  options?: Option[];
 }
 
 const DEBOUNCE_MS = 300;
@@ -44,10 +54,11 @@ const FILTER_SHORTCUT_KEY = 'f';
 const REMOVE_FILTER_SHORTCUTS = ['backspace', 'delete'];
 
 interface KanbanFilterListProps {
-  tasks: any[];
-  companies: any[];
-  people: any[];
-  onFilteredTasksChange: (filteredTasks: any[]) => void;
+  tasks: BoardTaskWithRelations[];
+  companies: CompanyType[];
+  people: PeopleType[];
+  users: UserType[];
+  onFilteredTasksChange: (filteredTasks: BoardTaskWithRelations[]) => void;
   debounceMs?: number;
   throttleMs?: number;
   shallow?: boolean;
@@ -64,6 +75,7 @@ export function KanbanFilterList({
   tasks,
   companies,
   people,
+  users,
   onFilteredTasksChange,
   debounceMs = DEBOUNCE_MS,
   throttleMs = THROTTLE_MS,
@@ -89,18 +101,18 @@ export function KanbanFilterList({
         id: 'assignee',
         label: 'Assignee',
         variant: 'multiSelect' as const,
-        options: people.map((person) => ({
-          value: person.id,
-          label: person.name,
+        options: users.map((user) => ({
+          value: user.id,
+          label: user.name || user.email,
         })),
       },
       {
         id: 'creator',
         label: 'Created By',
         variant: 'select' as const,
-        options: people.map((person) => ({
-          value: person.id,
-          label: person.name,
+        options: users.map((user) => ({
+          value: user.id,
+          label: user.name || user.email,
         })),
       },
       {
@@ -219,7 +231,7 @@ export function KanbanFilterList({
     });
 
     onFilteredTasksChange(filteredTasks);
-  }, [filters, tasks, joinOperator, filterableFields]);
+  }, [filters, tasks, joinOperator, filterableFields, onFilteredTasksChange]);
 
   const onFilterAdd = React.useCallback(() => {
     const field = filterableFields[0];
@@ -229,7 +241,7 @@ export function KanbanFilterList({
     debouncedSetFilters([
       ...filters,
       {
-        id: field.id as Extract<keyof any, string>,
+        id: field.id as Extract<keyof BoardTaskType, string>,
         value: '',
         variant: field.variant,
         operator: getDefaultFilterOperator(field.variant),
@@ -395,7 +407,7 @@ interface KanbanFilterItemProps {
   filterItemId: string;
   joinOperator: JoinOperator;
   setJoinOperator: (value: JoinOperator) => void;
-  filterableFields: any[];
+  filterableFields: KanbanFilterableField[];
   onFilterUpdate: (filterId: string, updates: Partial<Omit<KanbanColumnFilter, 'filterId'>>) => void;
   onFilterRemove: (filterId: string) => void;
 }
@@ -503,7 +515,7 @@ function KanbanFilterItem({
                       onSelect={(value) => {
                         const selectedField = filterableFields.find((f) => f.id === value);
                         onFilterUpdate(filter.filterId, {
-                          id: value as Extract<keyof any, string>,
+                          id: value as Extract<keyof BoardTaskType, string>,
                           variant: selectedField?.variant ?? 'text',
                           operator: getDefaultFilterOperator(selectedField?.variant ?? 'text'),
                           value: '',
@@ -584,7 +596,13 @@ function renderFilterInput({
 }: {
   filter: KanbanColumnFilter;
   inputId: string;
-  field: any;
+  field: {
+    id: string;
+    label: string;
+    variant: FilterVariant;
+    placeholder?: string;
+    options?: Array<{ value: string; label: string }>;
+  };
   onFilterUpdate: (filterId: string, updates: Partial<Omit<KanbanColumnFilter, 'filterId'>>) => void;
   showValueSelector: boolean;
   setShowValueSelector: (value: boolean) => void;
@@ -800,20 +818,20 @@ function renderFilterInput({
 }
 
 // Helper function to get task field value
-function getTaskFieldValue(task: any, fieldId: string): any {
+function getTaskFieldValue(task: BoardTaskWithRelations, fieldId: string) {
   switch (fieldId) {
     case 'name':
       return task.name;
     case 'content':
       return task.content;
     case 'assignee':
-      return task.assignees?.map((a: any) => a.user?.id).join(',') || '';
+      return task.assignees?.map((a) => a.user?.id).join(',') || '';
     case 'creator':
       return task.owner?.id || task.ownerId;
     case 'company':
-      return task.company?.id || task.companyId;
+      return task.companyId;
     case 'person':
-      return task.person?.id || task.personId;
+      return task.personId;
     case 'amount':
       return task.amount;
     case 'createdAt':

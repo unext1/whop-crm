@@ -1,6 +1,6 @@
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, like, lt, lte, ne, not, or, type SQL } from 'drizzle-orm';
-import type { AnyColumn } from 'drizzle-orm';
 import type { ColumnDef } from '@tanstack/react-table';
+import type { AnyColumn } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, isNotNull, isNull, like, lt, lte, ne, not, or, type SQL } from 'drizzle-orm';
 import { getFiltersStateParser, getSortingStateParser } from '~/components/data-table/parsers';
 import type { ExtendedColumnFilter, ExtendedColumnSort, JoinOperator } from '~/components/data-table/types/data-table';
 
@@ -60,12 +60,24 @@ export const buildWhereClause = <TData>(
   filters: ExtendedColumnFilter<TData>[],
   joinOperator: JoinOperator,
   columnMap: Record<string, AnyColumn>,
+  customColumnHandlers?: Record<string, (filter: ExtendedColumnFilter<TData>) => SQL | undefined>,
 ): SQL | undefined => {
   if (filters.length === 0) return undefined;
 
   const conditions: SQL[] = [];
 
   for (const filter of filters) {
+    // Check if there's a custom handler for this column
+    const customHandler = customColumnHandlers?.[filter.id];
+    if (customHandler) {
+      const condition = customHandler(filter);
+      if (condition) {
+        conditions.push(condition);
+      }
+      continue;
+    }
+
+    // Use default column mapping
     const column = columnMap[filter.id];
     if (!column) continue;
 

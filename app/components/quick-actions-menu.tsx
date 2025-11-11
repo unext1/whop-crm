@@ -67,9 +67,8 @@ export function QuickActionsMenu({
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48 bg-muted/30 backdrop-blur-md border-none shadow-lg">
+        <DropdownMenuContent align="end" className="w-48">
           <DropdownMenuLabel className="text-xs">Quick Actions</DropdownMenuLabel>
-          <DropdownMenuSeparator />
 
           {/* Send DM - Only for people with Whop ID */}
           {/* {type === 'person' && hasWhopId && (

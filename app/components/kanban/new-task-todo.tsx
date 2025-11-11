@@ -1,9 +1,9 @@
 /* eslint-disable jsx-a11y/no-autofocus */
 import { Building2, CableIcon, Calendar, CheckSquare, User, X } from 'lucide-react';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Form, useSubmit } from 'react-router';
-import { useRef } from 'react';
 
+import { cn } from '~/utils';
 import { Button } from '../ui/button';
 import { Calendar as CalendarComponent } from '../ui/calendar';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
@@ -11,9 +11,8 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Textarea } from '../ui/textarea';
-import { cn } from '~/utils';
 import { Switch } from '../ui/switch';
+import { Textarea } from '../ui/textarea';
 
 type Company = {
   id: string;
@@ -82,7 +81,9 @@ export function NewTaskTodo({
             <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
               <CheckSquare className="h-3.5 w-3.5" />
             </div>
-            <DialogTitle className="text-base font-semibold m-0">New Task</DialogTitle>
+            <DialogTitle className="text-base font-semibold m-0">
+              New Task {'>'} {columnName}
+            </DialogTitle>
           </div>
           <DialogClose asChild>
             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
@@ -166,41 +167,14 @@ export function NewTaskTodo({
 
             {/* Main Details */}
             <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-7 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
                 <div className="space-y-2 col-span-3">
                   <Label className="text-sm font-medium">
                     Task name <span className="text-muted-foreground">(required)</span>
                   </Label>
                   <Input autoFocus required ref={inputRef} name="name" placeholder="Enter task name..." />
                 </div>
-                <div className="space-y-2 col-span-2">
-                  <Label className="text-sm font-medium">Status</Label>
-                  <Select name="status" defaultValue={columnName}>
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue placeholder="Select status..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Todo">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-gray-400" />
-                          <span>Todo</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="In Progress">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-blue-500" />
-                          <span>In Progress</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="Done">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full bg-green-500" />
-                          <span>Done</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+
                 <div className="space-y-2 col-span-2">
                   <Label className="text-sm font-medium">Priority</Label>
                   <Select name="priority">

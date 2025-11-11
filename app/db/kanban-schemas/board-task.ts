@@ -4,9 +4,10 @@ import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { boardTable } from './board';
 import { boardColumnTable } from './board-column';
 import { taskAssigneesTable } from './task-assignees';
-import { userTable } from '../schema';
+import { userTable } from '../schema/user';
 import { taskCommentTable } from './task-comments';
-import { companiesTable, peopleTable } from '../schema';
+import { peopleTable } from '../schema/people';
+import { companiesTable } from '../schema';
 
 export const boardTaskTable = sqliteTable('board_task', {
   id: text('id').primaryKey().default(sql`(uuid4())`),
@@ -49,3 +50,10 @@ export const boardTaskRelations = relations(boardTaskTable, ({ one, many }) => (
 }));
 
 export type BoardTaskType = typeof boardTaskTable.$inferSelect;
+
+export type BoardTaskWithRelations = BoardTaskType & {
+  owner: typeof userTable.$inferSelect | null;
+  assignees: (typeof taskAssigneesTable.$inferSelect & {
+    user: typeof userTable.$inferSelect;
+  })[];
+};

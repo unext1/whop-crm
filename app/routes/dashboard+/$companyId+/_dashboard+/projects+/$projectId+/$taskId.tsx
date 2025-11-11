@@ -1,8 +1,18 @@
 import { parseWithZod } from '@conform-to/zod';
-import { and, eq } from 'drizzle-orm';
-import { ActivityIcon, CheckSquare, Edit, FileText, LayoutDashboardIcon, Menu, Paperclip, Plus, X } from 'lucide-react';
-import { useState } from 'react';
-import { data, Form, redirect, useFetcher, useNavigate } from 'react-router';
+import { and, eq, inArray } from 'drizzle-orm';
+import {
+  ActivityIcon,
+  CheckSquare,
+  FileText,
+  LayoutDashboardIcon,
+  Menu,
+  MoreHorizontal,
+  Paperclip,
+  Plus,
+  X,
+} from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { data, Form, redirect, useFetcher, useNavigate, useNavigation, useSubmit } from 'react-router';
 import { z } from 'zod';
 import { EditableDateField } from '~/components/editable-date-field';
 import { EditableSelectField } from '~/components/editable-select-field';
@@ -12,13 +22,27 @@ import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
-import { Dialog, DialogClose, DialogContent, DialogTitle } from '~/components/ui/dialog';
-import { Label } from '~/components/ui/label';
+import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { Textarea } from '~/components/ui/textarea';
 import { db } from '~/db/index';
-import { activitiesTable, boardTaskTable, taskAssigneesTable, taskCommentTable } from '~/db/schema';
+import {
+  activitiesTable,
+  boardColumnTable,
+  boardTaskTable,
+  companiesTable,
+  peopleTable,
+  taskAssigneesTable,
+  taskCommentTable,
+  userTable,
+} from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
 import { logTaskActivity } from '~/utils/activity.server';
@@ -150,27 +174,192 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data({ error: 'Field name required' }, { status: 400 });
     }
 
-    const allowedFields = ['priority', 'dueDate'];
+    const allowedFields = ['priority', 'dueDate', 'status', 'amount', 'attachmentType'];
     if (!allowedFields.includes(fieldName)) {
       return data({ error: 'Invalid field' }, { status: 400 });
     }
 
     try {
-      const updateData: Record<string, string | null> = {};
+      const updateData: Record<string, string | null | number> = {};
       if (fieldName === 'dueDate') {
         updateData.dueDate = fieldValue || null;
       } else if (fieldName === 'priority') {
         updateData.priority = fieldValue || null;
+      } else if (fieldName === 'status') {
+        // For status updates, fieldValue should be the columnId
+        updateData.columnId = fieldValue || null;
+      } else if (fieldName === 'amount') {
+        updateData.amount = fieldValue ? Number.parseInt(fieldValue, 10) : null;
+      } else if (fieldName === 'attachmentType') {
+        let attachmentType: string | null = null;
+        let attachmentName: string | null = null;
+
+        if (fieldValue && fieldValue !== 'none') {
+          const [type, id] = fieldValue.split(':');
+          attachmentType = type;
+          if (type === 'company') {
+            updateData.companyId = id;
+            updateData.personId = null;
+            // Get company name for better logging
+            const company = await db.query.companiesTable.findFirst({
+              where: eq(companiesTable.id, id),
+            });
+            attachmentName = company?.name || 'company';
+          } else if (type === 'person') {
+            updateData.personId = id;
+            updateData.companyId = null;
+            // Get person name for better logging
+            const person = await db.query.peopleTable.findFirst({
+              where: eq(peopleTable.id, id),
+            });
+            attachmentName = person?.name || 'person';
+          }
+        } else {
+          updateData.companyId = null;
+          updateData.personId = null;
+        }
+
+        // Log attachment changes as these are significant relationships
+        let description: string;
+        if (fieldValue === 'none') {
+          description = 'Removed attachment';
+        } else {
+          description = `Linked to ${attachmentName}`;
+        }
+
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'updated',
+          description,
+          relatedEntityId: fieldValue && fieldValue !== 'none' ? fieldValue.split(':')[1] : undefined,
+          relatedEntityType: attachmentType as 'company' | 'person' | undefined,
+        });
+      }
+
+      // Get old task data for logging status changes
+      let oldTask = null;
+      if (fieldName === 'status') {
+        oldTask = await db.query.boardTaskTable.findFirst({
+          where: eq(boardTaskTable.id, taskId),
+          with: {
+            column: true,
+          },
+        });
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
 
-      // Skip logging minor field updates - only log major task actions
+      // Log status changes
+      if (fieldName === 'status' && oldTask) {
+        const oldColumnId = oldTask.columnId;
+        const newColumnId = fieldValue;
+
+        // Get column names for logging
+        let oldColumnName = 'None';
+        let newColumnName = 'None';
+
+        if (oldColumnId) {
+          const oldColumn = await db.query.boardColumnTable.findFirst({
+            where: eq(boardColumnTable.id, oldColumnId),
+          });
+          oldColumnName = oldColumn?.name || 'Unknown';
+        }
+
+        if (newColumnId) {
+          const newColumn = await db.query.boardColumnTable.findFirst({
+            where: eq(boardColumnTable.id, newColumnId),
+          });
+          newColumnName = newColumn?.name || 'Unknown';
+        }
+
+        // Only log if status actually changed
+        if (oldColumnId !== newColumnId) {
+          await logTaskActivity({
+            taskId,
+            userId: user.id,
+            activityType: 'status_changed',
+            description: `Status changed from ${oldColumnName} to ${newColumnName}`,
+            metadata: {
+              field: 'status',
+              oldValue: oldColumnName,
+              newValue: newColumnName,
+              oldColumnId,
+              newColumnId,
+            },
+          });
+        }
+      }
 
       return data({ success: true });
     } catch {
       return data({ error: 'Failed to update field' }, { status: 500 });
     }
+  }
+
+  if (intent === 'updateAssignees') {
+    const assigneeIds = formData.getAll('assigneeIds') as string[];
+
+    // Get current assignees
+    const currentAssignees = await db.query.taskAssigneesTable.findMany({
+      where: eq(taskAssigneesTable.taskId, taskId),
+    });
+
+    const currentAssigneeIds = currentAssignees.map((a) => a.userId);
+    const newAssigneeIds = assigneeIds.filter(Boolean);
+
+    // Find users to add and remove
+    const toAdd = newAssigneeIds.filter((id) => !currentAssigneeIds.includes(id));
+    const toRemove = currentAssigneeIds.filter((id) => !newAssigneeIds.includes(id));
+
+    // Add new assignees
+    if (toAdd.length > 0) {
+      await db.insert(taskAssigneesTable).values(
+        toAdd.map((userId) => ({
+          taskId,
+          userId,
+        })),
+      );
+
+      // Log activity for added users
+      for (const userId of toAdd) {
+        const addedUser = await db.query.userTable.findFirst({
+          where: eq(userTable.id, userId),
+        });
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'assignee_added',
+          relatedEntityId: userId,
+          relatedEntityType: 'user',
+          description: addedUser ? `${addedUser.name} was assigned` : 'User was assigned',
+        });
+      }
+    }
+
+    // Remove old assignees
+    if (toRemove.length > 0) {
+      await db
+        .delete(taskAssigneesTable)
+        .where(and(eq(taskAssigneesTable.taskId, taskId), inArray(taskAssigneesTable.userId, toRemove)));
+
+      // Log activity for removed users
+      for (const userId of toRemove) {
+        const removedUser = await db.query.userTable.findFirst({
+          where: eq(userTable.id, userId),
+        });
+        await logTaskActivity({
+          taskId,
+          userId: user.id,
+          activityType: 'assignee_removed',
+          relatedEntityId: userId,
+          relatedEntityType: 'user',
+          description: removedUser ? `${removedUser.name} was unassigned` : 'User was unassigned',
+        });
+      }
+    }
+
+    return {};
   }
 
   const submission = parseWithZod(formData, { schema: removeUserSchema });
@@ -235,6 +424,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
   }
 
+  // Fetch available columns for status changes
+  const columns = task.boardId
+    ? await db.query.boardColumnTable.findMany({
+        where: eq(boardColumnTable.boardId, task.boardId),
+        orderBy: (boardColumnTable, { asc }) => [asc(boardColumnTable.order)],
+      })
+    : [];
+
+  // Fetch all users in the organization for assigning
+  const users = await db.query.userTable.findMany({
+    where: eq(userTable.organizationId, companyId),
+    orderBy: userTable.name,
+  });
+
+  // Fetch all companies and people in the organization for attachment selection
+  const allCompanies = await db.query.companiesTable.findMany({
+    where: eq(companiesTable.organizationId, companyId),
+    orderBy: companiesTable.name,
+  });
+
+  const allPeople = await db.query.peopleTable.findMany({
+    where: eq(peopleTable.organizationId, companyId),
+    orderBy: peopleTable.name,
+  });
+
   // Fetch activities for this task
   const activities = await db.query.activitiesTable.findMany({
     where: and(eq(activitiesTable.entityType, 'task'), eq(activitiesTable.entityId, taskId)),
@@ -244,7 +458,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { task: { ...task, activities }, user, projectId, companyId, taskId };
+  return { task: { ...task, activities }, user, projectId, companyId, taskId, columns, users, allCompanies, allPeople };
 }
 
 const tabs = [
@@ -252,16 +466,43 @@ const tabs = [
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: FileText },
   { id: 'tasks', label: 'Sub-tasks', icon: CheckSquare },
-  { id: 'files', label: 'Files', icon: Paperclip },
+  // { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
 const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
-  const { task, user, projectId, companyId } = loaderData;
+  const { task, user, projectId, companyId, columns, users, allCompanies, allPeople } = loaderData;
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const isAdding = navigation.state === 'submitting' && navigation.formData?.get('intent') === 'insertComment';
   const fetcher = useFetcher();
+  const submit = useSubmit();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [manageUsersOpen, setManageUsersOpen] = useState(false);
+  const formRef = useRef<HTMLFormElement>(null);
+
+  useEffect(() => {
+    if (isAdding) {
+      formRef.current?.reset();
+    }
+  }, [isAdding]);
+
+  // Prepare options for the assignee combobox
+  const userOptions = users.map((u) => ({
+    id: u.id,
+    name: u.name || 'Unknown User',
+    profilePictureUrl: u.profilePictureUrl || '',
+  }));
+
+  const selectedAssigneeIds = task.assignees?.map((a) => a.userId) || [];
+
+  const handleAssigneeChange = (ids: string[]) => {
+    const formData = new FormData();
+    formData.append('intent', 'updateAssignees');
+    ids.forEach((id) => {
+      formData.append('assigneeIds', id);
+    });
+    submit(formData, { method: 'post' });
+  };
 
   // Sidebar JSX
   const sidebarContent = (
@@ -279,58 +520,128 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
       <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
-        <div className="mb-6">
+        <div className="mb-2">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
             {task.name?.charAt(0) || 'T'}
           </div>
-          <h2 className="text-lg font-semibold">{task.name || 'Unnamed Task'}</h2>
+          <EditableText
+            size="lg"
+            fieldName="name"
+            value={task.name}
+            inputLabel="Edit task name"
+            buttonLabel={`Edit task "${task.name}" name`}
+          >
+            <input type="hidden" name="intent" value="updateTask" />
+            <input type="hidden" name="taskId" value={task.id} />
+          </EditableText>
         </div>
 
         {/* Details Section */}
         <div className="space-y-4">
+          <Separator />
+
           <div>
-            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Status</h3>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Properties</h3>
             <div className="space-y-2">
-              {task.column && (
-                <div className="flex items-center gap-2 text-sm">
-                  <div className="mt-0.5 h-2 w-2 rounded-full bg-primary shrink-0" />
-                  <div className="flex-1">
-                    <p className="text-foreground">{task.column.name}</p>
-                  </div>
-                </div>
-              )}
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Status</p>
+                <EditableSelectField
+                  value={task.columnId || ''}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="status"
+                  placeholder="Set status..."
+                  options={columns.map((column) => ({
+                    value: column.id,
+                    label: column.name,
+                  }))}
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Due Date</p>
+                <EditableDateField
+                  value={task.dueDate}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="dueDate"
+                  placeholder="Set due date..."
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Priority</p>
+                <EditableSelectField
+                  value={task.priority}
+                  fieldName="fieldValue"
+                  intent="updateTaskField"
+                  fieldNameParam="priority"
+                  placeholder="Set priority..."
+                  options={[
+                    { value: 'low', label: 'Low' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'high', label: 'High' },
+                  ]}
+                />
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-1">Deal Value</p>
+                <EditableText
+                  size="sm"
+                  fieldName="fieldValue"
+                  value={task.amount ? `$${task.amount.toLocaleString()}` : ''}
+                  inputLabel="Edit deal value"
+                  buttonLabel="Edit deal value"
+                >
+                  <input type="hidden" name="intent" value="updateTaskField" />
+                  <input type="hidden" name="fieldName" value="amount" />
+                </EditableText>
+              </div>
             </div>
           </div>
 
           <Separator />
 
           <div>
-            <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-medium text-muted-foreground">Assignees</h3>
-              {task.ownerId === user.id && (
-                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setManageUsersOpen(true)}>
-                  <Edit className="h-3 w-3" />
-                </Button>
-              )}
-            </div>
+            <h3 className="mb-2 text-xs font-medium text-muted-foreground">Attach to</h3>
             <div className="space-y-2">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => (
-                  <div key={assignee.userId} className="flex items-center gap-2 text-sm">
-                    <Avatar className="h-6 w-6 shrink-0">
-                      <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
-                      <AvatarFallback className="text-[10px] bg-primary text-primary-foreground">
-                        {assignee.user.name ? assignee.user.name[0].toUpperCase() : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1 overflow-hidden">
-                      <p className="truncate text-foreground">{assignee.user.name || 'Unassigned'}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground">No assignees</p>
-              )}
+              <EditableSelectField
+                value={
+                  task.companyId ? `company:${task.companyId}` : task.personId ? `person:${task.personId}` : 'none'
+                }
+                fieldName="fieldValue"
+                intent="updateTaskField"
+                fieldNameParam="attachmentType"
+                placeholder="Select attachment..."
+                options={[
+                  { value: 'none', label: 'None' },
+                  ...allCompanies.map((company) => ({
+                    value: `company:${company.id}`,
+                    label: `${company.name}`,
+                  })),
+                  ...allPeople.map((person) => ({
+                    value: `person:${person.id}`,
+                    label: `${person.name}`,
+                  })),
+                ]}
+              />
+            </div>
+          </div>
+
+          <Separator />
+
+          <div>
+            <div className="mb-2">
+              <h3 className="text-xs font-medium text-muted-foreground">Assignees</h3>
+              <div>
+                <ComboboxMultiple
+                  options={userOptions}
+                  selectedIds={selectedAssigneeIds}
+                  onSelectionChange={handleAssigneeChange}
+                  placeholder="Select assignees..."
+                  searchPlaceholder="Search users..."
+                  emptyText="No users found."
+                  className="w-full"
+                />
+              </div>
             </div>
           </div>
 
@@ -388,31 +699,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   </p>
                 </div>
               )}
-              <div>
-                <p className="text-muted-foreground mb-1">Due Date</p>
-                <EditableDateField
-                  value={task.dueDate}
-                  fieldName="fieldValue"
-                  intent="updateTaskField"
-                  fieldNameParam="dueDate"
-                  placeholder="Set due date..."
-                />
-              </div>
-              <div>
-                <p className="text-muted-foreground mb-1">Priority</p>
-                <EditableSelectField
-                  value={task.priority}
-                  fieldName="fieldValue"
-                  intent="updateTaskField"
-                  fieldNameParam="priority"
-                  placeholder="Set priority..."
-                  options={[
-                    { value: 'low', label: 'Low' },
-                    { value: 'medium', label: 'Medium' },
-                    { value: 'high', label: 'High' },
-                  ]}
-                />
-              </div>
             </div>
           </div>
         </div>
@@ -621,7 +907,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
           {activeTab === 'activity' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 mb-2">
+                <div className="flex items-center gap-2">
                   <ActivityIcon className="h-4 w-4" />
                   <h2 className="text-sm font-semibold">All Activity</h2>
                 </div>
@@ -647,9 +933,8 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
             <div className="space-y-4">
               {/* Comment Form */}
               <Card className="p-4 bg-muted/30 backdrop-blur-md border-none shadow-sm">
-                <Form method="post" className="space-y-3">
-                  <Label className="text-xs font-semibold text-muted-foreground">Add Comment</Label>
-                  <div className="flex gap-2 mt-4">
+                <Form method="post" className="space-y-3" ref={formRef}>
+                  <div className="flex gap-2">
                     <Avatar className="h-8 w-8 shrink-0">
                       <AvatarImage src={user.profilePictureUrl || ''} alt="avatar" />
                       <AvatarFallback className="text-xs bg-primary text-primary-foreground">
@@ -659,13 +944,14 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <div className="flex-1 space-y-2">
                       <Textarea
                         name="description"
-                        rows={3}
+                        rows={2}
                         placeholder="Write a comment..."
                         className="text-sm resize-none"
+                        disabled={isAdding}
                       />
-                      <div className="flex justify-end">
-                        <Button type="submit" variant="outline" size="sm" className="h-8 text-xs bg-transparent">
-                          Post
+                      <div className="flex justify-start">
+                        <Button type="submit" variant="default" size="sm" className="h-8 text-xs" disabled={isAdding}>
+                          {isAdding ? 'Posting...' : 'Post'}
                         </Button>
                       </div>
                     </div>
@@ -696,22 +982,28 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                                 year: 'numeric',
                               })}
                             </span>
+                            {comment.userId === user.id && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto">
+                                    <MoreHorizontal className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-32">
+                                  <Form method="post">
+                                    <input type="hidden" name="intent" value="removeComment" />
+                                    <input type="hidden" name="commentId" value={comment.id} />
+                                    <DropdownMenuItem asChild>
+                                      <button type="submit" className="w-full">
+                                        Delete
+                                      </button>
+                                    </DropdownMenuItem>
+                                  </Form>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </div>
                           <p className="text-sm text-foreground whitespace-pre-wrap">{comment.description}</p>
-                          {comment.userId === user.id && (
-                            <fetcher.Form method="post" className="mt-2">
-                              <input type="hidden" name="intent" value="removeComment" />
-                              <input type="hidden" name="commentId" value={comment.id} />
-                              <Button
-                                type="submit"
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 text-xs text-muted-foreground hover:text-destructive"
-                              >
-                                Delete
-                              </Button>
-                            </fetcher.Form>
-                          )}
                         </div>
                       </div>
                     </Card>
@@ -767,59 +1059,6 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
           )}
         </div>
       </div>
-
-      {/* Manage Users Dialog */}
-      <Dialog open={manageUsersOpen} onOpenChange={setManageUsersOpen}>
-        <DialogContent
-          className="sm:max-w-xl p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
-          showCloseButton={false}
-        >
-          <div className="flex h-14 items-center justify-between border-b border-border px-6 bg-muted/40">
-            <DialogTitle className="text-sm font-semibold m-0">Manage Users</DialogTitle>
-            <DialogClose asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-            </DialogClose>
-          </div>
-          <div className="overflow-auto max-h-[calc(100vh-180px)] p-6">
-            <div className="space-y-3">
-              {task.assignees && task.assignees.length > 0 ? (
-                task.assignees.map((assignee) => {
-                  return (
-                    <div
-                      key={assignee.taskId}
-                      className="flex items-center justify-between p-3 rounded-lg border border-border bg-card"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={assignee.user.profilePictureUrl || ''} alt="avatar" />
-                          <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                            {assignee.user.name ? assignee.user.name[0].toUpperCase() : ''}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm font-medium">{assignee.user.name}</span>
-                      </div>
-                      {task.ownerId === user.id ? (
-                        <fetcher.Form method="post" action={`/dashboard/${companyId}/projects/${projectId}/removeUser`}>
-                          <input type="hidden" value={assignee.userId} name="userId" />
-                          <input type="hidden" value={task.id} name="taskId" />
-                          <Button type="submit" variant="ghost" size="sm" className="h-7 w-7 text-xs">
-                            ×
-                          </Button>
-                        </fetcher.Form>
-                      ) : null}
-                    </div>
-                  );
-                })
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-8">No users assigned</p>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

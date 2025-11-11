@@ -24,7 +24,7 @@ export function AppSidebar({
       title: 'Workspace',
       items: [
         {
-          title: 'Dashboard',
+          title: 'Overview',
           url: href('/dashboard/:companyId', { companyId: params.companyId || '' }),
           icon: LayoutDashboardIcon,
         },
@@ -61,7 +61,7 @@ export function AppSidebar({
   return (
     <Sidebar collapsible="icon" variant="sidebar" {...props}>
       <SidebarHeader className="border-b flex items-start justify-center overflow-hidden ">
-        <div className="w-full py-1.5">
+        <div className="w-full py-0.5">
           <Link
             to={href('/dashboard/:companyId', { companyId: params.companyId as string })}
             className="flex items-center justify-center"

@@ -5,6 +5,7 @@ import { userTable } from './user';
 export const activitiesTable = sqliteTable('activities', {
   id: text('id').primaryKey().default(sql`(uuid4())`).notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),
+  activityDate: text('activity_date'), // When the activity actually occurred (for logging past activities)
   entityType: text('entity_type').notNull(), // 'task', 'person', 'company'
   entityId: text('entity_id').notNull(),
   userId: text('user_id').references(() => userTable.id, { onDelete: 'set null' }),

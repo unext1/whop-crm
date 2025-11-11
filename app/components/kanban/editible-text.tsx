@@ -32,6 +32,7 @@ export function EditableText({
   inputLabel,
   buttonLabel,
   size,
+  className,
 }: {
   children: React.ReactNode;
   fieldName: string;
@@ -39,6 +40,7 @@ export function EditableText({
   inputLabel: string;
   buttonLabel: string;
   size?: 'sm' | 'md' | 'lg';
+  className?: string;
 }) {
   const fetcher = useFetcher();
   const [edit, setEdit] = useState(false);
@@ -72,6 +74,7 @@ export function EditableText({
           size === 'md' && 'w-full h-8 text-xs md:text-xs font-semibold',
           size === 'lg' && 'w-full h-12 text-base md:text-xl font-semibold px-0 md:px-0',
           size === undefined && 'w-full h-8 md:text-xs text-xs font-semibold',
+          className,
         )}
         aria-label={inputLabel}
         name={fieldName}
@@ -103,6 +106,7 @@ export function EditableText({
         size === 'lg' && 'text-base md:text-xl justify-start h-12 w-full px-0 md:px-0 font-semibold ',
         size === undefined && 'text-xs justify-start h-8 w-full px-[13px] font-semibold ',
         'hover:bg-muted',
+        className,
       )}
       ref={buttonRef}
       onClick={() => {
