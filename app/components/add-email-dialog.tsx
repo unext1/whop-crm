@@ -3,10 +3,8 @@ import { Mail, Plus, X, Star, StarOff } from 'lucide-react';
 import { Button } from '~/components/ui/button';
 import {
   Dialog,
+  DialogClose,
   DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from '~/components/ui/dialog';
@@ -71,16 +69,26 @@ export function AddEmailDialog({ trigger, onAddEmails }: AddEmailDialogProps) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] bg-muted/30 shadow-s backdrop-blur-md border-none">
-        <DialogHeader>
-          <DialogTitle>Add Email Addresses</DialogTitle>
-          <DialogDescription>
-            Add one or more email addresses for this person. You can mark one as primary.
-          </DialogDescription>
-        </DialogHeader>
+      <DialogContent className="sm:max-w-[425px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-s" showCloseButton={false}>
+        {/* Header */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+              <Mail className="h-3.5 w-3.5" />
+            </div>
+            <DialogTitle className="text-base font-semibold m-0">Add Email Addresses</DialogTitle>
+          </div>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogClose>
+        </div>
 
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4 py-4">
+        {/* Form Content */}
+        <div className="overflow-auto max-h-[calc(100vh-180px)]">
+          <form id="add-email-form" onSubmit={handleSubmit} className="space-y-4 p-6">
             {emails.map((email, index) => (
               <div key={email.id} className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -91,12 +99,12 @@ export function AddEmailDialog({ trigger, onAddEmails }: AddEmailDialogProps) {
                       variant="ghost"
                       size="sm"
                       onClick={() => setPrimaryEmail(email.isPrimary ? '' : email.id)}
-                      className="h-6 w-6 p-0"
+                      className="h-8 w-8 p-0"
                     >
                       {email.isPrimary ? (
-                        <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                        <Star className="h-3.5 w-3.5 fill-yellow-400 text-yellow-400" />
                       ) : (
-                        <StarOff className="h-3 w-3 text-muted-foreground" />
+                        <StarOff className="h-3.5 w-3.5 text-muted-foreground" />
                       )}
                     </Button>
                     {emails.length > 1 && (
@@ -105,9 +113,9 @@ export function AddEmailDialog({ trigger, onAddEmails }: AddEmailDialogProps) {
                         variant="ghost"
                         size="sm"
                         onClick={() => removeEmail(email.id)}
-                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="h-3.5 w-3.5" />
                       </Button>
                     )}
                   </div>
@@ -149,22 +157,28 @@ export function AddEmailDialog({ trigger, onAddEmails }: AddEmailDialogProps) {
               </div>
             ))}
 
-            <Button type="button" variant="outline" size="sm" onClick={addEmail} className="w-full">
-              <Plus className="mr-2 h-3 w-3" />
+            <Button type="button" variant="outline" size="sm" onClick={addEmail} className="w-full h-8 text-xs">
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
               Add Another Email
             </Button>
-          </div>
+          </form>
+        </div>
 
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!hasValidEmails}>
-              <Mail className="mr-2 h-3 w-3" />
+        {/* Footer */}
+        <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2">{/* Empty space for alignment */}</div>
+          <div className="flex items-center gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="submit" form="add-email-form" size="sm" className="h-8 text-xs" disabled={!hasValidEmails}>
+              <Mail className="mr-1.5 h-3.5 w-3.5" />
               Add Emails
             </Button>
-          </DialogFooter>
-        </form>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

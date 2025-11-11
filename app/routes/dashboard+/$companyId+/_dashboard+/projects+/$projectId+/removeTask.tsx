@@ -12,7 +12,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   const formData = await request.formData();
   const taskId = String(formData.get('taskId') || '');
 
-  // TODO: Check if owner removing task
   await db.delete(boardTaskTable).where(eq(boardTaskTable.id, taskId));
 
   return redirect(`/dashboard/${companyId}/projects/${projectId}`);

@@ -14,14 +14,16 @@ import {
   Mail,
   MapPin,
   Menu,
+  MoreHorizontal,
   Paperclip,
   Phone,
   Plus,
   Twitter,
+  Users,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { data, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { data, Form, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
 import { AddEmailDialog } from '~/components/add-email-dialog';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
@@ -31,6 +33,12 @@ import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '~/components/ui/dropdown-menu';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
 import { db } from '~/db';
@@ -80,6 +88,11 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     where: and(eq(boardTaskTable.personId, personId), eq(boardTaskTable.type, 'tasks')),
     with: {
       column: true,
+      assignees: {
+        with: {
+          user: true,
+        },
+      },
     },
     orderBy: boardTaskTable.order,
   });
@@ -890,7 +903,7 @@ const PersonPage = () => {
               <h3 className="text-xs font-medium text-muted-foreground">Contact</h3>
               <AddEmailDialog
                 trigger={
-                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                  <Button variant="ghost" size="sm" className="h-8 text-xs px-2">
                     <Plus className="mr-1 h-3 w-3" />
                     Email
                   </Button>
@@ -1160,7 +1173,7 @@ const PersonPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Job Title */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Job Title</p>
@@ -1171,7 +1184,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Companies */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Companies</p>
                       <div className="flex items-center gap-2">
@@ -1182,7 +1195,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Tasks Count */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
@@ -1211,7 +1224,7 @@ const PersonPage = () => {
                 />
 
                 {(!person.activities || person.activities.length === 0) && (
-                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                   </div>
@@ -1238,7 +1251,7 @@ const PersonPage = () => {
               />
 
               {(!person.activities || person.activities.length === 0) && (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                   <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                   <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                 </div>
@@ -1254,6 +1267,8 @@ const PersonPage = () => {
                   <QuickTodoDialog
                     personId={person.id}
                     userId={user.id}
+                    companies={[]}
+                    people={[]}
                     trigger={
                       <Button size="sm" className="h-8 text-xs">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
@@ -1264,10 +1279,10 @@ const PersonPage = () => {
                 </div>
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
-                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-8 text-center shadow-sm flex-1">
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
                   <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-foreground">No tasks yet</p>
-                  <p className="text-xs text-muted-foreground">Create a task to get started</p>
+                  <p className="mt-2 text-sm font-semibold">No tasks yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">Create a task to get started</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1281,12 +1296,9 @@ const PersonPage = () => {
                       </h3>
                       <div className="space-y-2">
                         {tasks.map((task) => (
-                          <div
-                            key={task.id}
-                            className="rounded-lg border border-border bg-card p-3 shadow-sm hover:border-primary/50 transition-colors"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div className="flex items-start gap-2 flex-1">
+                          <Card key={task.id} className="p-4 bg-muted/30 border-0 shadow-s">
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="flex items-start gap-2 flex-1 min-w-0">
                                 {columnName.toLowerCase() === 'done' || columnName.toLowerCase() === 'completed' ? (
                                   <button
                                     type="button"
@@ -1297,8 +1309,9 @@ const PersonPage = () => {
                                       formData.append('columnName', 'Todo');
                                       submit(formData, { method: 'post' });
                                     }}
+                                    className="shrink-0 mt-0.5"
                                   >
-                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                    <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
                                   </button>
                                 ) : (
                                   <button
@@ -1310,17 +1323,79 @@ const PersonPage = () => {
                                       formData.append('columnName', 'Done');
                                       submit(formData, { method: 'post' });
                                     }}
+                                    className="shrink-0 mt-0.5"
                                   >
-                                    <Circle className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                                    <Circle className="h-4 w-4 text-muted-foreground" />
                                   </button>
                                 )}
-                                <div className="flex-1">
-                                  <h4 className="text-sm font-medium">{task.name}</h4>
-                                  {task.content && <p className="text-xs text-muted-foreground mt-1">{task.content}</p>}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <h4 className="text-sm font-medium truncate">{task.name}</h4>
+                                    {task.priority && (
+                                      <Badge variant="outline" className="h-5 text-[10px] px-1.5 capitalize shrink-0">
+                                        {task.priority}
+                                      </Badge>
+                                    )}
+                                    {task.column && (
+                                      <Badge variant="secondary" className="h-5 text-[10px] px-1.5 shrink-0">
+                                        {task.column.name}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  {task.content && (
+                                    <p className="text-xs text-muted-foreground line-clamp-2">{task.content}</p>
+                                  )}
+                                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                    {task.dueDate && (
+                                      <span className="flex items-center gap-1">
+                                        <Calendar className="h-3 w-3" />
+                                        {new Date(task.dueDate).toLocaleDateString()}
+                                      </span>
+                                    )}
+                                    {task.assignees && task.assignees.length > 0 && (
+                                      <span className="flex items-center gap-1">
+                                        <Users className="h-3 w-3" />
+                                        {task.assignees.length}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-32">
+                                  <DropdownMenuItem asChild>
+                                    <Link
+                                      to={`/dashboard/${organizationId}/tasks/${task.id}`}
+                                      className="w-full cursor-pointer"
+                                    >
+                                      View
+                                    </Link>
+                                  </DropdownMenuItem>
+                                  <Form
+                                    method="post"
+                                    action={`/dashboard/${organizationId}/api/delete-todo`}
+                                    onSubmit={(e) => {
+                                      if (!confirm('Are you sure you want to delete this task?')) {
+                                        e.preventDefault();
+                                      }
+                                    }}
+                                  >
+                                    <input type="hidden" name="taskId" value={task.id} />
+                                    <DropdownMenuItem asChild>
+                                      <button type="submit" className="w-full text-destructive">
+                                        Delete
+                                      </button>
+                                    </DropdownMenuItem>
+                                  </Form>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
-                          </div>
+                          </Card>
                         ))}
                       </div>
                     </div>
@@ -1331,7 +1406,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'notes' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Notes</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1345,20 +1420,17 @@ const PersonPage = () => {
                   <p className="text-sm whitespace-pre-wrap">{person.notes}</p>
                 </div>
               ) : (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
                   <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">No notes yet</p>
-                  <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Create first note
-                  </Button>
+                  <p className="mt-2 text-sm text-foreground">No notes yet</p>
+                  <p className="text-xs text-muted-foreground">Create a note to get started</p>
                 </div>
               )}
             </div>
           )}
 
           {activeTab === 'files' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1366,19 +1438,16 @@ const PersonPage = () => {
                   Upload
                 </Button>
               </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
                 <Paperclip className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">No files yet</p>
-                <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Upload first file
-                </Button>
+                <p className="mt-2 text-sm text-foreground">No files yet</p>
+                <p className="text-xs text-muted-foreground">Upload a file to get started</p>
               </div>
             </div>
           )}
 
           {activeTab === 'emails' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Email History</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1386,19 +1455,16 @@ const PersonPage = () => {
                   Compose
                 </Button>
               </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
                 <Mail className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">No emails yet</p>
-                <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                  <Mail className="mr-1.5 h-3.5 w-3.5" />
-                  Send first email
-                </Button>
+                <p className="mt-2 text-sm text-foreground">No emails yet</p>
+                <p className="text-xs text-muted-foreground">Send an email to get started</p>
               </div>
             </div>
           )}
 
           {activeTab === 'calendar' && (
-            <div className="">
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Upcoming Meetings</h2>
                 <Button size="sm" className="h-8 text-xs">
@@ -1406,13 +1472,10 @@ const PersonPage = () => {
                   Schedule
                 </Button>
               </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
                 <Calendar className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">No meetings scheduled</p>
-                <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Schedule first meeting
-                </Button>
+                <p className="mt-2 text-sm text-foreground">No meetings scheduled</p>
+                <p className="text-xs text-muted-foreground">Schedule a meeting to get started</p>
               </div>
             </div>
           )}

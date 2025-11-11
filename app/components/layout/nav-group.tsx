@@ -58,7 +58,7 @@ const SidebarMenuLink = ({ item, href }: { item: MenuItem; href: string }) => {
         asChild
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
-        className="data-[active=true]:bg-muted text-sm py-0"
+        className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted text-sm py-0"
       >
         <Link to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
@@ -72,11 +72,16 @@ const SidebarMenuLink = ({ item, href }: { item: MenuItem; href: string }) => {
 
 const SidebarMenuCollapsible = ({ item, href }: { item: NavCollapsible; href: string }) => {
   const { setOpenMobile } = useSidebar();
+  const isActive = checkIsActive(href, item, true);
   return (
-    <Collapsible asChild defaultOpen={checkIsActive(href, item, true)} className="group/collapsible">
+    <Collapsible asChild defaultOpen={isActive} className="group/collapsible">
       <SidebarMenuItem>
         <CollapsibleTrigger asChild>
-          <SidebarMenuButton tooltip={item.title}>
+          <SidebarMenuButton
+            tooltip={item.title}
+            isActive={isActive}
+            className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+          >
             {item.icon && <item.icon />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
@@ -87,7 +92,11 @@ const SidebarMenuCollapsible = ({ item, href }: { item: NavCollapsible; href: st
           <SidebarMenuSub>
             {item.items.map((subItem) => (
               <SidebarMenuSubItem key={subItem.title}>
-                <SidebarMenuSubButton asChild isActive={checkIsActive(href, subItem)}>
+                <SidebarMenuSubButton
+                  asChild
+                  isActive={checkIsActive(href, subItem)}
+                  className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+                >
                   <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                     {subItem.icon && <subItem.icon />}
                     <span>{subItem.title}</span>
@@ -104,11 +113,16 @@ const SidebarMenuCollapsible = ({ item, href }: { item: NavCollapsible; href: st
 };
 
 const SidebarMenuCollapsedDropdown = ({ item, href }: { item: NavCollapsible; href: string }) => {
+  const isActive = checkIsActive(href, item, true);
   return (
     <SidebarMenuItem>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <SidebarMenuButton tooltip={item.title} isActive={checkIsActive(href, item)}>
+          <SidebarMenuButton
+            tooltip={item.title}
+            isActive={isActive}
+            className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+          >
             {item.icon && <item.icon />}
             <span>{item.title}</span>
             {item.badge && <NavBadge>{item.badge}</NavBadge>}
@@ -122,7 +136,10 @@ const SidebarMenuCollapsedDropdown = ({ item, href }: { item: NavCollapsible; hr
           <DropdownMenuSeparator />
           {item.items.map((sub) => (
             <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
-              <NavLink to={sub.url} className={`${checkIsActive(href, sub) ? 'bg-secondary' : ''}`}>
+              <NavLink
+                to={sub.url}
+                className={`${checkIsActive(href, sub) ? 'bg-linear-to-bl from-muted to-muted/30 shadow-s border-0' : ''} hover:bg-muted`}
+              >
                 {sub.icon && <sub.icon />}
                 <span className="max-w-52 text-wrap">{sub.title}</span>
                 {sub.badge && <span className="ml-auto text-xs">{sub.badge}</span>}
@@ -134,12 +151,66 @@ const SidebarMenuCollapsedDropdown = ({ item, href }: { item: NavCollapsible; hr
     </SidebarMenuItem>
   );
 };
-
 function checkIsActive(href: string, item: NavItem, mainNav = false) {
-  return (
-    href === item.url ||
-    href.split('?')[0] === item.url ||
-    !!item?.items?.filter((i) => i.url === href).length ||
-    (mainNav && href.split('/')[1] !== '' && href.split('/')[1] === item?.url?.split('/')[1])
-  );
+  const currentPath = href.split('?')[0];
+
+  // Handle collapsible items (with sub-items) - type guard
+  const isCollapsible = (navItem: NavItem): navItem is NavCollapsible => {
+    return 'items' in navItem && Array.isArray(navItem.items);
+  };
+
+  if (isCollapsible(item)) {
+    // Check if any sub-item matches
+    const subItemMatch = item.items.some((subItem) => {
+      if (!subItem.url) return false;
+      const subItemPath = subItem.url.split('?')[0];
+      return currentPath === subItemPath || currentPath.startsWith(subItemPath + '/');
+    });
+    if (subItemMatch) return true;
+
+    // For main nav collapsible items, check if we're on a matching route pattern
+    // This handles cases like "Deals" highlighting when on /projects/:projectId
+    if (mainNav) {
+      // Check if we're on a projects route (for "Deals" collapsible)
+      // Match patterns like /dashboard/:companyId/projects or /dashboard/:companyId/projects/:projectId
+      const projectsMatch = /\/projects(\/|$)/.test(currentPath);
+      if (projectsMatch) return true;
+    }
+  }
+
+  // Handle regular menu items (with url) - type guard
+  const isMenuItem = (navItem: NavItem): navItem is MenuItem => {
+    return 'url' in navItem && typeof navItem.url === 'string';
+  };
+
+  if (isMenuItem(item)) {
+    const itemPath = item.url.split('?')[0];
+
+    // Exact match
+    if (currentPath === itemPath) return true;
+
+    // Routes that should only match exactly (not their children):
+    // - Base dashboard route: /dashboard/:companyId (Overview)
+    // - Tasks route: /dashboard/:companyId/tasks
+    const isExactOnlyRoute = itemPath.match(/^\/dashboard\/[^/]+$/) || itemPath.endsWith('/tasks');
+
+    // For routes that should match child routes (like /company matching /company/:id)
+    // Only apply startsWith if the item path is not an exact-only route
+    if (!isExactOnlyRoute && currentPath.startsWith(itemPath + '/')) {
+      return true;
+    }
+
+    // For main nav items, check if the route segment matches (e.g., /company matches /company/:id)
+    if (mainNav && !isExactOnlyRoute) {
+      const currentSegments = currentPath.split('/').filter(Boolean);
+      const itemSegments = itemPath.split('/').filter(Boolean);
+
+      // Check if all item segments match the beginning of current segments
+      if (itemSegments.length > 0 && currentSegments.length >= itemSegments.length) {
+        return itemSegments.every((segment, index) => segment === currentSegments[index]);
+      }
+    }
+  }
+
+  return false;
 }

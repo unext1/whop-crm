@@ -27,6 +27,7 @@ export const boardTaskTable = sqliteTable('board_task', {
 
   personId: text('person_id').references(() => peopleTable.id, { onDelete: 'set null' }),
   companyId: text('company_id').references(() => companiesTable.id, { onDelete: 'set null' }),
+  parentTaskId: text('parent_task_id'),
   status: text('status').default('open').notNull(),
   dueDate: text('due_date'),
   priority: text('priority'), // 'low', 'medium', 'high'
@@ -47,6 +48,14 @@ export const boardTaskRelations = relations(boardTaskTable, ({ one, many }) => (
   }),
   comments: many(taskCommentTable),
   assignees: many(taskAssigneesTable),
+  parentTask: one(boardTaskTable, {
+    fields: [boardTaskTable.parentTaskId],
+    references: [boardTaskTable.id],
+    relationName: 'parent',
+  }),
+  subTasks: many(boardTaskTable, {
+    relationName: 'parent',
+  }),
 }));
 
 export type BoardTaskType = typeof boardTaskTable.$inferSelect;

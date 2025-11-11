@@ -1,4 +1,4 @@
-import { Building2, Calendar, Circle, Clock, MessageCircle, RotateCcw, User, Users } from 'lucide-react';
+import { Building2, Calendar, Circle, Clock, DollarSign, MessageCircle, RotateCcw, User, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useState } from 'react';
 import { Link, useParams, useSubmit } from 'react-router';
@@ -36,6 +36,7 @@ const TaskTodo = ({
   priority,
   company,
   person,
+  parentDeal,
   commentsCount = 0,
 }: TaskType & {
   previousOrder: number;
@@ -44,6 +45,7 @@ const TaskTodo = ({
   priority?: string | null;
   company?: { id: string; name: string | null } | null;
   person?: { id: string; name: string | null } | null;
+  parentDeal?: { id: string; name: string; boardId: string | null } | null;
   commentsCount?: number;
 }) => {
   const submit = useSubmit();
@@ -286,6 +288,34 @@ const TaskTodo = ({
           )}
 
           {/* Relations Row */}
+          {parentDeal && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={
+                      parentDeal.boardId
+                        ? `/dashboard/${companyId}/projects/${parentDeal.boardId}/${parentDeal.id}`
+                        : '#'
+                    }
+                    className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-1">
+                      <DollarSign className="h-3 w-3" />
+                      <span className="truncate">{parentDeal.name || 'Unnamed Deal'}</span>
+                    </div>
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="start">
+                  <div className="space-y-1">
+                    <p className="font-medium">Deal</p>
+                    <p className="text-xs opacity-90">{parentDeal.name || 'Unnamed Deal'}</p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
           {company && (
             <TooltipProvider>
               <Tooltip>

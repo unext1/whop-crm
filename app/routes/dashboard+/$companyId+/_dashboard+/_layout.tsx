@@ -8,9 +8,9 @@ import { useToast } from '~/components/ui/use-toast';
 import { popToast } from '~/services/cookie.server';
 import { cn } from '~/utils';
 import type { Route } from './+types/_layout';
-import { organizationTable, userTable } from '~/db/schema';
+import { boardTable, boardTaskTable, companiesTable, organizationTable, peopleTable, userTable } from '~/db/schema';
 import { db } from '~/db';
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/services/whop.server';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
@@ -77,19 +77,69 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   // If both org and user exist, or we're already on onboarding, continue
   const { toast: toastData, headers } = await popToast(request);
 
+  // Optimize all queries using transaction and count queries
+  const { allDeals, gettingStarted } = await db.transaction(async (tx) => {
+    // Get deals (only need id and name)
+    const deals = await tx.query.boardTable.findMany({
+      columns: {
+        id: true,
+        name: true,
+      },
+      where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
+    });
+
+    // Get board IDs for task queries
+    const boardIds = await tx.select({ id: boardTable.id }).from(boardTable).where(eq(boardTable.companyId, companyId));
+
+    const boardIdArray = boardIds.map((b) => b.id);
+
+    // Batch all count queries for getting started progress
+    const [peopleCount, companiesCount, tasksCount, dealsCount] = await Promise.all([
+      tx.select({ count: sql<number>`count(*)` }).from(peopleTable).where(eq(peopleTable.organizationId, companyId)),
+      tx
+        .select({ count: sql<number>`count(*)` })
+        .from(companiesTable)
+        .where(eq(companiesTable.organizationId, companyId)),
+      boardIdArray.length > 0
+        ? tx
+            .select({ count: sql<number>`count(*)` })
+            .from(boardTaskTable)
+            .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'tasks')))
+        : Promise.resolve([{ count: 0 }]),
+      boardIdArray.length > 0
+        ? tx
+            .select({ count: sql<number>`count(*)` })
+            .from(boardTaskTable)
+            .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'pipeline')))
+        : Promise.resolve([{ count: 0 }]),
+    ]);
+
+    return {
+      allDeals: deals,
+      gettingStarted: {
+        hasPerson: Number(peopleCount[0]?.count || 0) > 0,
+        hasCompany: Number(companiesCount[0]?.count || 0) > 0,
+        hasTask: Number(tasksCount[0]?.count || 0) > 0,
+        hasDeal: Number(dealsCount[0]?.count || 0) > 0,
+      },
+    };
+  });
+
   return data(
     {
       user,
       toastData,
       organization,
       selectedOrganization: companyId,
+      allDeals,
+      gettingStarted,
     },
     { headers },
   );
 };
 
 const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
-  const { user, toastData, organization } = loaderData;
+  const { user, toastData, organization, allDeals, gettingStarted } = loaderData;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -104,7 +154,7 @@ const DashboardLayout = ({ loaderData }: Route.ComponentProps) => {
 
   return (
     <SidebarProvider>
-      {user && <AppSidebar user={user} organization={organization} />}
+      {user && <AppSidebar user={user} organization={organization} deals={allDeals} gettingStarted={gettingStarted} />}
       <div
         id="content"
         className={cn(

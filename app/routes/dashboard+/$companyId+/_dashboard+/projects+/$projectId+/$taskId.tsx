@@ -2,6 +2,7 @@ import { parseWithZod } from '@conform-to/zod';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   ActivityIcon,
+  Calendar,
   CheckSquare,
   FileText,
   LayoutDashboardIcon,
@@ -9,17 +10,19 @@ import {
   MoreHorizontal,
   Paperclip,
   Plus,
+  Users,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { data, Form, redirect, useFetcher, useNavigate, useNavigation, useSubmit } from 'react-router';
+import { data, Form, Link, redirect, useFetcher, useNavigate, useNavigation, useParams, useSubmit } from 'react-router';
 import { z } from 'zod';
 import { EditableDateField } from '~/components/editable-date-field';
 import { EditableSelectField } from '~/components/editable-select-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { EditableText } from '~/components/kanban/editible-text';
-import { QuickActionsMenu } from '~/components/quick-actions-menu';
+import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
+import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
@@ -36,6 +39,7 @@ import { db } from '~/db/index';
 import {
   activitiesTable,
   boardColumnTable,
+  boardTable,
   boardTaskTable,
   companiesTable,
   peopleTable,
@@ -47,6 +51,7 @@ import { requireUser } from '~/services/whop.server';
 import { cn } from '~/utils';
 import { logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types/$taskId';
+import { QuickActionsMenu } from '~/components/quick-actions-menu';
 
 const removeUserSchema = z.object({
   invitedUser: z.string(),
@@ -66,7 +71,7 @@ const removeCommentSchema = z.object({
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { user } = await requireUser(request, params.companyId);
-  const { taskId } = params;
+  const { taskId, companyId } = params;
 
   const formData = await request.formData();
   const intent = formData.get('intent');
@@ -362,6 +367,90 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return {};
   }
 
+  if (intent === 'createQuickTodo') {
+    const name = String(formData.get('name') || '');
+    const content = formData.get('content') ? String(formData.get('content')) : null;
+    const priority = formData.get('priority') ? String(formData.get('priority')) : null;
+    const dueDate = formData.get('dueDate') ? String(formData.get('dueDate')) : null;
+    const relatedDealId = formData.get('parentTaskId') ? String(formData.get('parentTaskId')) : null;
+
+    if (!name) {
+      return data({ error: 'Task name required' }, { status: 400 });
+    }
+
+    // If relatedDealId is provided, create a regular task linked to the deal
+    if (relatedDealId) {
+      const deal = await db.query.boardTaskTable.findFirst({
+        where: eq(boardTaskTable.id, relatedDealId),
+      });
+
+      if (!deal) {
+        return data({ error: 'Deal not found' }, { status: 404 });
+      }
+
+      // Ensure tasks board exists
+      const tasksBoard = await db.query.boardTable.findFirst({
+        where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'tasks')),
+      });
+
+      if (!tasksBoard) {
+        return data({ error: 'Tasks board not found' }, { status: 500 });
+      }
+
+      // Get the Todo column from existing tasks board
+      const todoColumn = await db.query.boardColumnTable.findFirst({
+        where: eq(boardColumnTable.boardId, tasksBoard.id),
+        orderBy: (boardColumnTable, { asc }) => [asc(boardColumnTable.order)],
+      });
+
+      if (!todoColumn) {
+        return data({ error: 'Todo column not found' }, { status: 500 });
+      }
+
+      // Get the highest order in the Todo column
+      const maxOrderTask = await db.query.boardTaskTable.findFirst({
+        where: eq(boardTaskTable.columnId, todoColumn.id),
+        orderBy: (tasks, { desc }) => [desc(tasks.order)],
+      });
+
+      const nextOrder = maxOrderTask?.order ? maxOrderTask.order + 1 : 1;
+
+      await db.transaction(async (tx) => {
+        const task = await tx
+          .insert(boardTaskTable)
+          .values({
+            name,
+            content: content || null,
+            priority: priority || null,
+            dueDate: dueDate || null,
+            boardId: tasksBoard.id,
+            columnId: todoColumn.id,
+            type: 'tasks',
+            order: nextOrder,
+            ownerId: user.id,
+            status: 'open',
+            parentTaskId: relatedDealId, // Link task to the deal
+          })
+          .returning();
+
+        await logTaskActivity({
+          taskId: relatedDealId,
+          userId: user.id,
+          activityType: 'updated',
+          description: `Created related task "${name}"`,
+          relatedEntityId: task[0].id,
+          relatedEntityType: 'task',
+          tx,
+        });
+      });
+
+      return {};
+    }
+
+    // Otherwise, create as regular task (fallback behavior)
+    return data({ error: 'Deal ID required' }, { status: 400 });
+  }
+
   const submission = parseWithZod(formData, { schema: removeUserSchema });
 
   if (submission.status !== 'success') {
@@ -407,8 +496,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
         },
         orderBy: (taskCommentTable, { desc }) => [desc(taskCommentTable.createdAt)],
       },
-      // Note: Activities are now stored in the unified activities table
-      // We'll fetch them separately with a filter
       column: true,
       board: {
         with: {
@@ -423,6 +510,24 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!task || !task.board) {
     throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
   }
+
+  // Fetch related tasks (tasks linked to this deal via parentTaskId)
+  const relatedTasks = await db.query.boardTaskTable.findMany({
+    where: and(
+      eq(boardTaskTable.type, 'tasks'),
+      eq(boardTaskTable.parentTaskId, taskId), // Tasks where this deal is the parent
+    ),
+    with: {
+      assignees: {
+        with: {
+          user: true,
+        },
+      },
+      owner: true,
+      column: true,
+    },
+    orderBy: (boardTaskTable, { desc }) => [desc(boardTaskTable.createdAt)],
+  });
 
   // Fetch available columns for status changes
   const columns = task.boardId
@@ -458,19 +563,30 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { task: { ...task, activities }, user, projectId, companyId, taskId, columns, users, allCompanies, allPeople };
+  return {
+    task: { ...task, activities },
+    user,
+    projectId,
+    companyId,
+    taskId,
+    columns,
+    users,
+    allCompanies,
+    allPeople,
+    relatedTasks,
+  };
 }
 
 const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: FileText },
-  { id: 'tasks', label: 'Sub-tasks', icon: CheckSquare },
+  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   // { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
 const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
-  const { task, user, projectId, companyId, columns, users, allCompanies, allPeople } = loaderData;
+  const { task, user, projectId, companyId, columns, users, allCompanies, allPeople, relatedTasks } = loaderData;
   const navigate = useNavigate();
   const navigation = useNavigation();
   const isAdding = navigation.state === 'submitting' && navigation.formData?.get('intent') === 'insertComment';
@@ -478,7 +594,9 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
   const submit = useSubmit();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [subTaskDialogOpen, setSubTaskDialogOpen] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const params = useParams();
 
   useEffect(() => {
     if (isAdding) {
@@ -520,7 +638,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
       <div className="p-4 overflow-y-auto scrollbar-thin">
         {/* Avatar and Name */}
-        <div className="mb-2">
+        <div className="mb-6">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
             {task.name?.charAt(0) || 'T'}
           </div>
@@ -761,6 +879,9 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               entityName={task.name || 'Unnamed Task'}
               userId={user.id}
               organizationId={companyId}
+              companies={allCompanies}
+              people={allPeople}
+              parentTaskId={task.id}
               onDelete={() => {
                 const formData = new FormData();
                 formData.append('intent', 'removeTask');
@@ -808,7 +929,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Status */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
@@ -823,7 +944,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Assignees */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm ">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
                       <div className="space-y-2">
@@ -849,7 +970,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Comments Count */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
@@ -867,11 +988,11 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   <h2 className="text-sm font-semibold">Description</h2>
                 </div>
                 {task.content ? (
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <p className="text-sm text-foreground whitespace-pre-wrap">{task.content}</p>
                   </Card>
                 ) : (
-                  <Card className="p-8 bg-muted/30 shadow-s border-0 shadow-sm text-center">
+                  <Card className="p-4 bg-muted/30 border-0 shadow-sm text-center">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">No description</p>
                   </Card>
@@ -895,7 +1016,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 />
 
                 {(!task.activities || task.activities.length === 0) && (
-                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                   </div>
@@ -921,7 +1042,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
               />
 
               {(!task.activities || task.activities.length === 0) && (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                   <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                   <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                 </div>
@@ -985,7 +1106,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                             {comment.userId === user.id && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 ml-auto">
                                     <MoreHorizontal className="h-3 w-3" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -1009,7 +1130,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     </Card>
                   ))
                 ) : (
-                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">No comments yet</p>
                   </div>
@@ -1019,22 +1140,113 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
           )}
 
           {activeTab === 'tasks' && (
-            <div>
+            <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Sub-tasks</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <h2 className="text-sm font-semibold">Related Tasks</h2>
+                <Button size="sm" className="h-8 text-xs" onClick={() => setSubTaskDialogOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New Sub-task
+                  New Task
                 </Button>
               </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
-                <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-muted-foreground">No sub-tasks yet</p>
-                <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  Create first sub-task
-                </Button>
-              </div>
+              {relatedTasks && relatedTasks.length > 0 ? (
+                <div className="space-y-2">
+                  {relatedTasks.map((relatedTask) => (
+                    <Card key={relatedTask.id} className="p-4 bg-muted/30 border-0 shadow-s">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <CheckSquare className="h-4 w-4 text-muted-foreground shrink-0" />
+                            <h3 className="text-sm font-medium truncate">{relatedTask.name}</h3>
+                            {relatedTask.priority && (
+                              <Badge variant="outline" className="h-5 text-[10px] px-1.5 capitalize">
+                                {relatedTask.priority}
+                              </Badge>
+                            )}
+                            {relatedTask.column && (
+                              <Badge variant="secondary" className="h-5 text-[10px] px-1.5">
+                                {relatedTask.column.name}
+                              </Badge>
+                            )}
+                          </div>
+                          {relatedTask.content && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 ml-6">{relatedTask.content}</p>
+                          )}
+                          <div className="flex items-center gap-3 mt-2 ml-6 text-xs text-muted-foreground">
+                            {relatedTask.dueDate && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(relatedTask.dueDate).toLocaleDateString()}
+                              </span>
+                            )}
+                            {relatedTask.assignees && relatedTask.assignees.length > 0 && (
+                              <span className="flex items-center gap-1">
+                                <Users className="h-3 w-3" />
+                                {relatedTask.assignees.length}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-32">
+                            <DropdownMenuItem asChild>
+                              <Link
+                                to={`/dashboard/${companyId}/tasks/${relatedTask.id}`}
+                                className="w-full cursor-pointer"
+                              >
+                                View
+                              </Link>
+                            </DropdownMenuItem>
+                            <Form
+                              method="post"
+                              action={`/dashboard/${companyId}/api/delete-todo`}
+                              onSubmit={(e) => {
+                                if (!confirm('Are you sure you want to delete this task?')) {
+                                  e.preventDefault();
+                                }
+                              }}
+                            >
+                              <input type="hidden" name="taskId" value={relatedTask.id} />
+                              <DropdownMenuItem asChild>
+                                <button type="submit" className="w-full text-destructive">
+                                  Delete
+                                </button>
+                              </DropdownMenuItem>
+                            </Form>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
+                  <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm font-semibold">No related tasks yet</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Create tasks linked to this deal that will appear in your tasks board
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-4 h-8 text-xs"
+                    onClick={() => setSubTaskDialogOpen(true)}
+                  >
+                    <Plus className="mr-1.5 h-3.5 w-3.5" />
+                    Create first task
+                  </Button>
+                </div>
+              )}
+              <QuickTodoDialog
+                parentTaskId={params.taskId}
+                userId={user.id}
+                open={subTaskDialogOpen}
+                onOpenChange={setSubTaskDialogOpen}
+              />
             </div>
           )}
 
@@ -1047,7 +1259,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                   Upload
                 </Button>
               </div>
-              <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+              <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                 <Paperclip className="mx-auto h-8 w-8 text-muted-foreground" />
                 <p className="mt-2 text-sm text-muted-foreground">No files yet</p>
                 <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">

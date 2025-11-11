@@ -11,14 +11,14 @@ import { CSS } from '@dnd-kit/utilities';
 import { eq } from 'drizzle-orm';
 import { GripVertical, Menu, Settings, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { data, Form, redirect, useFetcher, useNavigation } from 'react-router';
+import { data, Form, redirect, useFetcher, useNavigate, useNavigation } from 'react-router';
 import { z } from 'zod';
 import type { Route } from './+types/settings';
 
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Separator } from '~/components/ui/separator';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '~/components/ui/sheet';
@@ -191,7 +191,7 @@ function SortableColumn({ column, onDelete }: { column: Column; onDelete: (colum
   };
 
   return (
-    <Card ref={setNodeRef} style={style} className="p-3 bg-muted backdrop-blur-md border-none shadow-s">
+    <Card ref={setNodeRef} style={style} className="p-4 bg-muted backdrop-blur-md border-none shadow-s">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button {...attributes} {...listeners} className="cursor-grab hover:bg-muted rounded p-1">
@@ -277,6 +277,9 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
       }, 400);
     }
   }, [navigation.state]);
+
+  const navigate = useNavigate();
+
   const sidebarContent = (
     <div className="flex flex-col w-full">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
@@ -284,7 +287,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
           variant="ghost"
           size="icon"
           className="h-8 w-8 hidden lg:flex hover:bg-muted"
-          onClick={() => window.history.back()}
+          onClick={() => navigate(-1)}
         >
           <X className="h-4 w-4" />
         </Button>
@@ -400,7 +403,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
               <Settings className="h-4 w-4" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold">Settings</h1>
+              <h1 className="text-base font-semibold">Settings</h1>
             </div>
           </div>
         </div>
@@ -439,20 +442,41 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
                       Create Column
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px] bg-muted/30 backdrop-blur-md border-none shadow-s">
-                    <DialogHeader>
-                      <DialogTitle>Create Column</DialogTitle>
-                    </DialogHeader>
-
-                    <Form method="post">
-                      <input type="hidden" name="intent" value="createColumn" />
-                      <Input autoFocus required ref={inputRef} type="text" name="name" placeholder="Column name..." />
-                      <div className="flex justify-end mt-4">
-                        <Button type="submit" size="sm" disabled={navigation.state === 'submitting'}>
-                          {navigation.state === 'submitting' ? 'Creating...' : 'Create Column'}
-                        </Button>
+                  <DialogContent
+                    className="sm:max-w-[425px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-s"
+                    showCloseButton={false}
+                  >
+                    {/* Header */}
+                    <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+                      <div className="flex items-center gap-2.5">
+                        <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                          <Settings className="h-3.5 w-3.5" />
+                        </div>
+                        <DialogTitle className="text-base font-semibold m-0">Create Column</DialogTitle>
                       </div>
-                    </Form>
+                      <DialogClose asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </DialogClose>
+                    </div>
+
+                    {/* Content */}
+                    <div className="overflow-auto max-h-[calc(100vh-180px)] p-6">
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="createColumn" />
+                        <Input autoFocus required ref={inputRef} type="text" name="name" placeholder="Column name..." />
+                        <div className="flex justify-end mt-4">
+                          <Button type="submit" size="sm" disabled={navigation.state === 'submitting'}>
+                            {navigation.state === 'submitting' ? 'Creating...' : 'Create Column'}
+                          </Button>
+                        </div>
+                      </Form>
+                    </div>
                   </DialogContent>
                 </Dialog>
               </div>
@@ -467,7 +491,7 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
                     </SortableContext>
                   </DndContext>
                 ) : (
-                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                     <Settings className="mx-auto h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">No columns yet</p>
                     <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">

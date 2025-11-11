@@ -1,11 +1,12 @@
 /* eslint-disable jsx-a11y/no-autofocus */
-import { Building2, CableIcon, Calendar, CheckSquare, User, X } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Building2, Calendar, CheckSquare, User, X } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 import { Form, useSubmit } from 'react-router';
 
 import { cn } from '~/utils';
 import { Button } from '../ui/button';
 import { Calendar as CalendarComponent } from '../ui/calendar';
+import { Combobox } from '../ui/combobox';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -50,10 +51,73 @@ export function NewTaskTodo({
   const submit = useSubmit();
   const [open, setOpen] = useState(false);
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
-  const [selectedRelationType, setSelectedRelationType] = useState<'none' | 'company' | 'person'>('none');
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('');
-  const [selectedPersonId, setSelectedPersonId] = useState<string>('');
+  const [selectedRelation, setSelectedRelation] = useState<{
+    type: 'company' | 'person';
+    id: string;
+    name: string;
+  } | null>(null);
   const [createMore, setCreateMore] = useState(false);
+
+  // Prepare grouped items for combobox (companies and people together)
+  const relationItems = useMemo(() => {
+    const groups: {
+      title?: string;
+      items: Array<{
+        value: string;
+        label: string;
+        icon: React.ReactElement;
+        type: 'company' | 'person';
+        id: string;
+        onSelect?: () => void;
+      }>;
+    }[] = [];
+
+    if (companies.length > 0) {
+      groups.push({
+        title: 'Companies',
+        items: companies.map((c) => ({
+          value: `company:${c.id}`,
+          label: c.name || 'Unnamed Company',
+          icon: <Building2 className="h-4 w-4 text-muted-foreground" />,
+          type: 'company' as const,
+          id: c.id,
+          onSelect: () => {
+            setSelectedRelation({ type: 'company', id: c.id, name: c.name || 'Unnamed Company' });
+          },
+        })),
+      });
+    }
+
+    if (people.length > 0) {
+      groups.push({
+        title: 'People',
+        items: people.map((p) => ({
+          value: `person:${p.id}`,
+          label: p.name || 'Unnamed Person',
+          icon: <User className="h-4 w-4 text-muted-foreground" />,
+          type: 'person' as const,
+          id: p.id,
+          onSelect: () => {
+            setSelectedRelation({ type: 'person', id: p.id, name: p.name || 'Unnamed Person' });
+          },
+        })),
+      });
+    }
+
+    return groups;
+  }, [companies, people]);
+
+  // Get selected item for combobox
+  const selectedRelationItem = useMemo(() => {
+    if (!selectedRelation) return undefined;
+    return {
+      value: `${selectedRelation.type}:${selectedRelation.id}`,
+      label: selectedRelation.name,
+      icon: selectedRelation.type === 'company' ? <Building2 className="h-4 w-4" /> : <User className="h-4 w-4" />,
+      type: selectedRelation.type,
+      id: selectedRelation.id,
+    };
+  }, [selectedRelation]);
 
   const formatDate = (date: Date | undefined) => {
     if (!date) return '';
@@ -122,18 +186,13 @@ export function NewTaskTodo({
                 formData.set('priority', String(priority));
               }
 
-              if (selectedRelationType === 'company' && selectedCompanyId) {
-                formData.set('relatedCompanyId', selectedCompanyId);
-                const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
-                if (selectedCompany) {
-                  formData.set('companyName', selectedCompany.name || '');
-                }
-              }
-              if (selectedRelationType === 'person' && selectedPersonId) {
-                formData.set('relatedPersonId', selectedPersonId);
-                const selectedPerson = people.find((p) => p.id === selectedPersonId);
-                if (selectedPerson) {
-                  formData.set('personName', selectedPerson.name || '');
+              if (selectedRelation) {
+                if (selectedRelation.type === 'company') {
+                  formData.set('relatedCompanyId', selectedRelation.id);
+                  formData.set('companyName', selectedRelation.name);
+                } else {
+                  formData.set('relatedPersonId', selectedRelation.id);
+                  formData.set('personName', selectedRelation.name);
                 }
               }
 
@@ -151,9 +210,7 @@ export function NewTaskTodo({
               inputRef.current.value = '';
 
               setDueDate(undefined);
-              setSelectedRelationType('none');
-              setSelectedCompanyId('');
-              setSelectedPersonId('');
+              setSelectedRelation(null);
               if (!createMore) {
                 setOpen(false);
               }
@@ -244,113 +301,51 @@ export function NewTaskTodo({
             </div>
 
             {/* Relations Section */}
-            <div className="space-y-4 border-t border-border pt-4">
-              <h3 className="text-sm font-semibold text-foreground">Relations</h3>
+            {(companies.length > 0 || people.length > 0) && (
+              <div className="space-y-4 border-t border-border pt-4">
+                <h3 className="text-sm font-semibold text-foreground">Relations </h3>
 
-              <div className="flex gap-4">
                 <div className="space-y-2">
                   <Label className="text-sm font-medium flex items-center gap-2">
-                    <CableIcon className="h-4 w-4 text-muted-foreground" />
+                    <User className="h-4 w-4 text-muted-foreground" />
                     Link to
                   </Label>
-                  <Select
-                    value={selectedRelationType}
-                    onValueChange={(value: 'none' | 'company' | 'person') => {
-                      setSelectedRelationType(value);
-                      if (value !== 'company') setSelectedCompanyId('');
-                      if (value !== 'person') setSelectedPersonId('');
+                  <Combobox
+                    key={selectedRelation ? `${selectedRelation.type}:${selectedRelation.id}` : 'none'}
+                    groupedItems={relationItems}
+                    selectedItem={selectedRelationItem}
+                    buttonTrigger={(item) => (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className={cn(
+                          'h-10 w-full justify-start text-left font-normal',
+                          !item && 'text-muted-foreground',
+                        )}
+                      >
+                        {item ? (
+                          <div className="flex items-center gap-2 flex-1 min-w-0">
+                            {item.icon}
+                            <span className="truncate">{item.label}</span>
+                          </div>
+                        ) : (
+                          <span>Select company or person...</span>
+                        )}
+                      </Button>
+                    )}
+                    labels={{
+                      inputLabel: 'Search companies and people...',
+                      notFoundLabel: 'No companies or people found.',
                     }}
-                  >
-                    <SelectTrigger className="h-10">
-                      <SelectValue placeholder="Select relation..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No relation</SelectItem>
-                      <SelectItem value="company">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="h-4 w-4" />
-                          <span>Company</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="person">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          <span>Person</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                  />
+                  <input
+                    type="hidden"
+                    name="relationValue"
+                    value={selectedRelation ? `${selectedRelation.type}:${selectedRelation.id}` : ''}
+                  />
                 </div>
-
-                {/* Company Selection - Animated in */}
-                {selectedRelationType === 'company' && (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <Building2 className="h-4 w-4 text-muted-foreground" />
-                      Company
-                    </Label>
-                    {companies.length > 0 ? (
-                      <Select value={selectedCompanyId} onValueChange={setSelectedCompanyId}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue placeholder="Select company..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {companies.map((company) => (
-                            <SelectItem key={company.id} value={company.id}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
-                                  <Building2 className="h-3 w-3 text-primary" />
-                                </div>
-                                <span>{company.name || 'Unnamed Company'}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="flex h-10 items-center px-3 text-sm text-muted-foreground border border-border rounded-md bg-muted/30">
-                        <Building2 className="h-4 w-4 mr-2 text-muted-foreground" />
-                        No companies available
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Person Selection - Animated in */}
-                {selectedRelationType === 'person' && (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium flex items-center gap-2">
-                      <User className="h-4 w-4 text-muted-foreground" />
-                      Person
-                    </Label>
-                    {people.length > 0 ? (
-                      <Select value={selectedPersonId} onValueChange={setSelectedPersonId}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue placeholder="Select person..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {people.map((person) => (
-                            <SelectItem key={person.id} value={person.id}>
-                              <div className="flex items-center gap-2">
-                                <div className="w-6 h-6 rounded bg-primary/10 flex items-center justify-center">
-                                  <User className="h-3 w-3 text-primary" />
-                                </div>
-                                <span>{person.name || 'Unnamed Person'}</span>
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <div className="flex h-10 items-center px-3 text-sm text-muted-foreground border border-border rounded-md bg-muted/30">
-                        <User className="h-4 w-4 mr-2 text-muted-foreground" />
-                        No people available
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
-            </div>
+            )}
           </Form>
         </div>
 

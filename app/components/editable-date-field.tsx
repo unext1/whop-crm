@@ -50,7 +50,7 @@ export function EditableDateField({
   };
 
   const showValue = displayValue ? (
-    formatDate(new Date(displayValue))
+    <span className="text-sm text-foreground">{formatDate(new Date(displayValue))}</span>
   ) : (
     <span className="text-sm text-muted-foreground">{placeholder}</span>
   );

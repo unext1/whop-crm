@@ -119,13 +119,14 @@ export const Combobox = <T,>({
                         onSelect && selected?.value !== value && onSelect();
                       }}
                       disabled={isSelected}
+                      className="hover:bg-muted cursor-pointer"
                     >
                       {icon && !isSelected ? (
                         icon
                       ) : (
-                        <Check className={cn('mr-2 h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
+                        <Check className={cn('h-4 w-4 shrink-0', isSelected ? 'opacity-100' : 'opacity-0')} />
                       )}
-                      <span className="truncate">{label}</span>
+                      <span className="truncate text-xs">{label}</span>
                     </CommandItem>
                   );
                 })}

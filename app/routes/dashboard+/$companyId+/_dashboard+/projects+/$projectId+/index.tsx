@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { KanbanSquareIcon } from 'lucide-react';
+import { KanbanSquareIcon, X } from 'lucide-react';
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { href, Link, useFetcher, useFetchers, useNavigate } from 'react-router';
 import type { Route } from './+types/index';
@@ -7,13 +7,16 @@ import type { Route } from './+types/index';
 import Column from '~/components/kanban/column';
 import { KanbanFilterList } from '~/components/kanban/kanban-filter-list';
 import { NewColumn } from '~/components/kanban/new-column';
+import { Badge } from '~/components/ui/badge';
 import { Button, buttonVariants } from '~/components/ui/button';
-import { Checkbox } from '~/components/ui/checkbox';
-import { Dialog, DialogContent, DialogTitle } from '~/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '~/components/ui/select';
+import { Switch } from '~/components/ui/switch';
 import { db } from '~/db';
+import { COLUMN_TEMPLATES } from '~/utils/column-templates';
+
 import {
   boardColumnTable,
   boardTable,
@@ -247,6 +250,8 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
   const { project, companyId, projectId, user, projects, companies, people, users } = loaderData;
   const navigate = useNavigate();
   const [createOpen, setCreateOpen] = useState(false);
+  const [createMore, setCreateMore] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default');
   const [selectedProjectId, setSelectedProjectId] = useState(project.id);
   const [filteredTasks, setFilteredTasks] = useState(project.tasks);
   const createFetcher = useFetcher();
@@ -314,6 +319,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
           owner: user, // Add owner for "Created By" display
           ownerId: user.id,
           type: 'pipeline',
+          parentTaskId: null,
         } as TaskRecord;
         // Add company/person objects for optimistic UI
         if (pendingItem.companyName && pendingItem.relatedCompanyId) {
@@ -440,10 +446,24 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
 
       {/* Create Project Dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-[425px] border-0 p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg shadow-s">
+        <DialogContent
+          className="sm:max-w-[600px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-s"
+          showCloseButton={false}
+        >
           {/* Header */}
-          <div className="flex h-14 items-center justify-between border-b border-border px-6">
-            <DialogTitle className="text-sm font-semibold m-0">Create Project</DialogTitle>
+          <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                <KanbanSquareIcon className="h-3.5 w-3.5" />
+              </div>
+              <DialogTitle className="text-base font-semibold m-0">Create Project</DialogTitle>
+            </div>
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogClose>
           </div>
 
           {/* Form Content */}
@@ -452,30 +472,87 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
               method="post"
               action={href('/dashboard/:companyId/projects', { companyId })}
               id="create-project-form"
-              className="p-6 space-y-4"
-              onSubmit={() => setCreateOpen(false)}
+              className="space-y-4 p-6"
+              onSubmit={() => {
+                if (!createMore) {
+                  setCreateOpen(false);
+                }
+              }}
             >
               <Input name="ownerId" type="hidden" value={user.id} />
               <div className="space-y-2">
                 <Label htmlFor="name" className="text-sm text-muted-foreground">
                   Project name <span className="text-muted-foreground">(required)</span>
                 </Label>
-                <Input name="name" type="text" placeholder="Set Project name..." className="h-9" required />
+                <Input id="name" name="name" type="text" placeholder="Set Project name..." className="h-9" required />
               </div>
-              <div className="flex items-center gap-2">
-                <Checkbox name="defaultColumns" id="defaultColumns" />
-                <Label htmlFor="defaultColumns" className="text-sm text-muted-foreground cursor-pointer">
-                  Default Columns
-                </Label>
+
+              <div className="space-y-3">
+                <Label className="text-sm text-muted-foreground">Column Template</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {COLUMN_TEMPLATES.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      className={`cursor-pointer rounded-lg border p-4 transition-all w-full text-left ${
+                        selectedTemplateId === template.id
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border/50 hover:border-border'
+                      }`}
+                      onClick={() => setSelectedTemplateId(template.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedTemplateId(template.id);
+                        }
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-4">
+                          <div className="h-10 w-10 rounded-lg bg-muted/20 flex items-center justify-center text-lg">
+                            {template.icon}
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="text-sm font-medium">{template.name}</div>
+                            </div>
+                            <div className="text-xs text-muted-foreground mb-2">{template.description}</div>
+                            <div className="flex flex-wrap gap-1">
+                              {template.columns.map((column) => (
+                                <Badge key={column} variant="outline" className="text-xs">
+                                  {column}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <input type="hidden" name="templateId" value={selectedTemplateId} />
               </div>
             </createFetcher.Form>
           </div>
 
           {/* Footer */}
-          <div className="flex h-14 items-center justify-end gap-2 border-t border-border px-6">
-            <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs">
-              {createFetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
-            </Button>
+          <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Switch id="create-more" checked={createMore} onCheckedChange={setCreateMore} />
+              <Label htmlFor="create-more" className="text-sm font-normal cursor-pointer">
+                Create more
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs">
+                {createFetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

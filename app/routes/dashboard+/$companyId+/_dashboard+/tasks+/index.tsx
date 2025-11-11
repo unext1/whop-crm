@@ -1,5 +1,5 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { CheckSquare } from 'lucide-react';
+import { CheckSquare, Loader2 } from 'lucide-react';
 import React, { useRef, useState } from 'react';
 import { useFetchers } from 'react-router';
 import type { Route } from './+types/index';
@@ -239,6 +239,15 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           Object.assign(task, { person });
         }
       }
+      // Fetch parent deal if task is linked to a deal
+      if (task.parentTaskId) {
+        const parentDeal = await db.query.boardTaskTable.findFirst({
+          where: eq(boardTaskTable.id, task.parentTaskId),
+        });
+        if (parentDeal) {
+          Object.assign(task, { parentDeal });
+        }
+      }
       // Add comment count
       Object.assign(task, { commentsCount: countsMap.get(task.id) ?? 0 });
     }
@@ -306,7 +315,10 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
   if (!board) {
     return (
       <div className="flex flex-1 items-center justify-center">
-        <p>Loading tasks...</p>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <span>Loading tasks...</span>
+        </div>
       </div>
     );
   }
@@ -355,6 +367,7 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
         assignees: [], // Start with empty assignees - owner is not auto-assigned
         owner: user, // Add owner for "Created By" display
         ownerId: user.id,
+        parentTaskId: null,
         type: 'tasks' as const,
       } as TaskRecord;
       // Add company/person objects for optimistic UI

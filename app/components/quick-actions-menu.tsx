@@ -1,4 +1,4 @@
-import { CheckSquare, DollarSign, Mail, MoreHorizontal, Trash2 } from 'lucide-react';
+import { CheckSquare, DollarSign, Mail, MoreHorizontal, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { useFetcher } from 'react-router';
 import { QuickTodoDialog } from './kanban/quick-todo-dialog';
@@ -13,7 +13,8 @@ import {
   AlertDialogTitle,
 } from './ui/alert-dialog';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from './ui/dialog';
+import { CurrencyInput } from './ui/currency-input';
+import { Dialog, DialogClose, DialogContent, DialogTitle } from './ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ import {
 } from './ui/dropdown-menu';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
+import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 
 interface QuickActionsMenuProps {
@@ -36,6 +38,9 @@ interface QuickActionsMenuProps {
   userId: string;
   organizationId: string;
   onDelete?: () => void;
+  companies?: Array<{ id: string; name: string | null }>;
+  people?: Array<{ id: string; name: string | null }>;
+  parentTaskId?: string;
 }
 
 export function QuickActionsMenu({
@@ -46,11 +51,18 @@ export function QuickActionsMenu({
   primaryEmail,
   userId,
   onDelete,
+  // biome-ignore lint/correctness/noUnusedFunctionParameters: adding later
+  companies = [],
+  // biome-ignore lint/correctness/noUnusedFunctionParameters: adding later
+  people = [],
+  parentTaskId,
 }: QuickActionsMenuProps) {
   const [dmOpen, setDmOpen] = useState(false);
   const [dealOpen, setDealOpen] = useState(false);
   const [taskOpen, setTaskOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [createMore, setCreateMore] = useState(false);
+  const [amount, setAmount] = useState<number>(0);
   const fetcher = useFetcher();
 
   const handleSendEmail = () => {
@@ -63,7 +75,7 @@ export function QuickActionsMenu({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="icon" className="h-8 w-8 border-0 shadow-s shadow-sm">
+          <Button variant="outline" size="icon" className="h-8 w-8 border-0 shadow-s">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
@@ -87,7 +99,7 @@ export function QuickActionsMenu({
           )}
 
           {/* Create Task */}
-          {(type === 'person' || type === 'company') && (
+          {(type === 'person' || type === 'company' || (type === 'task' && parentTaskId)) && (
             <DropdownMenuItem onClick={() => setTaskOpen(true)}>
               <CheckSquare className="mr-2 h-4 w-4" />
               Create Task
@@ -122,108 +134,217 @@ export function QuickActionsMenu({
 
       {/* Send DM Dialog */}
       <Dialog open={dmOpen} onOpenChange={setDmOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Send DM to {entityName}</DialogTitle>
-            <DialogDescription>Send a direct message via Whop</DialogDescription>
-          </DialogHeader>
-          <fetcher.Form
-            method="post"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              formData.append('intent', 'sendDM');
-              formData.append('personId', entityId);
-              fetcher.submit(formData, { method: 'post' });
-              setDmOpen(false);
-            }}
-            className="space-y-4"
-          >
-            <input type="hidden" name="personId" value={entityId} />
-            <div className="space-y-2">
-              <Label htmlFor="dm-message">Message</Label>
-              <Textarea
-                id="dm-message"
-                name="message"
-                placeholder="Type your message..."
-                rows={6}
-                className="resize-none"
-                required
-              />
+        <DialogContent
+          className="sm:max-w-[625px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
+          showCloseButton={false}
+        >
+          {/* Header */}
+          <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                <Mail className="h-3.5 w-3.5" />
+              </div>
+              <DialogTitle className="text-base font-semibold m-0">Send DM to {entityName}</DialogTitle>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDmOpen(false)}>
-                Cancel
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
               </Button>
-              <Button type="submit" disabled={fetcher.state === 'submitting'}>
+            </DialogClose>
+          </div>
+
+          {/* Form Content */}
+          <div className="overflow-auto max-h-[calc(100vh-180px)]">
+            <fetcher.Form
+              method="post"
+              id="send-dm-form"
+              className="space-y-6 p-6"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                formData.append('intent', 'sendDM');
+                formData.append('personId', entityId);
+                fetcher.submit(formData, { method: 'post' });
+                setDmOpen(false);
+              }}
+            >
+              <input type="hidden" name="personId" value={entityId} />
+              <div className="space-y-2">
+                <Label htmlFor="dm-message" className="text-sm font-medium">
+                  Message <span className="text-muted-foreground">(required)</span>
+                </Label>
+                <Textarea
+                  id="dm-message"
+                  name="message"
+                  placeholder="Type your message..."
+                  rows={6}
+                  className="resize-none"
+                  required
+                />
+              </div>
+            </fetcher.Form>
+          </div>
+
+          {/* Footer */}
+          <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2">{/* Empty space for alignment */}</div>
+            <div className="flex items-center gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" form="send-dm-form" size="sm" className="h-8 text-xs">
                 {fetcher.state === 'submitting' ? 'Sending...' : 'Send DM'}
               </Button>
             </div>
-          </fetcher.Form>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* Create Task Dialog */}
       {type === 'person' && (
-        <QuickTodoDialog personId={entityId} userId={userId} open={taskOpen} onOpenChange={setTaskOpen} />
+        <QuickTodoDialog
+          personId={entityId}
+          userId={userId}
+          companies={[]}
+          people={[]}
+          open={taskOpen}
+          onOpenChange={setTaskOpen}
+        />
       )}
 
       {type === 'company' && (
-        <QuickTodoDialog companyId={entityId} userId={userId} open={taskOpen} onOpenChange={setTaskOpen} />
+        <QuickTodoDialog
+          companyId={entityId}
+          userId={userId}
+          companies={[]}
+          people={[]}
+          open={taskOpen}
+          onOpenChange={setTaskOpen}
+        />
+      )}
+
+      {/* Create Todo Dialog for Tasks/Deals */}
+      {type === 'task' && parentTaskId && (
+        <QuickTodoDialog
+          parentTaskId={parentTaskId}
+          userId={userId}
+          companies={[]}
+          people={[]}
+          open={taskOpen}
+          onOpenChange={setTaskOpen}
+        />
       )}
 
       {/* Create Deal Dialog */}
       <Dialog open={dealOpen} onOpenChange={setDealOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Create Deal for {entityName}</DialogTitle>
-            <DialogDescription>Create a new deal in your pipeline</DialogDescription>
-          </DialogHeader>
-          <fetcher.Form
-            method="post"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const formData = new FormData(e.currentTarget);
-              formData.append('intent', 'createDeal');
-              formData.append('personId', entityId);
-              fetcher.submit(formData, { method: 'post' });
-              setDealOpen(false);
-            }}
-            className="space-y-4"
-          >
-            <div className="space-y-2">
-              <Label htmlFor="deal-name">Deal Name</Label>
-              <Input
-                id="deal-name"
-                name="name"
-                placeholder={`Deal with ${entityName}`}
-                defaultValue={`Deal with ${entityName}`}
-                required
-              />
+        <DialogContent
+          className="sm:max-w-[625px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-lg"
+          showCloseButton={false}
+        >
+          {/* Header */}
+          <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                <DollarSign className="h-3.5 w-3.5" />
+              </div>
+              <DialogTitle className="text-base font-semibold m-0">
+                New Deal {'>'} {entityName}
+              </DialogTitle>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="deal-amount">Amount (optional)</Label>
-              <Input id="deal-amount" name="amount" type="number" placeholder="0" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="deal-content">Notes</Label>
-              <Textarea
-                id="deal-content"
-                name="content"
-                placeholder="Add notes about this deal..."
-                rows={4}
-                className="resize-none"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setDealOpen(false)}>
-                Cancel
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
               </Button>
-              <Button type="submit" disabled={fetcher.state === 'submitting'}>
-                {fetcher.state === 'submitting' ? 'Creating...' : 'Create Deal'}
+            </DialogClose>
+          </div>
+
+          {/* Form Content */}
+          <div className="overflow-auto max-h-[calc(100vh-180px)]">
+            <fetcher.Form
+              method="post"
+              id="create-deal-form"
+              className="space-y-6 p-6"
+              onSubmit={(e) => {
+                e.preventDefault();
+                const formData = new FormData(e.currentTarget);
+                formData.append('intent', 'createDeal');
+                if (type === 'person') {
+                  formData.append('personId', entityId);
+                } else if (type === 'company') {
+                  formData.append('companyId', entityId);
+                }
+                if (amount > 0) {
+                  formData.append('amount', amount.toString());
+                }
+                fetcher.submit(formData, { method: 'post' });
+                if (!createMore) {
+                  setDealOpen(false);
+                }
+                setAmount(0);
+              }}
+            >
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="deal-name" className="text-sm font-medium">
+                    Deal name <span className="text-muted-foreground">(required)</span>
+                  </Label>
+                  <Input
+                    id="deal-name"
+                    name="name"
+                    placeholder={`Deal with ${entityName}`}
+                    defaultValue={`Deal with ${entityName}`}
+                    className="h-10"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Description</Label>
+                  <Textarea
+                    id="deal-content"
+                    name="content"
+                    placeholder="Add deal details..."
+                    rows={4}
+                    className="resize-none"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium">Deal Value</Label>
+                  <CurrencyInput
+                    value={amount}
+                    onValueChange={setAmount}
+                    placeholder="Enter deal value..."
+                    className="h-10"
+                  />
+                </div>
+              </div>
+            </fetcher.Form>
+          </div>
+
+          {/* Footer */}
+          <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Switch id="create-more-deal" checked={createMore} onCheckedChange={setCreateMore} />
+              <Label htmlFor="create-more-deal" className="text-sm font-normal cursor-pointer">
+                Create more
+              </Label>
+            </div>
+            <div className="flex items-center gap-2">
+              <DialogClose asChild>
+                <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button type="submit" form="create-deal-form" size="sm" className="h-8 text-xs">
+                {fetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
               </Button>
             </div>
-          </fetcher.Form>
+          </div>
         </DialogContent>
       </Dialog>
 

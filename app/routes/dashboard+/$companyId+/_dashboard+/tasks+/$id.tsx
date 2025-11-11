@@ -3,6 +3,7 @@ import { and, eq, inArray } from 'drizzle-orm';
 import {
   ActivityIcon,
   Building2,
+  DollarSign,
   FileText,
   LayoutDashboardIcon,
   Menu,
@@ -12,7 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { data, Form, Link, redirect, useFetcher, useNavigate, useNavigation, useSubmit } from 'react-router';
+import { data, Form, Link, redirect, useFetcher, useNavigate, useNavigation, useParams, useSubmit } from 'react-router';
 import { z } from 'zod';
 import { EditableDateField } from '~/components/editable-date-field';
 import { EditableSelectField } from '~/components/editable-select-field';
@@ -480,6 +481,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   // Fetch company and person if associated
   let company = null;
   let person = null;
+  let parentDeal = null;
 
   if (task.companyId) {
     company = await db.query.companiesTable.findFirst({
@@ -490,6 +492,13 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (task.personId) {
     person = await db.query.peopleTable.findFirst({
       where: eq(peopleTable.id, task.personId),
+    });
+  }
+
+  // Fetch parent deal if task is linked to a deal
+  if (task.parentTaskId) {
+    parentDeal = await db.query.boardTaskTable.findFirst({
+      where: eq(boardTaskTable.id, task.parentTaskId),
     });
   }
 
@@ -527,7 +536,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     orderBy: (activitiesTable, { desc }) => [desc(activitiesTable.createdAt)],
   });
 
-  return { task: { ...task, company, person, activities }, user, users, columns, allCompanies, allPeople };
+  return { task: { ...task, company, person, parentDeal, activities }, user, users, columns, allCompanies, allPeople };
 }
 
 const tabs = [
@@ -544,6 +553,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
   const submit = useSubmit();
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const params = useParams();
 
   // Prepare options for the assignee combobox
   const userOptions = users.map((u) => ({
@@ -796,7 +806,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
               {task.name?.charAt(0) || 'T'}
             </div>
             <div className="flex items-center gap-2 mb-1">
-              <h2 className="text-lg font-semibold">{task.name || 'Unnamed task'}</h2>
+              <h2 className="text-base font-semibold">{task.name || 'Unnamed task'}</h2>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -849,33 +859,43 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Attached To */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Attached to</p>
-                      {task.company ? (
-                        <Link
-                          to={`/dashboard/${task.board?.companyId || ''}/company/${task.company.id}`}
-                          className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
-                        >
-                          <Building2 className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-foreground">{task.company.name}</span>
-                        </Link>
-                      ) : task.person ? (
-                        <Link
-                          to={`/dashboard/${task.board?.companyId || ''}/people/${task.person.id}`}
-                          className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
-                        >
-                          <User className="h-3 w-3 text-muted-foreground" />
-                          <span className="text-foreground">{task.person.name}</span>
-                        </Link>
-                      ) : (
-                        <p className="text-xs text-muted-foreground">Not attached</p>
-                      )}
+                      <div className="space-y-1">
+                        {task.parentDeal ? (
+                          <Link
+                            to={`/dashboard/${params.companyId}/projects/${task.parentDeal.boardId}/${task.parentDeal.id}`}
+                            className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          >
+                            <DollarSign className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-foreground">{task.parentDeal.name}</span>
+                          </Link>
+                        ) : task.company ? (
+                          <Link
+                            to={`/dashboard/${task.board?.companyId || ''}/company/${task.company.id}`}
+                            className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          >
+                            <Building2 className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-foreground">{task.company.name}</span>
+                          </Link>
+                        ) : task.person ? (
+                          <Link
+                            to={`/dashboard/${task.board?.companyId || ''}/people/${task.person.id}`}
+                            className="flex items-center gap-2 text-xs cursor-pointer hover:bg-muted/50 p-1 rounded"
+                          >
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-foreground">{task.person.name}</span>
+                          </Link>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">Not attached</p>
+                        )}
+                      </div>
                     </div>
                   </Card>
 
                   {/* Assignees */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Assignees</p>
                       <div className="flex flex-wrap gap-2">
@@ -910,11 +930,11 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   </Card>
 
                   {/* Comments Count */}
-                  <Card className="p-4 bg-muted shadow-s border-0 shadow-sm py-6">
+                  <Card className="p-4 bg-muted shadow-s border-0">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Comments</p>
-                        <p className="text-xs font-medium">{task.comments?.length || 0} comments</p>
+                        <p className="text-sm font-medium">{task.comments?.length || 0} comments</p>
                       </div>
                       <MessagesSquareIcon className="h-4 w-4 text-muted-foreground" />
                     </div>
@@ -953,7 +973,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                   />
 
                   {(!task.activities || task.activities.length === 0) && (
-                    <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                    <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                       <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                       <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                     </div>
@@ -980,7 +1000,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
               />
 
               {(!task.activities || task.activities.length === 0) && (
-                <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                   <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                   <p className="mt-2 text-sm text-muted-foreground">No activity yet</p>
                 </div>
@@ -1044,7 +1064,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                             {comment.userId === user.id && (
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6 ml-auto">
+                                  <Button variant="ghost" size="icon" className="h-8 w-8 ml-auto">
                                     <MoreHorizontal className="h-3 w-3" />
                                   </Button>
                                 </DropdownMenuTrigger>
@@ -1068,7 +1088,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                     </Card>
                   ))
                 ) : (
-                  <div className="rounded-lg border border-border bg-card p-8 text-center shadow-sm">
+                  <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
                     <p className="mt-2 text-sm text-muted-foreground">No comments yet</p>
                   </div>

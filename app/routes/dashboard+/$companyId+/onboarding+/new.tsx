@@ -653,7 +653,10 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
         if (!loaderData.monthlyCheckout) {
           throw new Error('Checkout session not available');
         }
-        const result = await iframeSdk.inAppPurchase(loaderData.monthlyCheckout);
+        const result = await iframeSdk.inAppPurchase({
+          id: loaderData.monthlyCheckout.id,
+          planId: loaderData.monthlyCheckout.plan.id,
+        });
         if (result.status === 'ok') {
           setTimeout(() => window.location.reload(), 2000);
         }
@@ -661,7 +664,10 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
         if (!loaderData.annualCheckout) {
           throw new Error('Checkout session not available');
         }
-        const result = await iframeSdk.inAppPurchase(loaderData.annualCheckout);
+        const result = await iframeSdk.inAppPurchase({
+          id: loaderData.annualCheckout.id,
+          planId: loaderData.annualCheckout.plan.id,
+        });
         if (result.status === 'ok') {
           setTimeout(() => window.location.reload(), 2000);
         }

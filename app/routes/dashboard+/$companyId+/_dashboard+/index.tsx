@@ -552,7 +552,7 @@ const DashboardPage = ({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
                   <Link to={href('/dashboard/:companyId/tasks', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s">
                       View all
                     </Button>
                   </Link>
@@ -608,7 +608,7 @@ const DashboardPage = ({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Companies</CardTitle>
                   <Link to={href('/dashboard/:companyId/company', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s">
                       View all
                     </Button>
                   </Link>
@@ -653,7 +653,7 @@ const DashboardPage = ({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent People</CardTitle>
                   <Link to={href('/dashboard/:companyId/people', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow-sm">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s">
                       View all
                     </Button>
                   </Link>
@@ -698,7 +698,7 @@ const DashboardPage = ({
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Deals</CardTitle>
                   <Link to={href('/dashboard/:companyId/tasks', { companyId })}>
-                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s shadow-sm">
+                    <Button variant="ghost" size="sm" className="h-8 text-xs shadow-s">
                       View all
                     </Button>
                   </Link>

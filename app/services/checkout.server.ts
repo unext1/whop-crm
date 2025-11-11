@@ -1,11 +1,11 @@
-import { WhopServerApi } from './whop.server';
+import { whopSdk } from './whop.server';
 
 export const createCheckoutSession = async (planId: string, companyId: string) => {
-  const checkoutSession = await WhopServerApi.payments.createCheckoutSession({
-    planId: planId,
+  const checkoutConfiguration = await whopSdk.checkoutConfigurations.create({
+    plan_id: planId,
     metadata: {
-      companyId: companyId, // bizz_Id
+      companyId: companyId,
     },
   });
-  return checkoutSession;
+  return checkoutConfiguration;
 };

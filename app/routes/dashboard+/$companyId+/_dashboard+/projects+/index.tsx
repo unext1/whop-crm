@@ -2,31 +2,27 @@ import { parseWithZod } from '@conform-to/zod';
 import { data, Form, Link, redirect, useNavigation } from 'react-router';
 import { z } from 'zod';
 import type { Route } from './+types/index';
+import { useEffect, useState } from 'react';
+import { KanbanSquareIcon, X } from 'lucide-react';
 
+import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Checkbox } from '~/components/ui/checkbox';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '~/components/ui/dialog';
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/tooltip';
+import { Switch } from '~/components/ui/switch';
 import { db } from '~/db';
 import { boardColumnTable, boardMemberTable, boardTable, type UserType } from '~/db/schema';
 
 import { eq, and } from 'drizzle-orm';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '~/components/ui/card';
 import { requireUser } from '~/services/whop.server';
+import { COLUMN_TEMPLATES } from '~/utils/column-templates';
 
 const schema = z.object({
   name: z.string().min(1, 'Project name is required'),
   ownerId: z.string(),
-  defaultColumns: z.boolean().default(false),
+  templateId: z.string().optional(),
 });
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -57,27 +53,19 @@ export async function action({ request, params }: Route.ActionArgs) {
     userId: user.id,
   });
 
-  if (submission.value.defaultColumns) {
-    await db.insert(boardColumnTable).values({
-      name: '❌ Not Started',
-      order: 1,
-      boardId: newProject[0].id,
-    });
-    await db.insert(boardColumnTable).values({
-      name: '💡 To Do',
-      order: 2,
-      boardId: newProject[0].id,
-    });
-    await db.insert(boardColumnTable).values({
-      name: '⏳ In Progress',
-      order: 3,
-      boardId: newProject[0].id,
-    });
-    await db.insert(boardColumnTable).values({
-      name: '� Done',
-      order: 4,
-      boardId: newProject[0].id,
-    });
+  // Fetch template columns if templateId is provided
+  if (submission.value.templateId) {
+    const template = COLUMN_TEMPLATES.find((t) => t.id === submission.value.templateId);
+
+    if (template?.columns) {
+      await db.insert(boardColumnTable).values(
+        template.columns.map((columnName: string, index: number) => ({
+          name: columnName,
+          order: index + 1,
+          boardId: newProject[0].id,
+        })),
+      );
+    }
   }
 
   return redirect(`/dashboard/${companyId}/projects/${newProject[0].id}`);
@@ -180,52 +168,125 @@ export default ProjectPage;
 
 const CreateProjectDialog = ({ user }: { user: UserType }) => {
   const navigation = useNavigation();
+  const [open, setOpen] = useState(false);
+  const [createMore, setCreateMore] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('default');
+
+  useEffect(() => {
+    if (navigation.state === 'idle' && !createMore) {
+      setOpen(false);
+    }
+  }, [navigation.state, createMore]);
 
   return (
-    <Dialog>
+    <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" className="h-8 text-xs">
+        <Button size="sm" className="h-8 text-xs shadow-s">
           <svg aria-hidden="true" className="mr-1.5 h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
           </svg>
           Create Project
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Create Project</DialogTitle>
-          <DialogDescription>
-            Create a new project to organize your tasks and collaborate with your team.
-          </DialogDescription>
-        </DialogHeader>
-
-        <Form method="post" className="grid gap-4 py-4">
-          <div className="grid grid-cols-6 items-center gap-x-4 gap-y-2">
-            <Input name="ownerId" type="hidden" value={user.id} />
-            <Label htmlFor="name" className="text-right col-span-2 text-sm whitespace-nowrap w-fit">
-              Project Name
-            </Label>
-
-            <Input name="name" type="text" placeholder="My awesome project" className="col-span-4" />
-
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Label htmlFor="defaultColumns" className="text-right col-span-2 text-sm whitespace-nowrap w-fit">
-                    Default Columns
-                  </Label>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>Default columns: Not Started, Todo, In Progress, Done</p>{' '}
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-            <Checkbox name="defaultColumns" />
+      <DialogContent
+        className="sm:max-w-[600px] p-0 gap-0 overflow-hidden bg-muted/30 backdrop-blur-md border-none shadow-s"
+        showCloseButton={false}
+      >
+        {/* Header */}
+        <div className="flex h-16 items-center justify-between border-b border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+              <KanbanSquareIcon className="h-3.5 w-3.5" />
+            </div>
+            <DialogTitle className="text-base font-semibold m-0">Create Project</DialogTitle>
           </div>
-          <Button type="submit" className="w-full">
-            {navigation.location ? 'Creating...' : 'Create Project'}
-          </Button>
-        </Form>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogClose>
+        </div>
+
+        {/* Form Content */}
+        <div className="overflow-auto max-h-[calc(100vh-180px)]">
+          <Form method="post" id="project-form" className="space-y-4 p-6">
+            <input type="hidden" name="ownerId" value={user.id} />
+
+            <div className="space-y-2">
+              <Label htmlFor="name" className="text-sm text-muted-foreground">
+                Project name <span className="text-muted-foreground">(required)</span>
+              </Label>
+              <Input id="name" name="name" placeholder="Set Project name..." required className="h-9" />
+            </div>
+
+            <div className="space-y-3">
+              <Label className="text-sm text-muted-foreground">Column Template</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {COLUMN_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    className={`cursor-pointer rounded-lg border p-4 transition-all w-full text-left ${
+                      selectedTemplateId === template.id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border/50 hover:border-border'
+                    }`}
+                    onClick={() => setSelectedTemplateId(template.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedTemplateId(template.id);
+                      }
+                    }}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-4">
+                        <div className="h-10 w-10 rounded-lg bg-muted/20 flex items-center justify-center text-lg">
+                          {template.icon}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <div className="text-sm font-medium">{template.name}</div>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">{template.description}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {template.columns.map((column) => (
+                              <Badge key={column} variant="outline" className="text-xs">
+                                {column}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <input type="hidden" name="templateId" value={selectedTemplateId} />
+            </div>
+          </Form>
+        </div>
+
+        {/* Footer */}
+        <div className="flex h-14 items-center justify-between border-t border-border px-6 bg-muted/30">
+          <div className="flex items-center gap-2">
+            <Switch id="create-more" checked={createMore} onCheckedChange={setCreateMore} />
+            <Label htmlFor="create-more" className="text-sm font-normal cursor-pointer">
+              Create more
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <DialogClose asChild>
+              <Button type="button" variant="ghost" size="sm" className="h-8 text-xs">
+                Cancel
+              </Button>
+            </DialogClose>
+            <Button type="submit" form="project-form" size="sm" className="h-8 text-xs">
+              {navigation.state === 'submitting' ? 'Creating...' : 'Create record'}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

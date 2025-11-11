@@ -20,7 +20,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     return redirect(`/dashboard/${companyId}/projects/${projectId}/settings`);
   }
 
-  // TODO: check if user is owner
   await db.delete(boardTable).where(eq(boardTable.id, projectId));
 
   return redirect(`/dashboard/${companyId}/projects/${projectId}/settings`);

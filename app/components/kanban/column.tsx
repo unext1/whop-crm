@@ -22,6 +22,7 @@ export interface TaskType {
   amount?: number | null;
   company?: { id: string; name: string | null } | null;
   person?: { id: string; name: string | null } | null;
+  parentDeal?: { id: string; name: string; boardId: string | null } | null;
   assignees?: Array<{
     user: {
       id: string;
@@ -173,6 +174,7 @@ const Column = ({
                   priority={task.priority}
                   company={task.company}
                   person={task.person}
+                  parentDeal={task.parentDeal}
                 />
               );
             }

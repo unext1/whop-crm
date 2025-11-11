@@ -5,18 +5,33 @@ import {
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
+  SidebarMenu,
+  SidebarMenuItem,
   SidebarRail,
   useSidebar,
 } from '~/components/ui/sidebar';
 import type { OrganizationType, UserType } from '~/db/schema';
+import { GettingStartedCard } from '~/components/getting-started-card';
 import { NavGroup } from './nav-group';
 import { NavUser } from './nav-user';
 
 export function AppSidebar({
   user,
   organization,
+  deals,
+  gettingStarted,
   ...props
-}: { user: UserType; organization: OrganizationType } & React.ComponentProps<typeof Sidebar>) {
+}: {
+  user: UserType;
+  organization: OrganizationType;
+  deals: { id: string; name: string }[];
+  gettingStarted?: {
+    hasPerson: boolean;
+    hasCompany: boolean;
+    hasTask: boolean;
+    hasDeal: boolean;
+  };
+} & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();
 
   const navGroups = [
@@ -48,11 +63,27 @@ export function AppSidebar({
           url: href('/dashboard/:companyId/people', { companyId: params.companyId || '' }),
           icon: UsersIcon,
         },
-        {
-          title: 'Deals',
-          url: href('/dashboard/:companyId/projects', { companyId: params.companyId || '' }),
-          icon: KanbanIcon,
-        },
+        ...(deals.length > 0
+          ? [
+              {
+                title: 'Deals',
+                icon: KanbanIcon,
+                items: deals.map((deal) => ({
+                  title: deal.name,
+                  url: href('/dashboard/:companyId/projects/:projectId', {
+                    companyId: params.companyId || '',
+                    projectId: deal.id,
+                  }),
+                })),
+              },
+            ]
+          : [
+              {
+                title: 'Deals',
+                url: href('/dashboard/:companyId/projects', { companyId: params.companyId || '' }),
+                icon: KanbanIcon,
+              },
+            ]),
       ],
     },
   ];
@@ -101,6 +132,15 @@ export function AppSidebar({
         ))}
       </SidebarContent>
       <SidebarFooter>
+        {gettingStarted && (
+          <div className="px-2 mb-2">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <GettingStartedCard progress={gettingStarted} />
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+        )}
         <NavUser
           user={{
             name: user.name ?? 'Anonymous',
