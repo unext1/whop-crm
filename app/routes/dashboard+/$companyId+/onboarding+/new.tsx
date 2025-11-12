@@ -1,16 +1,6 @@
 import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
-import {
-  ArrowDown,
-  ArrowUp,
-  Building2,
-  ChartArea,
-  Check,
-  CheckSquare,
-  LayoutDashboardIcon,
-  TrendingUp,
-  User,
-} from 'lucide-react';
+import { ArrowDown, ArrowUp, ChartArea, Check, CheckSquare, LayoutDashboardIcon, TrendingUp, User } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigate, useNavigation, useParams } from 'react-router';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
@@ -241,14 +231,6 @@ const DashboardMockup = ({ orgName, userName }: { orgName: string; userName: str
       growth: 12,
       icon: User,
       last30Days: 5,
-      positive: true,
-    },
-    {
-      title: 'Companies',
-      value: 23,
-      growth: 8,
-      icon: Building2,
-      last30Days: 2,
       positive: true,
     },
     {
@@ -852,7 +834,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               </div>
 
               <div className="flex flex-col gap-6">
-                {loaderData.hasPremiumAccess && (
+                {!loaderData.hasPremiumAccess && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
                       {/* Monthly */}
