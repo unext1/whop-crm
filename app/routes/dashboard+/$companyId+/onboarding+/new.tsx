@@ -286,14 +286,14 @@ const DashboardMockup = ({ orgName, userName }: { orgName: string; userName: str
         </div>
         <div className=" space-y-4">
           {/* Statistics Cards - 4 Columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-8 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {statsCards.map((stat) => {
               const Icon = stat.icon;
               const hasGrowth = Math.abs(stat.growth) > 0;
               return (
                 <Card
                   key={stat.title}
-                  className="bg-linear-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
+                  className="bg-linear-to-b from-muted to-muted/30 shadow col-span-1 border transition-all duration-300 transform"
                 >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -321,7 +321,7 @@ const DashboardMockup = ({ orgName, userName }: { orgName: string; userName: str
                               ? statsCards[1].last30Days
                               : stat.title === 'Tasks'
                                 ? statsCards[2].last30Days
-                                : statsCards[3].last30Days,
+                                : 0,
                         )}{' '}
                         this month
                       </p>

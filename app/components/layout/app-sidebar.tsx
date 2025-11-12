@@ -137,7 +137,7 @@ export function AppSidebar({
         ))}
       </SidebarContent>
       <SidebarFooter>
-        {gettingStarted && (
+        {gettingStarted && state !== 'collapsed' && (
           <div className="px-2 mb-2">
             <SidebarMenu>
               <SidebarMenuItem>

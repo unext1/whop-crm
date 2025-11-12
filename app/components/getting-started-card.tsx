@@ -81,7 +81,6 @@ export function GettingStartedCard({ progress }: GettingStartedCardProps) {
         <ShimmerButton background="hsl(var(--muted))" className="w-full text-center text-xs flex justify-center mb-6">
           <Rocket className="h-4 w-4 shrink-0 mr-2" />
           <span>Getting started</span>
-          {percentage < 100 && <span className="text-xs opacity-80">{percentage}%</span>}
         </ShimmerButton>
       </PopoverTrigger>
       <PopoverContent
