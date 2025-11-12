@@ -15,6 +15,9 @@ import { data, Form, redirect, useFetcher, useNavigate, useNavigation } from 're
 import { z } from 'zod';
 import type { Route } from './+types/settings';
 
+import { EditableText } from '~/components/kanban/editible-text';
+import { QuickActionsMenu } from '~/components/quick-actions-menu';
+
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
@@ -42,6 +45,10 @@ const updateColumnOrderSchema = z.object({
 
 const removeColumnSchema = z.object({
   columnId: z.string(),
+});
+
+const updateProjectNameSchema = z.object({
+  name: z.string().min(1, 'Project name is required'),
 });
 
 interface ProjectWithRelations {
@@ -87,7 +94,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     throw redirect(`/dashboard/${companyId}/projects`);
   }
 
-  return { project: project as ProjectWithRelations, projectId, companyId };
+  return { project: project as ProjectWithRelations, projectId, companyId, user };
 };
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
@@ -168,6 +175,20 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       return data(submission.reply());
     }
 
+    case 'updateProjectName': {
+      const submission = parseWithZod(formData, { schema: updateProjectNameSchema });
+
+      if (submission.status !== 'success') {
+        return data(submission.reply(), {
+          status: submission.status === 'error' ? 400 : 200,
+        });
+      }
+
+      await db.update(boardTable).set({ name: submission.value.name }).where(eq(boardTable.id, projectId));
+
+      return data(submission.reply());
+    }
+
     default:
       return data({ error: 'Invalid intent' }, { status: 400 });
   }
@@ -191,7 +212,7 @@ function SortableColumn({ column, onDelete }: { column: Column; onDelete: (colum
   };
 
   return (
-    <Card ref={setNodeRef} style={style} className="p-4 bg-muted backdrop-blur-md border-none shadow-s">
+    <Card ref={setNodeRef} style={style} className="p-4 bg-muted border-0 shadow-s border-none">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button {...attributes} {...listeners} className="cursor-grab hover:bg-muted rounded p-1">
@@ -213,7 +234,7 @@ function SortableColumn({ column, onDelete }: { column: Column; onDelete: (colum
 }
 
 const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
-  const { project, projectId, companyId } = loaderData;
+  const { project, projectId, companyId, user } = loaderData;
   const [activeTab, setActiveTab] = useState('columns');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createColumnDialogOpen, setCreateColumnDialogOpen] = useState(false);
@@ -299,7 +320,17 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-primary text-lg font-semibold text-primary-foreground">
             {project.name?.charAt(0) || 'P'}
           </div>
-          <h2 className="text-lg font-semibold">{project.name || 'Unnamed Project'}</h2>
+          <div className="flex items-center gap-2">
+            <EditableText
+              fieldName="name"
+              value={project.name || 'Unnamed Project'}
+              inputLabel="Edit project name"
+              buttonLabel={`Edit project "${project.name || 'Unnamed Project'}" name`}
+              size="md"
+            >
+              <input type="hidden" name="intent" value="updateProjectName" />
+            </EditableText>
+          </div>
         </div>
 
         {/* Project Details */}
@@ -404,6 +435,21 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
               <h1 className="text-base font-semibold">Settings</h1>
             </div>
           </div>
+          <QuickActionsMenu
+            type="project"
+            entityId={project.id}
+            entityName={project.name || 'Unnamed Project'}
+            userId={user.id}
+            organizationId={companyId}
+            onDelete={() => {
+              const formData = new FormData();
+              formData.append('projectId', project.id);
+              fetcher.submit(formData, {
+                method: 'post',
+                action: `/dashboard/${companyId}/projects/${projectId}/removeProject`,
+              });
+            }}
+          />
         </div>
 
         {/* Tabs */}
@@ -429,14 +475,14 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 scrollbar-thin">
           {activeTab === 'columns' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Project Columns</h2>
                 <Dialog open={createColumnDialogOpen} onOpenChange={setCreateColumnDialogOpen}>
                   <DialogTrigger asChild>
-                    <Button size="sm" className="h-8 text-xs">
+                    <Button size="sm" className="h-8 text-xs shadow-s">
                       Create Column
                     </Button>
                   </DialogTrigger>
@@ -490,8 +536,8 @@ const ProjectSettings = ({ loaderData }: Route.ComponentProps) => {
                   </DndContext>
                 ) : (
                   <div className="rounded-lg border border-border bg-card p-4 text-center shadow-sm">
-                    <Settings className="mx-auto h-8 w-8 text-muted-foreground" />
-                    <p className="mt-2 text-sm text-muted-foreground">No columns yet</p>
+                    <Settings className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                    <h2 className="text-lg font-semibold mb-2">No columns yet</h2>
                     <Button variant="outline" size="sm" className="mt-4 h-8 text-xs">
                       Create your first column
                     </Button>

@@ -404,7 +404,7 @@ const DashboardPage = ({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 scrollbar-thin">
         <div className="mb-6">
           <h2 className="text-3xl font-semibold">Welcome back, {user.name} 👋</h2>
           <p className="text-base text-muted-foreground">Here's a quick overview of your activity this month.</p>
@@ -547,7 +547,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent Activity */}
-            <Card className="bg-muted/30 border shadow-sm col-span-3">
+            <Card className="bg-card shadow-sm border border-border col-span-3">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
@@ -603,7 +603,7 @@ const DashboardPage = ({
           {/* Recent Companies, People, and Deals - 3 Columns */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Recent Companies */}
-            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
+            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Companies</CardTitle>
@@ -648,7 +648,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent People */}
-            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
+            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent People</CardTitle>
@@ -693,7 +693,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent Deals */}
-            <Card className="bg-muted/30 border shadow-sm flex flex-col h-full">
+            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Deals</CardTitle>

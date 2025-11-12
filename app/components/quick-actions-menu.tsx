@@ -30,7 +30,7 @@ import { Switch } from './ui/switch';
 import { Textarea } from './ui/textarea';
 
 interface QuickActionsMenuProps {
-  type: 'person' | 'company' | 'task';
+  type: 'person' | 'company' | 'task' | 'project';
   entityId: string;
   entityName: string;
   hasWhopId?: boolean;
@@ -353,11 +353,11 @@ export function QuickActionsMenu({
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              Delete {type === 'person' ? 'Person' : type === 'company' ? 'Company' : 'Task'}?
+              Delete {type === 'person' ? 'Person' : type === 'company' ? 'Company' : type === 'task' ? 'Task' : 'Project'}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to delete {entityName}? This action cannot be undone and will permanently remove
-              this {type === 'person' ? 'person' : type === 'company' ? 'company' : 'task'} and all associated data.
+              this {type === 'person' ? 'person' : type === 'company' ? 'company' : type === 'task' ? 'task' : 'project'} and all associated data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

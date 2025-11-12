@@ -320,6 +320,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
           ownerId: user.id,
           type: 'pipeline',
           parentTaskId: null,
+          notes: null,
         } as TaskRecord;
         // Add company/person objects for optimistic UI
         if (pendingItem.companyName && pendingItem.relatedCompanyId) {
@@ -549,7 +550,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
                   Cancel
                 </Button>
               </DialogClose>
-              <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs">
+              <Button type="submit" form="create-project-form" size="sm" className="h-8 text-xs shadow-s">
                 {createFetcher.state === 'submitting' ? 'Creating...' : 'Create record'}
               </Button>
             </div>

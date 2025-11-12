@@ -8,6 +8,13 @@ export type ColumnTemplate = {
 
 export const COLUMN_TEMPLATES: ColumnTemplate[] = [
   {
+    id: 'empty',
+    name: 'Empty',
+    description: 'Start with an empty board',
+    icon: '▪️',
+    columns: [],
+  },
+  {
     id: 'sales',
     name: 'Sales',
     description: 'Lead generation and deal tracking',

@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm';
 import { data } from 'react-router';
 import { db } from '~/db';
-import { boardTaskTable } from '~/db/schema';
+import { boardTable, boardTaskTable } from '~/db/schema';
 import { requireUser } from '~/services/whop.server';
 import type { Route } from './+types/delete-todo';
 
@@ -16,21 +16,20 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return data({ error: 'Task ID is required' }, { status: 400 });
   }
 
-  // Verify task exists and belongs to this organization
-  const task = await db.query.boardTaskTable.findFirst({
-    where: eq(boardTaskTable.id, taskId),
+  // Verify task belongs to organization through board relationship
+  const boards = await db.query.boardTable.findMany({
+    where: eq(boardTable.companyId, companyId),
     with: {
-      board: true,
+      tasks: {
+        where: eq(boardTaskTable.id, taskId),
+      },
     },
   });
 
+  const task = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId);
+
   if (!task) {
     return data({ error: 'Task not found' }, { status: 404 });
-  }
-
-  // Verify task belongs to this organization
-  if (task.board && task.board.companyId !== companyId) {
-    return data({ error: 'Unauthorized' }, { status: 403 });
   }
 
   // Delete the task

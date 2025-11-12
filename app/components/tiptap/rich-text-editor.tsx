@@ -110,7 +110,7 @@ export function RichTextEditor({
   return (
     <div
       className={cn(
-        'relative w-full max-w-full overflow-x-hidden overflow-y-scroll border bg-card text-foreground',
+        'relative w-full max-w-full overflow-x-hidden overflow-y-scroll scrollbar-thin border bg-card text-foreground',
         editable && 'pb-[60px] sm:pb-0',
         className,
       )}
@@ -118,7 +118,7 @@ export function RichTextEditor({
       {editable && <EditorToolbar editor={editor} />}
       {editable && <FloatingToolbar editor={editor} />}
       {editable && <TipTapFloatingMenu editor={editor} />}
-      <EditorContent editor={editor} className="w-full max-w-full cursor-text text-foreground sm:p-6" />
+      <EditorContent editor={editor} className="w-full max-w-full cursor-text scrollbar-thin text-foreground sm:p-6" />
     </div>
   );
 }

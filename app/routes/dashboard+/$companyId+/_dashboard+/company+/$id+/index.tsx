@@ -26,9 +26,11 @@ import { useState } from 'react';
 import { data, Form, Link, redirect, useLoaderData, useNavigate, useNavigation, useSubmit } from 'react-router';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
+import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { LogActivityDialog } from '~/components/log-activity-dialog';
 import { MeetingDialog } from '~/components/meetings/meeting-dialog';
-import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
+import { MeetingList } from '~/components/meetings/meeting-list';
+import { NotesTab } from '~/components/notes-tab';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
@@ -52,14 +54,12 @@ import {
   companiesPeopleTable,
   companiesTable,
   meetingsTable,
-  meetingsCompaniesTable,
   peopleTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
-import { MeetingList } from '~/components/meetings/meeting-list';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: companyId } = params;
@@ -88,19 +88,25 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     orderBy: peopleTable.name,
   });
 
-  // Fetch associated tasks
-  const tasks = await db.query.boardTaskTable.findMany({
-    where: and(eq(boardTaskTable.companyId, companyId), eq(boardTaskTable.type, 'tasks')),
+  // Fetch associated tasks - validate through board relationship
+  const boards = await db.query.boardTable.findMany({
+    where: eq(boardTable.companyId, organizationId),
     with: {
-      column: true,
-      assignees: {
+      tasks: {
+        where: and(eq(boardTaskTable.companyId, companyId), eq(boardTaskTable.type, 'tasks')),
         with: {
-          user: true,
+          column: true,
+          assignees: {
+            with: {
+              user: true,
+            },
+          },
         },
       },
     },
-    orderBy: boardTaskTable.order,
   });
+
+  const tasks = boards.flatMap((b) => b.tasks).sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Group tasks by column
   const tasksByColumn = tasks.reduce(
@@ -126,8 +132,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   // Fetch meetings for this company
-  const companyMeetings = await db.query.meetingsTable.findMany({
-    where: and(eq(meetingsTable.organizationId, organizationId), eq(meetingsCompaniesTable.companyId, companyId)),
+  const mettings = await db.query.meetingsTable.findMany({
+    where: eq(meetingsTable.organizationId, organizationId),
     with: {
       meetingsPeople: {
         with: {
@@ -142,6 +148,10 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     },
     orderBy: (meetingsTable, { asc }) => [asc(meetingsTable.startDate)],
   });
+
+  const companyMeetings = mettings.filter((meeting) =>
+    meeting.meetingsCompanies?.some((mc) => mc.company.id === companyId),
+  );
 
   // Fetch all companies for the meeting dialog
   const allCompanies = await db.query.companiesTable.findMany({
@@ -584,7 +594,7 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-  // { id: 'notes', label: 'Notes', icon: FileText },
+  { id: 'notes', label: 'Notes', icon: FileText },
   { id: 'team', label: 'Team', icon: Users },
   // { id: 'files', label: 'Files', icon: Paperclip },
   // { id: 'emails', label: 'Emails', icon: Mail },
@@ -825,10 +835,10 @@ const CompanyPage = () => {
       </Sheet>
 
       {/* Middle Panel - Timeline/Activity */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
         {/* Header */}
-        <div className="flex h-14 items-center justify-between border-b border-border px-4">
-          <div className="flex items-center gap-3">
+        <div className="flex h-14 items-center justify-between border-b border-border px-4 min-w-0 max-w-full overflow-x-hidden">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
             <Button
               variant="ghost"
               size="sm"
@@ -844,10 +854,12 @@ const CompanyPage = () => {
             <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
               {company.name?.charAt(0) || 'C'}
             </div>
-            <h1 className="text-base font-semibold">{company.name || 'Unnamed Company'}</h1>
-            <Badge variant="secondary" className="h-5 text-xs">
-              Active
-            </Badge>
+            <div className="flex items-center gap-2 min-w-0">
+              <h1 className="text-base font-semibold truncate">{company.name || 'Unnamed Company'}</h1>
+              <Badge variant="secondary" className="h-5 text-xs">
+                Active
+              </Badge>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             <QuickActionsMenu
@@ -864,7 +876,6 @@ const CompanyPage = () => {
             />
           </div>
         </div>
-
         {/* Tabs */}
         <div className="border-b border-border px-4">
           <div className="flex gap-1">
@@ -886,9 +897,8 @@ const CompanyPage = () => {
             ))}
           </div>
         </div>
-
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4 flex flex-col scrollbar-thin">
+        <div className="flex-1 overflow-auto flex p-4 flex-col scrollbar-thin min-w-0 max-w-full">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Key Stats */}
@@ -995,7 +1005,7 @@ const CompanyPage = () => {
                     companies={[]}
                     people={[]}
                     trigger={
-                      <Button size="sm" className="h-8 text-xs">
+                      <Button size="sm" className="h-8 text-xs shadow-s">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
                         Add Todo
                       </Button>
@@ -1005,9 +1015,9 @@ const CompanyPage = () => {
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
                 <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                  <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-semibold">No tasks yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Create a task to get started</p>
+                  <CheckSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h2 className="text-lg font-semibold mb-2">No tasks yet</h2>
+                  <p className="text-sm text-muted-foreground">Create a task to get started</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1022,8 +1032,8 @@ const CompanyPage = () => {
                       <div className="space-y-2">
                         {tasks.map((task) => (
                           <Card key={task.id} className="p-4 bg-muted/30 border-0 shadow-s">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
                                 {columnName.toLowerCase() === 'done' || columnName.toLowerCase() === 'completed' ? (
                                   <button
                                     type="button"
@@ -1104,11 +1114,7 @@ const CompanyPage = () => {
                                   <Form
                                     method="post"
                                     action={`/dashboard/${organizationId}/api/delete-todo`}
-                                    onSubmit={(e) => {
-                                      if (!confirm('Are you sure you want to delete this task?')) {
-                                        e.preventDefault();
-                                      }
-                                    }}
+                                    navigate={false}
                                   >
                                     <input type="hidden" name="taskId" value={task.id} />
                                     <DropdownMenuItem asChild>
@@ -1131,19 +1137,13 @@ const CompanyPage = () => {
           )}
 
           {activeTab === 'notes' && (
-            <div className="flex-1 flex flex-col">
-              <div className="mb-4 flex items-center justify-between">
-                <h2 className="text-sm font-semibold">Notes</h2>
-                <Button size="sm" className="h-8 text-xs">
-                  <Plus className="mr-1.5 h-3.5 w-3.5" />
-                  New Note
-                </Button>
-              </div>
-              <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                <FileText className="mx-auto h-8 w-8 text-muted-foreground" />
-                <p className="mt-2 text-sm text-foreground">No notes yet</p>
-                <p className="text-xs text-muted-foreground">Create a note to get started</p>
-              </div>
+            <div className="max-w-full overflow-x-hidden">
+              <NotesTab
+                initialNotes={company.notes || ''}
+                entityType="company"
+                entityId={company.id}
+                organizationId={organizationId}
+              />
             </div>
           )}
 
@@ -1151,7 +1151,7 @@ const CompanyPage = () => {
             <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Upload
                 </Button>
@@ -1180,9 +1180,9 @@ const CompanyPage = () => {
               </div>
               {company.companiesPeople.length === 0 ? (
                 <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                  <Users className="mx-auto h-12 w-12 text-muted-foreground" />
-                  <p className="mt-2 text-sm text-muted-foreground">No team members yet</p>
-                  <p className="text-xs text-muted-foreground mt-2">Use the dropdown above to add team members</p>
+                  <Users className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h2 className="text-lg font-semibold mb-2">No team members yet</h2>
+                  <p className="text-sm text-muted-foreground">Use the dropdown above to add team members</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1248,7 +1248,7 @@ const CompanyPage = () => {
             <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Email History</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Mail className="mr-1.5 h-3.5 w-3.5" />
                   Compose
                 </Button>
@@ -1272,7 +1272,7 @@ const CompanyPage = () => {
                   companies={allCompanies}
                   people={allPeople}
                   trigger={
-                    <Button size="sm" className="h-8 text-xs">
+                    <Button size="sm" className="h-8 text-xs shadow-s">
                       <Plus className="mr-1.5 h-3.5 w-3.5" />
                       Schedule Meeting
                     </Button>

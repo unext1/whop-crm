@@ -3,10 +3,7 @@ import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { experienceId } = params;
-  console.log(experienceId);
-  console.log(request.headers);
   const user = await requireUser(request, experienceId);
-  console.log(user);
   return { user };
 };
 

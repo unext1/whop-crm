@@ -1,6 +1,16 @@
 import { createSdk } from '@whop/iframe';
 import { eq } from 'drizzle-orm';
-import { ArrowDown, ArrowUp, Building2, Check, CheckSquare, LayoutDashboardIcon, TrendingUp, User } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Building2,
+  ChartArea,
+  Check,
+  CheckSquare,
+  LayoutDashboardIcon,
+  TrendingUp,
+  User,
+} from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigate, useNavigation, useParams } from 'react-router';
 import { Area, AreaChart, CartesianGrid, XAxis } from 'recharts';
@@ -533,7 +543,7 @@ const SalesFeaturesMockup = () => (
     <div className="flex h-14 items-center justify-between border-b border-border px-4">
       <div className="flex items-center gap-3">
         <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
-          📊
+          <ChartArea className="h-3.5 w-3.5" />
         </div>
         <h1 className="text-base font-semibold">Sales Pipeline</h1>
       </div>
@@ -896,27 +906,29 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                       <div className="grid grid-cols-2 gap-3 text-xs">
                         <div className="flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          <span>People & contact management</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>Visual sales pipeline</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>Team task management</span>
                         </div>
+
                         <div className="flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Advanced reporting</span>
+                          <span>Activity timeline & notes</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Priority support</span>
-                        </div>
+
                         <div className="flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           <span>Unlimited team members</span>
                         </div>
                         <div className="flex items-center gap-2">
                           <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Custom integrations</span>
+                          <span>Priority support</span>
                         </div>
                       </div>
                     </div>

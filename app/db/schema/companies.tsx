@@ -15,6 +15,7 @@ export const companiesTable = sqliteTable('companies', {
   phone: text('phone'),
   linkedin: text('linkedin'),
   twitter: text('twitter'),
+  notes: text('notes'),
 
   organizationId: text('organization_id')
     .references(() => organizationTable.id)

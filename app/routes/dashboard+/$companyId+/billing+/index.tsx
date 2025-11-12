@@ -73,7 +73,7 @@ const BillingPage = () => {
         throw new Error('Checkout session not available');
       }
 
-      const result = await iframeSdk.inAppPurchase(checkoutSession);
+      const result = await iframeSdk.inAppPurchase({ planId: checkoutSession.plan.id, id: checkoutSession.id });
       setPurchaseResult(result);
 
       if (result.status === 'ok') {
@@ -115,7 +115,7 @@ const BillingPage = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 scrollbar-thin">
         <div className="max-w-4xl mx-auto space-y-6">
           {/* Organization Subscription Required Notice */}
           {!orgPremiumAccess && (

@@ -99,6 +99,9 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
+          <div className="flex h-6 w-6 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+            <KanbanSquareIcon className="h-3.5 w-3.5" />
+          </div>
           <h1 className="text-base font-semibold">Projects</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -107,7 +110,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 scrollbar-thin">
         {projects.length >= 1 ? (
           <div className="grid sm:grid-cols-2 grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {projects.map((project) => {
@@ -133,12 +136,12 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
             })}
           </div>
         ) : (
-          <div className="flex flex-1 items-center py-40 justify-center">
-            <div className="flex flex-col items-center gap-1 text-center max-w-md">
-              <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+          <div className="flex flex-1 items-center justify-center py-40">
+            <div className="text-center">
+              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
                 <svg
                   aria-hidden="true"
-                  className="h-8 w-8 text-muted-foreground"
+                  className="h-6 w-6 text-muted-foreground"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -151,7 +154,7 @@ const ProjectPage = ({ loaderData }: Route.ComponentProps) => {
                   />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold">No projects yet</h3>
+              <h2 className="text-lg font-semibold mb-2">No projects yet</h2>
               <p className="text-sm text-muted-foreground mb-6">
                 Create your first project to start organizing your tasks and collaborating with your team.
               </p>
@@ -282,7 +285,7 @@ const CreateProjectDialog = ({ user }: { user: UserType }) => {
                 Cancel
               </Button>
             </DialogClose>
-            <Button type="submit" form="project-form" size="sm" className="h-8 text-xs">
+            <Button type="submit" form="project-form" size="sm" className="h-8 text-xs shadow-s">
               {navigation.state === 'submitting' ? 'Creating...' : 'Create record'}
             </Button>
           </div>

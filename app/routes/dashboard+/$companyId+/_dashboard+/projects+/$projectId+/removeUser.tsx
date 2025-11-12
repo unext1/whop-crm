@@ -13,7 +13,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const submission = parseWithZod(formData, {
-    schema: z.object({ 
+    schema: z.object({
       userId: z.string().min(1),
       taskId: z.string().min(1),
     }),
@@ -30,18 +30,21 @@ export async function action({ request, params }: Route.ActionArgs) {
     where: eq(userTable.id, userIdToRemove),
   });
 
+  // Verify task belongs to this organization's project
   const task = await db.query.boardTaskTable.findFirst({
     where: eq(boardTaskTable.id, taskId),
+    with: {
+      board: true,
+    },
   });
+
+  if (!task || !task.board || task.board.companyId !== params.companyId) {
+    return data({ error: 'Task not found or unauthorized' }, { status: 404 });
+  }
 
   await db
     .delete(taskAssigneesTable)
-    .where(
-      and(
-        eq(taskAssigneesTable.taskId, taskId),
-        eq(taskAssigneesTable.userId, userIdToRemove),
-      ),
-    );
+    .where(and(eq(taskAssigneesTable.taskId, taskId), eq(taskAssigneesTable.userId, userIdToRemove)));
 
   // Log user removal activity
   if (task) {

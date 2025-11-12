@@ -826,7 +826,7 @@ const DashboardPage = () => {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 text-xs shadow-s">
-                <Plus className="md:mr-1.5 h-3.5 w-3.5" />
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
                 <span className="hidden md:block">Add Person</span>
               </Button>
             </DialogTrigger>
@@ -965,7 +965,7 @@ const DashboardPage = () => {
                       Cancel
                     </Button>
                   </DialogTrigger>
-                  <Button type="submit" form="person-form" size="sm" className="h-8 text-xs">
+                  <Button type="submit" form="person-form" size="sm" className="h-8 text-xs shadow-s">
                     Create record
                   </Button>
                 </div>

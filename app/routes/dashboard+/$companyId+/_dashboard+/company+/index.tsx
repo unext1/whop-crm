@@ -484,7 +484,7 @@ const DashboardPage = () => {
                       Cancel
                     </Button>
                   </DialogTrigger>
-                  <Button type="submit" form="company-form" size="sm" className="h-8 text-xs">
+                  <Button type="submit" form="company-form" size="sm" className="h-8 text-xs shadow-s">
                     Create record
                   </Button>
                 </div>
@@ -495,7 +495,7 @@ const DashboardPage = () => {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 overflow-auto p-4 scrollbar-thin">
         <DataTable table={table} loading={navigation.state === 'loading'}>
           <DataTableAdvancedToolbar table={table}>
             <DataTableFilterList table={table} shallow={false} />

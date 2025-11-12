@@ -1,4 +1,4 @@
-import { and, eq, or, sql } from 'drizzle-orm';
+import { and, eq, or } from 'drizzle-orm';
 import {
   ActivityIcon,
   BriefcaseBusinessIcon,
@@ -22,8 +22,8 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { data, Form, Link, redirect, useFetcher, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { useState } from 'react';
+import { data, Form, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
 import { AddEmailDialog } from '~/components/add-email-dialog';
 import { EditableField } from '~/components/editable-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
@@ -31,8 +31,8 @@ import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { LogActivityDialog } from '~/components/log-activity-dialog';
 import { MeetingDialog } from '~/components/meetings/meeting-dialog';
 import { MeetingList } from '~/components/meetings/meeting-list';
+import { NotesTab } from '~/components/notes-tab';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
-import { RichTextEditor } from '~/components/tiptap/rich-text-editor';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
@@ -87,19 +87,25 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     throw new Response('Person not found', { status: 404 });
   }
 
-  // Fetch associated tasks
-  const tasks = await db.query.boardTaskTable.findMany({
-    where: and(eq(boardTaskTable.personId, personId), eq(boardTaskTable.type, 'tasks')),
+  // Fetch associated tasks - validate through board relationship
+  const boards = await db.query.boardTable.findMany({
+    where: eq(boardTable.companyId, organizationId),
     with: {
-      column: true,
-      assignees: {
+      tasks: {
+        where: and(eq(boardTaskTable.personId, personId), eq(boardTaskTable.type, 'tasks')),
         with: {
-          user: true,
+          column: true,
+          assignees: {
+            with: {
+              user: true,
+            },
+          },
         },
       },
     },
-    orderBy: boardTaskTable.order,
   });
+
+  const tasks = boards.flatMap((b) => b.tasks).sort((a, b) => (a.order || 0) - (b.order || 0));
 
   // Group tasks by column
   const tasksByColumn = tasks.reduce(
@@ -819,32 +825,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
     }
   }
 
-  // Update notes
-  if (intent === 'update-notes') {
-    const notes = formData.get('notes')?.toString() || '';
-
-    try {
-      await db
-        .update(peopleTable)
-        .set({
-          notes,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .where(and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)));
-
-      await logPersonActivity({
-        personId,
-        userId,
-        activityType: 'updated',
-        description: 'Updated notes',
-      });
-
-      return data({ success: true });
-    } catch {
-      return data({ error: 'Failed to update notes' }, { status: 500 });
-    }
-  }
-
   return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
@@ -853,61 +833,13 @@ const tabs = [
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
   { id: 'notes', label: 'Notes', icon: FileText },
-  { id: 'files', label: 'Files', icon: Paperclip },
-  { id: 'emails', label: 'Emails', icon: Mail },
+  // { id: 'files', label: 'Files', icon: Paperclip },
+  // { id: 'emails', label: 'Emails', icon: Mail },
   { id: 'calendar', label: 'Calendar', icon: Calendar },
 ];
 
 function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(' ');
-}
-
-function NotesTab({ initialNotes }: { initialNotes: string }) {
-  const fetcher = useFetcher();
-  const [notes, setNotes] = useState(initialNotes);
-  const [lastSavedNotes, setLastSavedNotes] = useState(initialNotes);
-
-  // Update local state when initialNotes changes (e.g., after page refresh)
-  useEffect(() => {
-    setNotes(initialNotes);
-    setLastSavedNotes(initialNotes);
-  }, [initialNotes]);
-
-  const hasUnsavedChanges = notes !== lastSavedNotes;
-  const isSaving = fetcher.state === 'submitting';
-  const isSaved = fetcher.state === 'idle' && !hasUnsavedChanges && fetcher.data?.success;
-
-  const handleSave = () => {
-    if (!hasUnsavedChanges || isSaving) return;
-
-    const formData = new FormData();
-    formData.set('intent', 'update-notes');
-    formData.set('notes', notes);
-    fetcher.submit(formData, { method: 'post' });
-    setLastSavedNotes(notes);
-  };
-
-  return (
-    <div className="flex-1 flex flex-col min-w-0 max-w-full overflow-x-hidden">
-      <div className="mb-4 flex items-center justify-between min-w-0">
-        <h2 className="text-sm font-semibold">Notes</h2>
-        <div className="flex items-center gap-2 shrink-0">
-          {hasUnsavedChanges && !isSaving && <span className="text-xs text-muted-foreground">Unsaved changes</span>}
-          {isSaving && <span className="text-xs text-muted-foreground">Saving...</span>}
-          {isSaved && <span className="text-xs text-muted-foreground">Saved</span>}
-          <Button size="sm" className="h-8 text-xs" onClick={handleSave} disabled={!hasUnsavedChanges || isSaving}>
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
-        </div>
-      </div>
-      <RichTextEditor
-        value={notes}
-        onChange={setNotes}
-        placeholder="Start writing notes about this person..."
-        className="flex-1 rounded-xl max-h-[calc(100dvh-14rem)] min-w-0 max-w-full"
-      />
-    </div>
-  );
 }
 
 const PersonPage = () => {
@@ -1194,7 +1126,7 @@ const PersonPage = () => {
       </Sheet>
 
       {/* Middle Panel - Timeline/Activity */}
-      <div className="flex flex-1 flex-col min-w-0 max-w-full overflow-x-hidden">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
         {/* Header */}
         <div className="flex h-14 items-center justify-between border-b border-border px-4 min-w-0 max-w-full overflow-x-hidden">
           <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1376,7 +1308,7 @@ const PersonPage = () => {
                     companies={[]}
                     people={[]}
                     trigger={
-                      <Button size="sm" className="h-8 text-xs">
+                      <Button size="sm" className="h-8 text-xs shadow-s">
                         <Plus className="mr-1.5 h-3.5 w-3.5" />
                         Add Todo
                       </Button>
@@ -1386,9 +1318,9 @@ const PersonPage = () => {
               </div>
               {Object.keys(tasksByColumn).length === 0 ? (
                 <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                  <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-semibold">No tasks yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Create a task to get started</p>
+                  <CheckSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h2 className="text-lg font-semibold mb-2">No tasks yet</h2>
+                  <p className="text-sm text-muted-foreground">Create a task to get started</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -1403,8 +1335,8 @@ const PersonPage = () => {
                       <div className="space-y-2">
                         {tasks.map((task) => (
                           <Card key={task.id} className="p-4 bg-muted/30 border-0 shadow-s">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="flex items-start gap-2 flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 flex-1 min-w-0">
                                 {columnName.toLowerCase() === 'done' || columnName.toLowerCase() === 'completed' ? (
                                   <button
                                     type="button"
@@ -1434,7 +1366,7 @@ const PersonPage = () => {
                                     <Circle className="h-4 w-4 text-muted-foreground" />
                                   </button>
                                 )}
-                                <div className="flex-1 min-w-0">
+                                <div className="flex-1 space-y-2 min-w-0">
                                   <div className="flex items-center gap-2 mb-1">
                                     <h4 className="text-sm font-medium truncate">{task.name}</h4>
                                     {task.priority && (
@@ -1451,7 +1383,7 @@ const PersonPage = () => {
                                   {task.content && (
                                     <p className="text-xs text-muted-foreground line-clamp-2">{task.content}</p>
                                   )}
-                                  <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
+                                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
                                     {task.dueDate && (
                                       <span className="flex items-center gap-1">
                                         <Calendar className="h-3 w-3" />
@@ -1485,11 +1417,7 @@ const PersonPage = () => {
                                   <Form
                                     method="post"
                                     action={`/dashboard/${organizationId}/api/delete-todo`}
-                                    onSubmit={(e) => {
-                                      if (!confirm('Are you sure you want to delete this task?')) {
-                                        e.preventDefault();
-                                      }
-                                    }}
+                                    navigate={false}
                                   >
                                     <input type="hidden" name="taskId" value={task.id} />
                                     <DropdownMenuItem asChild>
@@ -1513,7 +1441,12 @@ const PersonPage = () => {
 
           {activeTab === 'notes' && (
             <div className="max-w-full overflow-x-hidden">
-              <NotesTab initialNotes={person.notes || ''} />
+              <NotesTab
+                initialNotes={person.notes || ''}
+                entityType="person"
+                entityId={person.id}
+                organizationId={organizationId}
+              />
             </div>
           )}
 
@@ -1521,7 +1454,7 @@ const PersonPage = () => {
             <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Upload
                 </Button>
@@ -1538,7 +1471,7 @@ const PersonPage = () => {
             <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Email History</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Mail className="mr-1.5 h-3.5 w-3.5" />
                   Compose
                 </Button>
@@ -1552,7 +1485,7 @@ const PersonPage = () => {
           )}
 
           {activeTab === 'calendar' && (
-            <div className="flex-1 flex flex-col px-4 max-w-full overflow-x-hidden">
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Upcoming Meetings</h2>
                 <MeetingDialog
@@ -1562,7 +1495,7 @@ const PersonPage = () => {
                   companies={allCompanies}
                   people={allPeople}
                   trigger={
-                    <Button size="sm" className="h-8 text-xs">
+                    <Button size="sm" className="h-8 text-xs shadow-s">
                       <Plus className="mr-1.5 h-3.5 w-3.5" />
                       Schedule Meeting
                     </Button>

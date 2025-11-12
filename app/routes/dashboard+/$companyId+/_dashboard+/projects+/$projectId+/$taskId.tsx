@@ -52,6 +52,7 @@ import { cn } from '~/utils';
 import { logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types/$taskId';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
+import { NotesTab } from '~/components/notes-tab';
 
 const removeUserSchema = z.object({
   invitedUser: z.string(),
@@ -85,9 +86,21 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
-    const oldTask = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
+    // Verify task belongs to organization and get old task name
+    const boards = await db.query.boardTable.findMany({
+      where: eq(boardTable.companyId, companyId),
+      with: {
+        tasks: {
+          where: eq(boardTaskTable.id, taskId),
+        },
+      },
     });
+
+    const oldTask = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId);
+
+    if (!oldTask) {
+      return data({ error: 'Task not found' }, { status: 404 });
+    }
 
     await db
       .update(boardTaskTable)
@@ -242,15 +255,22 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         });
       }
 
-      // Get old task data for logging status changes
+      // Get old task data for logging status changes - validate through board
       let oldTask = null;
       if (fieldName === 'status') {
-        oldTask = await db.query.boardTaskTable.findFirst({
-          where: eq(boardTaskTable.id, taskId),
+        const boards = await db.query.boardTable.findMany({
+          where: eq(boardTable.companyId, companyId),
           with: {
-            column: true,
+            tasks: {
+              where: eq(boardTaskTable.id, taskId),
+              with: {
+                column: true,
+              },
+            },
           },
         });
+
+        oldTask = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId) || null;
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
@@ -380,9 +400,17 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
     // If relatedDealId is provided, create a regular task linked to the deal
     if (relatedDealId) {
-      const deal = await db.query.boardTaskTable.findFirst({
-        where: eq(boardTaskTable.id, relatedDealId),
+      // Verify deal belongs to organization through board
+      const boards = await db.query.boardTable.findMany({
+        where: eq(boardTable.companyId, companyId),
+        with: {
+          tasks: {
+            where: eq(boardTaskTable.id, relatedDealId),
+          },
+        },
       });
+
+      const deal = boards.flatMap((b) => b.tasks).find((t) => t.id === relatedDealId);
 
       if (!deal) {
         return data({ error: 'Deal not found' }, { status: 404 });
@@ -483,51 +511,72 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const { user } = await requireUser(request, params.companyId);
   const { projectId, companyId, taskId } = params;
 
-  const task = await db.query.boardTaskTable.findFirst({
+  // Verify task belongs to organization through board relationship
+  const boards = await db.query.boardTable.findMany({
+    where: eq(boardTable.companyId, companyId),
     with: {
-      assignees: {
+      tasks: {
+        where: eq(boardTaskTable.id, taskId),
         with: {
-          user: true,
+          assignees: {
+            with: {
+              user: true,
+            },
+          },
+          comments: {
+            with: {
+              user: true,
+            },
+            orderBy: (taskCommentTable, { desc }) => [desc(taskCommentTable.createdAt)],
+          },
+          column: true,
+          board: {
+            with: {
+              members: true,
+            },
+          },
+          owner: true,
         },
       },
-      comments: {
-        with: {
-          user: true,
-        },
-        orderBy: (taskCommentTable, { desc }) => [desc(taskCommentTable.createdAt)],
-      },
-      column: true,
-      board: {
-        with: {
-          members: true,
-        },
-      },
-      owner: true,
     },
-    where: eq(boardTaskTable.id, taskId),
   });
+
+  const task = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId);
 
   if (!task || !task.board) {
     throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
   }
 
-  // Fetch related tasks (tasks linked to this deal via parentTaskId)
-  const relatedTasks = await db.query.boardTaskTable.findMany({
-    where: and(
-      eq(boardTaskTable.type, 'tasks'),
-      eq(boardTaskTable.parentTaskId, taskId), // Tasks where this deal is the parent
-    ),
+  // Verify task belongs to this project
+  if (task.board.id !== projectId) {
+    throw redirect(`/dashboard/${companyId}/projects/${projectId}`);
+  }
+
+  // Fetch related tasks (tasks linked to this deal via parentTaskId) - validate through board
+  const relatedTasksBoards = await db.query.boardTable.findMany({
+    where: eq(boardTable.companyId, companyId),
     with: {
-      assignees: {
+      tasks: {
+        where: and(
+          eq(boardTaskTable.type, 'tasks'),
+          eq(boardTaskTable.parentTaskId, taskId), // Tasks where this deal is the parent
+        ),
         with: {
-          user: true,
+          assignees: {
+            with: {
+              user: true,
+            },
+          },
+          owner: true,
+          column: true,
         },
       },
-      owner: true,
-      column: true,
     },
-    orderBy: (boardTaskTable, { desc }) => [desc(boardTaskTable.createdAt)],
   });
+
+  const relatedTasks = relatedTasksBoards
+    .flatMap((b) => b.tasks)
+    .sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
   // Fetch available columns for status changes
   const columns = task.boardId
@@ -582,6 +631,7 @@ const tabs = [
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: FileText },
   { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+  { id: 'notes', label: 'Notes', icon: FileText },
   // { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
@@ -840,7 +890,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
       </Sheet>
 
       {/* Main Panel */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
         {/* Header */}
         <div className="flex h-14 w-full items-center justify-between border-b border-border px-4">
           <div className="flex items-center w-full gap-3">
@@ -916,7 +966,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 flex flex-col overflow-auto p-4">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Key Stats */}
@@ -990,7 +1040,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                     <p className="text-sm text-foreground whitespace-pre-wrap">{task.content}</p>
                   </Card>
                 ) : (
-                  <Card className="p-4 bg-muted/30 border-0 shadow-sm text-center">
+                  <Card className="p-4 bg-muted/30 border-0 shadow-s text-center">
                     <FileText className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">No description</p>
                   </Card>
@@ -1051,7 +1101,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
           {activeTab === 'comments' && (
             <div className="space-y-4">
               {/* Comment Form */}
-              <Card className="p-4 bg-muted/30 backdrop-blur-md border-none shadow-sm">
+              <Card className="p-4 bg-muted/30 border-0 shadow-s border-none backdrop-blur-md">
                 <Form method="post" className="space-y-3" ref={formRef}>
                   <div className="flex gap-2">
                     <Avatar className="h-8 w-8 shrink-0">
@@ -1141,7 +1191,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
             <div className="flex-1 flex flex-col">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Related Tasks</h2>
-                <Button size="sm" className="h-8 text-xs" onClick={() => setSubTaskDialogOpen(true)}>
+                <Button size="sm" className="h-8 text-xs shadow-s" onClick={() => setSubTaskDialogOpen(true)}>
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   New Task
                 </Button>
@@ -1150,7 +1200,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 <div className="space-y-2">
                   {relatedTasks.map((relatedTask) => (
                     <Card key={relatedTask.id} className="p-4 bg-muted/30 border-0 shadow-s">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center justify-between gap-3">
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             <CheckSquare className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1199,15 +1249,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                                 View
                               </Link>
                             </DropdownMenuItem>
-                            <Form
-                              method="post"
-                              action={`/dashboard/${companyId}/api/delete-todo`}
-                              onSubmit={(e) => {
-                                if (!confirm('Are you sure you want to delete this task?')) {
-                                  e.preventDefault();
-                                }
-                              }}
-                            >
+                            <Form method="post" action={`/dashboard/${companyId}/api/delete-todo`} navigate={false}>
                               <input type="hidden" name="taskId" value={relatedTask.id} />
                               <DropdownMenuItem asChild>
                                 <button type="submit" className="w-full text-destructive">
@@ -1223,20 +1265,9 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
                 </div>
               ) : (
                 <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
-                  <CheckSquare className="mx-auto h-8 w-8 text-muted-foreground" />
-                  <p className="mt-2 text-sm font-semibold">No related tasks yet</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Create tasks linked to this deal that will appear in your tasks board
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-4 h-8 text-xs"
-                    onClick={() => setSubTaskDialogOpen(true)}
-                  >
-                    <Plus className="mr-1.5 h-3.5 w-3.5" />
-                    Create first task
-                  </Button>
+                  <CheckSquare className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                  <h2 className="text-lg font-semibold mb-2">No tasks yet</h2>
+                  <p className="text-sm text-muted-foreground">Create a task to get started</p>
                 </div>
               )}
               <QuickTodoDialog
@@ -1248,11 +1279,22 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
             </div>
           )}
 
+          {activeTab === 'notes' && (
+            <div className="max-w-full overflow-x-hidden">
+              <NotesTab
+                initialNotes={task.notes || ''}
+                entityType="task"
+                entityId={task.id}
+                organizationId={companyId}
+              />
+            </div>
+          )}
+
           {activeTab === 'files' && (
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Upload
                 </Button>

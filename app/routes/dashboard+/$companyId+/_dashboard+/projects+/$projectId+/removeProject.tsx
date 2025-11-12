@@ -9,18 +9,18 @@ import { requireUser } from '~/services/whop.server';
 
 export async function action({ request, params }: Route.ActionArgs) {
   await requireUser(request, params.companyId);
-  const { companyId, projectId } = params;
+  const { companyId } = params;
 
   const formData = await request.formData();
   const submission = parseWithZod(formData, {
-    schema: z.object({ columnId: z.string().min(1) }),
+    schema: z.object({ projectId: z.string().min(1) }),
   });
 
   if (submission.status !== 'success') {
-    return redirect(`/dashboard/${companyId}/projects/${projectId}/settings`);
+    return redirect(`/dashboard/${companyId}/projects`);
   }
 
-  await db.delete(boardTable).where(eq(boardTable.id, projectId));
+  await db.delete(boardTable).where(eq(boardTable.id, submission.value.projectId));
 
-  return redirect(`/dashboard/${companyId}/projects/${projectId}/settings`);
+  return redirect(`/dashboard/${companyId}/projects`);
 }

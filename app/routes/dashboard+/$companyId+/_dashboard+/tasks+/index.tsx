@@ -1,7 +1,7 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { CheckSquare, Loader2 } from 'lucide-react';
 import React, { useRef, useState } from 'react';
-import { useFetchers } from 'react-router';
+import { data, useFetchers } from 'react-router';
 import type { Route } from './+types/index';
 
 import Column from '~/components/kanban/column';
@@ -133,11 +133,22 @@ export async function action({ request, params }: Route.ActionArgs) {
       const columnId = String(formData.get('columnId') || 0);
       const id = String(formData.get('id') || 0);
 
-      // Get old task state for activity log
-      const oldTask = await db.query.boardTaskTable.findFirst({
-        with: { column: true },
-        where: eq(boardTaskTable.id, id),
+      // Verify task belongs to organization and get old task state for activity log
+      const boards = await db.query.boardTable.findMany({
+        where: eq(boardTable.companyId, companyId),
+        with: {
+          tasks: {
+            where: eq(boardTaskTable.id, id),
+            with: { column: true },
+          },
+        },
       });
+
+      const oldTask = boards.flatMap((b) => b.tasks).find((t) => t.id === id);
+
+      if (!oldTask) {
+        return data({ error: 'Task not found' }, { status: 404 });
+      }
 
       const newColumn = await db.query.boardColumnTable.findFirst({
         where: eq(boardColumnTable.id, columnId),
@@ -239,11 +250,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           Object.assign(task, { person });
         }
       }
-      // Fetch parent deal if task is linked to a deal
+      // Fetch parent deal if task is linked to a deal - validate through board
       if (task.parentTaskId) {
-        const parentDeal = await db.query.boardTaskTable.findFirst({
-          where: eq(boardTaskTable.id, task.parentTaskId),
+        const boards = await db.query.boardTable.findMany({
+          where: eq(boardTable.companyId, companyId),
+          with: {
+            tasks: {
+              where: eq(boardTaskTable.id, task.parentTaskId),
+            },
+          },
         });
+
+        const parentDeal = boards.flatMap((b) => b.tasks).find((t) => t.id === task.parentTaskId);
         if (parentDeal) {
           Object.assign(task, { parentDeal });
         }
@@ -369,6 +387,7 @@ const TasksPage = ({ loaderData }: Route.ComponentProps) => {
         ownerId: user.id,
         parentTaskId: null,
         type: 'tasks' as const,
+        notes: null,
       } as TaskRecord;
       // Add company/person objects for optimistic UI
       if (pendingItem.companyName && pendingItem.relatedCompanyId) {

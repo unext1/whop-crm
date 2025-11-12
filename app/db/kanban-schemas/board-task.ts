@@ -31,6 +31,7 @@ export const boardTaskTable = sqliteTable('board_task', {
   status: text('status').default('open').notNull(),
   dueDate: text('due_date'),
   priority: text('priority'), // 'low', 'medium', 'high'
+  notes: text('notes'),
 });
 
 export const boardTaskRelations = relations(boardTaskTable, ({ one, many }) => ({

@@ -116,7 +116,7 @@ export function EditableText({
         inputRef.current?.select();
       }}
     >
-      {value || <span className="text-primary">Edit</span>}
+      {value || <span className="text-xs text-muted-foreground">Edit</span>}
     </Button>
   );
 }

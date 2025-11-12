@@ -11,7 +11,7 @@ import {
   getSelectProps,
   getTextareaProps,
   useForm,
-  useInputControl
+  useInputControl,
 } from '@conform-to/react';
 import { getZodConstraint, parseWithZod } from '@conform-to/zod';
 import { Select } from '@radix-ui/react-select';
@@ -75,7 +75,7 @@ export const CustomForm = <T extends z.Schema>({
     onValidate({ formData }) {
       return parseWithZod(formData, { schema });
     },
-    shouldRevalidate: 'onBlur'
+    shouldRevalidate: 'onBlur',
   });
   const Form = as || RRForm;
 

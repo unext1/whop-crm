@@ -20,6 +20,7 @@ import { EditableSelectField } from '~/components/editable-select-field';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { EditableText } from '~/components/kanban/editible-text';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
+import { NotesTab } from '~/components/notes-tab';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
 import { Card } from '~/components/ui/card';
@@ -37,6 +38,7 @@ import { db } from '~/db/index';
 import {
   activitiesTable,
   boardColumnTable,
+  boardTable,
   boardTaskTable,
   companiesTable,
   peopleTable,
@@ -87,10 +89,21 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
-    // Get old task name for activity log
-    const oldTask = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, taskId),
+    // Verify task belongs to organization and get old task name for activity log
+    const boards = await db.query.boardTable.findMany({
+      where: eq(boardTable.companyId, companyId),
+      with: {
+        tasks: {
+          where: eq(boardTaskTable.id, taskId),
+        },
+      },
     });
+
+    const oldTask = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId);
+
+    if (!oldTask) {
+      return data({ error: 'Task not found' }, { status: 404 });
+    }
 
     await db.update(boardTaskTable).set({ name: submission.value.name }).where(eq(boardTaskTable.id, taskId));
 
@@ -378,12 +391,19 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       // Get old task data for logging status changes
       let oldTask = null;
       if (fieldName === 'status') {
-        oldTask = await db.query.boardTaskTable.findFirst({
-          where: eq(boardTaskTable.id, taskId),
+        const boards = await db.query.boardTable.findMany({
+          where: eq(boardTable.companyId, companyId),
           with: {
-            column: true,
+            tasks: {
+              where: eq(boardTaskTable.id, taskId),
+              with: {
+                column: true,
+              },
+            },
           },
         });
+
+        oldTask = boards.flatMap((b) => b.tasks).find((t) => t.id === taskId);
       }
 
       await db.update(boardTaskTable).set(updateData).where(eq(boardTaskTable.id, taskId));
@@ -495,11 +515,18 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     });
   }
 
-  // Fetch parent deal if task is linked to a deal
+  // Fetch parent deal if task is linked to a deal - validate through board
   if (task.parentTaskId) {
-    parentDeal = await db.query.boardTaskTable.findFirst({
-      where: eq(boardTaskTable.id, task.parentTaskId),
+    const boards = await db.query.boardTable.findMany({
+      where: eq(boardTable.companyId, companyId),
+      with: {
+        tasks: {
+          where: eq(boardTaskTable.id, task.parentTaskId),
+        },
+      },
     });
+
+    parentDeal = boards.flatMap((b) => b.tasks).find((t) => t.id === task.parentTaskId) || null;
   }
 
   // Fetch all users in the organization for assigning
@@ -543,6 +570,7 @@ const tabs = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
   { id: 'activity', label: 'Activity', icon: ActivityIcon },
   { id: 'comments', label: 'Comments', icon: MessagesSquareIcon },
+  { id: 'notes', label: 'Notes', icon: FileText },
   // { id: 'files', label: 'Files', icon: Paperclip },
 ];
 
@@ -786,7 +814,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
       </Sheet>
 
       {/* Main Panel */}
-      <div className="flex flex-1 flex-col">
+      <div className="flex flex-1 flex-col overflow-x-hidden">
         {/* Header */}
         <div className="flex h-14 w-full items-center justify-between border-b border-border px-4">
           <div className="flex items-center w-full gap-3">
@@ -846,7 +874,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-auto p-4">
+        <div className="flex-1 overflow-auto p-4 scrollbar-thin">
           {activeTab === 'overview' && (
             <div className="space-y-6">
               {/* Key Stats */}
@@ -1009,7 +1037,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
           {activeTab === 'comments' && (
             <div className="space-y-4">
               {/* Comment Form */}
-              <Card className="p-4 bg-muted/30 backdrop-blur-md border-none shadow-sm">
+              <Card className="p-4 bg-muted/30 border-0 shadow-s border-none backdrop-blur-md">
                 <Form method="post" className="space-y-3" ref={formRef}>
                   <div className="flex gap-2">
                     <Avatar className="h-8 w-8 shrink-0">
@@ -1095,11 +1123,22 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
             </div>
           )}
 
+          {activeTab === 'notes' && (
+            <div className="max-w-full overflow-x-hidden">
+              <NotesTab
+                initialNotes={task.notes || ''}
+                entityType="task"
+                entityId={task.id}
+                organizationId={params.companyId || ''}
+              />
+            </div>
+          )}
+
           {/* {activeTab === 'files' && (
             <div>
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-sm font-semibold">Files</h2>
-                <Button size="sm" className="h-8 text-xs">
+                <Button size="sm" className="h-8 text-xs shadow-s">
                   <Plus className="mr-1.5 h-3.5 w-3.5" />
                   Upload
                 </Button>
