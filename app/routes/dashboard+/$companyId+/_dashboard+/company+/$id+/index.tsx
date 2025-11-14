@@ -67,6 +67,7 @@ import {
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
+import { getTodayUTC } from '~/utils';
 import { AI_SUMMARY_DAILY_LIMIT } from '../../api+/ai-summary';
 import type { Route } from './+types';
 
@@ -174,9 +175,8 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   // Get daily AI summary usage for organization
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayStr = today.toISOString();
+  // Use UTC to match database timestamps (stored as UTC)
+  const todayStr = getTodayUTC();
 
   const todaySummaries = await db
     .select({ count: sql<number>`count(*)` })

@@ -37,3 +37,9 @@ export function formatCurrency(amount: number | null | undefined): string {
   }
   return amount.toLocaleString('en-US');
 }
+
+export function getTodayUTC(): string {
+  const today = new Date();
+  today.setUTCHours(0, 0, 0, 0);
+  return today.toISOString();
+}
