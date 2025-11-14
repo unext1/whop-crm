@@ -57,6 +57,13 @@
       "when": 1763123456789,
       "tag": "0007_add_summary_table",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1763138887315,
+      "tag": "0008_omniscient_swarm",
+      "breakpoints": true
     }
   ]
 }

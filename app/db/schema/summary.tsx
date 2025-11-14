@@ -17,8 +17,8 @@ export const summaryTable = sqliteTable('summary', {
   recommendation: text('recommendation').notNull(),
 
   // Entity references (either person OR company, not both)
-  peopleId: text('people_id').references(() => peopleTable.id),
-  companyId: text('company_id').references(() => companiesTable.id),
+  peopleId: text('people_id').references(() => peopleTable.id, { onDelete: 'cascade' }),
+  companyId: text('company_id').references(() => companiesTable.id, { onDelete: 'cascade' }),
 
   // Metadata
   userId: text('user_id')
