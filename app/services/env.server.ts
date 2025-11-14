@@ -17,6 +17,8 @@ const environmentSchema = z.object({
 
   TURSO_DATABASE_URL: z.string().min(1).trim(),
   TURSO_AUTH_TOKEN: z.string().min(1).trim(),
+
+  GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1).trim(),
 });
 
 export const env = environmentSchema.parse(process.env);

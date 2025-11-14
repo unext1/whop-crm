@@ -65,7 +65,7 @@ export function NotesTab({ initialNotes, entityType, entityId, organizationId, p
         value={notes}
         onChange={setNotes}
         placeholder={defaultPlaceholder}
-        className="flex-1 rounded-xl max-h-[calc(100dvh-20rem)] min-w-0 max-w-full"
+        className="flex-1 rounded-xl max-h-[calc(100dvh-15rem)] min-w-0 max-w-full"
       />
     </div>
   );

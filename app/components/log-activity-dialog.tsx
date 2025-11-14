@@ -1,4 +1,4 @@
-import { Calendar, CheckCircle2, FileText, Mail, Phone, Users } from 'lucide-react';
+import { Calendar, Mail, Phone, Users } from 'lucide-react';
 import { useState } from 'react';
 import { href, useFetcher } from 'react-router';
 import { Button } from '~/components/ui/button';
@@ -30,7 +30,7 @@ export const activityTypesOptions: ActivityType[] = [
     value: 'meeting',
     label: 'Meeting',
     icon: Users,
-    color: 'text-purple-500',
+    color: 'text-purple-400',
     bgColor: 'bg-muted',
     borderColor: 'border-muted',
   },
@@ -38,7 +38,7 @@ export const activityTypesOptions: ActivityType[] = [
     value: 'email',
     label: 'Email',
     icon: Mail,
-    color: 'text-blue-500',
+    color: 'text-blue-400',
     bgColor: 'bg-muted',
     borderColor: 'border-muted',
   },
@@ -46,23 +46,7 @@ export const activityTypesOptions: ActivityType[] = [
     value: 'call',
     label: 'Call',
     icon: Phone,
-    color: 'text-green-500',
-    bgColor: 'bg-muted',
-    borderColor: 'border-muted',
-  },
-  {
-    value: 'note',
-    label: 'Note',
-    icon: FileText,
-    color: 'text-primary',
-    bgColor: 'bg-muted',
-    borderColor: 'border-muted',
-  },
-  {
-    value: 'task',
-    label: 'Task',
-    icon: CheckCircle2,
-    color: 'text-emerald-500',
+    color: 'text-green-400',
     bgColor: 'bg-muted',
     borderColor: 'border-muted',
   },
@@ -135,7 +119,7 @@ export function LogActivityDialog({ entityId, entityType, organizationId, trigge
                     type="button"
                     onClick={() => setSelectedType(type)}
                     className={`
-                      relative p-4 rounded-xl transition-all duration-300 bg-linear-to-bl from-muted to-muted/30 shadow-s hover:bg-muted cursor-pointer
+                      relative p-4 rounded-xl transition-all duration-300 bg-gradient-to-b from-muted to-muted/30 shadow-s hover:bg-muted cursor-pointer
                       ${isSelected ? 'ring-1 ring-primary' : 'border-transparent hover:border-border/50'}
                     `}
                   >

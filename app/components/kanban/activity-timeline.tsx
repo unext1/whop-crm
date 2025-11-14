@@ -227,7 +227,7 @@ export function ActivityTimeline({
   if (allItems.length > 0) {
     return (
       <div className="relative space-y-0">
-        <div className="absolute left-4 top-6 bottom-6 w-px bg-border" />
+        <div className="absolute left-3 top-6 bottom-6 w-px bg-border" />
         {allItems.map((item) => {
           if (item.type === 'creation') {
             const initial = (fallbackName || fallbackType).charAt(0).toUpperCase();
@@ -235,14 +235,14 @@ export function ActivityTimeline({
 
             return (
               <div key={item.id} className="relative">
-                <div className="flex gap-4 py-4">
-                  <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
+                <div className="flex gap-2 pb-5">
+                  <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground ring-4 ring-background">
                     {initial}
                   </div>
                   <div className="flex flex-1 items-center justify-between gap-4">
                     <div className="flex-1 space-y-2">
                       <div className="flex items-baseline gap-2">
-                        <p className="text-sm">
+                        <p className="text-xs">
                           <span className="font-semibold text-foreground">You</span>
                           <span className="text-muted-foreground"> created {entityType}</span>
                           {fallbackName && (
@@ -280,17 +280,17 @@ export function ActivityTimeline({
 
             return (
               <div key={activity.id} className="relative">
-                <div className="flex gap-4 py-4">
+                <div className="flex gap-2 pb-5">
                   <div
-                    className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${activityType.bgColor} text-sm font-semibold ${activityType.color} ring-4 ring-background`}
+                    className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${activityType.bgColor} text-xs font-semibold ${activityType.color} ring-4 ring-background`}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-3 w-3" />
                   </div>
                   <div className="flex flex-1 items-center justify-between gap-4">
                     <div className="flex-1 space-y-2">
                       {/* Main Activity */}
                       <div className="flex items-baseline gap-2">
-                        <p className="text-sm">
+                        <p className="text-xs">
                           <span className="font-semibold text-foreground">{userName}</span>
                           <span className="text-muted-foreground"> logged {activityType.label.toLowerCase()}</span>
                           <span className="text-muted-foreground"> </span>
@@ -299,13 +299,13 @@ export function ActivityTimeline({
                       </div>
 
                       {/* Activity Details */}
-                      <div className="mt-3 rounded-xl duration-300 shadow-s bg-linear-to-bl from-muted to-muted/30 p-4 shadow-sm">
+                      <div className="mt-2 rounded-xl duration-300 bg-gradient-to-b from-muted to-muted/30 border p-4 shadow-sm">
                         <div className="flex items-center gap-3">
                           <div className="h-full w-1 bg-primary rounded" />
                           <div className="flex-1">
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex-1">
-                                <p className="text-sm font-medium text-foreground">{metadata.name}</p>
+                                <p className="text-xs font-medium text-foreground">{metadata.name}</p>
                                 <p className="mt-1 text-xs text-muted-foreground">
                                   {formatRelativeTime(activity.activityDate || activity.createdAt)}
                                 </p>
@@ -317,7 +317,7 @@ export function ActivityTimeline({
                               </div>
                             </div>
                             {metadata.description && (
-                              <p className="text-sm text-muted-foreground">{metadata.description}</p>
+                              <p className="text-xs text-muted-foreground">{metadata.description}</p>
                             )}
                           </div>
                         </div>
@@ -344,12 +344,12 @@ export function ActivityTimeline({
 
           return (
             <div key={activity.id} className="relative">
-              <div className="flex gap-4 py-4">
-                <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
+              <div className="flex gap-2 pb-5">
+                <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground ring-4 ring-background">
                   {activity.user?.profilePictureUrl ? (
-                    <Avatar className="h-8 w-8">
+                    <Avatar className="h-6 w-6">
                       <AvatarImage src={activity.user.profilePictureUrl} alt={userName} />
-                      <AvatarFallback className="bg-primary text-sm font-semibold text-primary-foreground">
+                      <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
                         {userInitial}
                       </AvatarFallback>
                     </Avatar>
@@ -361,7 +361,7 @@ export function ActivityTimeline({
                   <div className="flex-1 space-y-2">
                     {/* Main Activity */}
                     <div className="flex items-baseline gap-2">
-                      <p className="text-sm">
+                      <p className="text-xs">
                         <span className="font-semibold text-foreground">{displayUser}</span>
                         <span className="text-muted-foreground"> {action}</span>
                       </p>
@@ -381,7 +381,7 @@ export function ActivityTimeline({
           <button
             type="button"
             onClick={onViewAll}
-            className="mt-4 flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
+            className="mt-4 flex items-center gap-1 text-xs text-foreground hover:text-primary transition-colors"
           >
             View all
             <ChevronRight className="h-4 w-4" />
@@ -397,7 +397,7 @@ export function ActivityTimeline({
   if (!hasDates) {
     return (
       <div className="py-4 text-center">
-        <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        <p className="text-xs text-muted-foreground">{emptyMessage}</p>
       </div>
     );
   }
@@ -419,13 +419,13 @@ export function ActivityTimeline({
         return (
           <div key={item.id} className="relative">
             <div className="flex gap-4 py-4">
-              <div className="relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground ring-4 ring-background">
+              <div className="relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground ring-4 ring-background">
                 {initial}
               </div>
               <div className="flex flex-1 items-center justify-between gap-4">
                 <div className="flex-1 space-y-2">
                   <div className="flex items-baseline gap-2">
-                    <p className="text-sm">
+                    <p className="text-xs">
                       <span className="font-semibold text-foreground">{fallbackName || fallbackType}</span>
                       <span className="text-muted-foreground">
                         {item.type === 'creation' ? ' was created by' : ' was updated'}
@@ -448,7 +448,7 @@ export function ActivityTimeline({
         <button
           type="button"
           onClick={onViewAll}
-          className="mt-4 flex items-center gap-1 text-sm text-foreground hover:text-primary transition-colors"
+          className="mt-4 flex items-center gap-1 text-xs text-foreground hover:text-primary transition-colors"
         >
           View all
           <ChevronRight className="h-4 w-4" />

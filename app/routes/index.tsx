@@ -57,7 +57,7 @@ const DiscoverPage = () => {
           <div className="flex items-center justify-between">
             <Link to={href('/')} className="hover:scale-105 transition-transform">
               <motion.div className="flex items-center gap-3 cursor-pointer">
-                <img src="/logo.png" alt="Spark Logo" className=" rounded" width={32} height={32} />
+                <img src="/logo.png" alt="CRM Logo" className=" rounded" width={32} height={32} />
                 <h1 className="text-2xl font-bold tracking-tight">CRM</h1>{' '}
                 <span className="text-xs text-muted-foreground">for WHOP</span>
               </motion.div>
@@ -82,12 +82,12 @@ const DiscoverPage = () => {
             {/* Announcement Badge */}
             <motion.div variants={fadeInUp}>
               <Link
-                to={href('/experiences/:experienceId', { experienceId: 'your-experience-id' })}
+                to={href('/dashboard/:companyId', { companyId: 'your-company-id' })}
                 className="hover:bg-muted bg-card group mx-auto flex w-fit items-center gap-4 rounded-full border border-border p-1 pl-4 px-4 shadow-lg transition-colors duration-300"
               >
                 <span className="text-foreground text-sm flex items-center">
                   <Flame className="h-4 w-4 text-primary mr-2" />
-                  The #1 tool for your <span className="font-bold text-primary mx-1">WHOP</span> community
+                  The #1 CRM tool for your <span className="font-bold text-primary mx-1">WHOP</span> organization
                 </span>
               </Link>
             </motion.div>
@@ -97,9 +97,9 @@ const DiscoverPage = () => {
               className="mx-auto mt-12 max-w-4xl text-balance text-6xl font-bold md:text-7xl lg:text-[5.25rem] bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent"
               variants={fadeInUp}
             >
-              Share Daily Tips.
+              Manage Contacts.
               <br />
-              Build Your Community.
+              Close Deals Faster.
             </motion.h1>
 
             {/* Subheading */}
@@ -107,8 +107,8 @@ const DiscoverPage = () => {
               className="mx-auto mt-8 max-w-3xl text-balance text-lg text-muted-foreground leading-relaxed"
               variants={fadeInUp}
             >
-              Transform your WHOP community with real-time posts, community voting, reputation scores, and competitive
-              leaderboards that drive engagement and organic growth.
+              Transform your sales process with intelligent contact management, visual deal pipelines, team
+              collaboration tools, and powerful analytics that help your organization close more deals and grow faster.
             </motion.p>
 
             {/* CTA Buttons */}
@@ -119,7 +119,7 @@ const DiscoverPage = () => {
                   className="rounded-xl px-8 py-6 text-base bg-gradient-to-r from-primary to-primary hover:shadow-lg hover:shadow-primary/50 transition-all"
                 >
                   <Flame className="mr-2 h-5 w-5" />
-                  Install in My Community
+                  Install in My Organization
                 </Button>
               </a>
             </motion.div>
@@ -133,7 +133,7 @@ const DiscoverPage = () => {
             transition={{ delay: 0.6, duration: 0.8 }}
           >
             <div className="relative mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-2xl">
-              <img src="/feed.png" alt="Spark App Preview" className="w-full rounded-xl" />
+              <img src="/feed.png" alt="CRM App Preview" className="w-full rounded-xl" />
             </div>
           </motion.div>
         </div>
@@ -154,14 +154,14 @@ const DiscoverPage = () => {
             <Card className="group shadow-primary/20">
               <CardHeader className="pb-3">
                 <CardDecorator>
-                  <MessageSquareIcon className="size-6" aria-hidden />
+                  <UserIcon className="size-6" aria-hidden />
                 </CardDecorator>
-                <h3 className="mt-6 font-medium">Upvote/Downvote System</h3>
+                <h3 className="mt-6 font-medium">Smart Contact Management</h3>
               </CardHeader>
               <CardContent>
                 <p className="text-xs">
-                  Community driven content curation. Members vote on quality posts, ensuring the best content surfaces
-                  naturally.
+                  Intelligent contact profiles with detailed information, relationship mapping, and automated data
+                  enrichment for better lead qualification.
                 </p>
               </CardContent>
             </Card>
@@ -171,12 +171,12 @@ const DiscoverPage = () => {
                 <CardDecorator>
                   <MessageSquareHeartIcon className="size-6" aria-hidden />
                 </CardDecorator>
-                <h3 className="mt-6 font-medium">Featured Posts & Moderation</h3>
+                <h3 className="mt-6 font-medium">Visual Deal Pipeline</h3>
               </CardHeader>
               <CardContent>
                 <p className=" text-xs">
-                  Highlight exceptional content and maintain quality standards. Admins can feature posts for broader
-                  visibility.
+                  Drag-and-drop kanban boards for deal management. Track progress from lead to closed deal with
+                  customizable pipeline stages.
                 </p>
               </CardContent>
             </Card>
@@ -184,13 +184,14 @@ const DiscoverPage = () => {
             <Card className="group shadow-primary/20">
               <CardHeader className="pb-3">
                 <CardDecorator>
-                  <UserIcon className="size-6" aria-hidden />
+                  <MessageSquareIcon className="size-6" aria-hidden />
                 </CardDecorator>
-                <h3 className="mt-6 font-medium">Profile Pages & Stats</h3>
+                <h3 className="mt-6 font-medium">Team Collaboration</h3>
               </CardHeader>
               <CardContent>
                 <p className=" text-xs">
-                  Detailed user profiles with SparkScore, contribution history, and engagement metrics for every member.
+                  Real-time task assignment, activity timelines, and collaborative note-taking to keep your entire sales
+                  team aligned and productive.
                 </p>
               </CardContent>
             </Card>
@@ -206,14 +207,15 @@ const DiscoverPage = () => {
               className="text-4xl md:text-6xl font-bold mb-6 bg-gradient-to-b from-foreground to-muted-foreground bg-clip-text text-transparent"
               variants={fadeInUp}
             >
-              Ready to Transform Your Community?
+              Ready to Transform Your Sales Process?
             </motion.h2>
 
             <motion.p
               className="text-xl text-muted-foreground mb-12 max-w-3xl mx-auto leading-relaxed"
               variants={fadeInUp}
             >
-              Install Spark in your WHOP community today and watch as passive members become engaged contributors.
+              Install CRM in your WHOP organization today and watch your team close more deals with intelligent contact
+              management and visual pipelines.
             </motion.p>
 
             <motion.div
@@ -226,14 +228,14 @@ const DiscoverPage = () => {
                   className="rounded-2xl px-12 py-6 text-lg font-semibold bg-gradient-to-r from-primary to-primary hover:shadow-2xl hover:shadow-primary/50 transition-all transform hover:scale-105"
                 >
                   <Flame className="mr-3 h-6 w-6" />
-                  Install Spark Now
+                  Start Closing More Deals
                   <ArrowRight className="ml-3 h-5 w-5" />
                 </Button>
               </a>
             </motion.div>
 
             <motion.p className="text-sm text-muted-foreground" variants={fadeInUp}>
-              Free to install • No setup required • Instant activation
+              14-day free trial • No credit card required • Premium features included
             </motion.p>
           </motion.div>
         </div>

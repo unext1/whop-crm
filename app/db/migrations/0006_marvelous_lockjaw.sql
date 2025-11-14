@@ -1,0 +1,1 @@
+ALTER TABLE `organizations` ADD `getting_started_completed` integer DEFAULT false;

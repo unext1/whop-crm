@@ -174,7 +174,7 @@ const NotesPage = () => {
             {notes.map((note) => (
               <Card
                 key={`${note.entityType}-${note.id}`}
-                className="shadow-s bg-linear-to-b from-muted to-muted/30 border-0 flex flex-col"
+                className="bg-linear-to-b from-muted to-muted/30 flex flex-col"
               >
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between gap-2">

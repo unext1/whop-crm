@@ -1,17 +1,14 @@
 /* eslint-disable jsx-a11y/no-autofocus */
-import { Building2, Calendar, MapPin, Repeat, User, X } from 'lucide-react';
+import { Building2, Calendar, MapPin, User, X } from 'lucide-react';
 import { useMemo, useRef, useState } from 'react';
 import { Form, useSubmit } from 'react-router';
 
-import { cn } from '~/utils';
 import { Button } from '../ui/button';
-import { Calendar as CalendarComponent } from '../ui/calendar';
 import { DateTimePicker24h } from '../ui/calendar-time';
 import { ComboboxMultiple } from '../ui/combobox-multiple';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Textarea } from '../ui/textarea';
 
@@ -83,11 +80,6 @@ export function MeetingDialog({
       })),
     [companies],
   );
-
-  const formatDate = (date: Date | undefined) => {
-    if (!date) return '';
-    return date.toISOString().split('T')[0];
-  };
 
   // Use controlled state if provided, otherwise use internal state
   const isControlled = controlledOpen !== undefined;
@@ -275,52 +267,6 @@ export function MeetingDialog({
               </div>
             </div>
 
-            {/* Recurrence Section */}
-            <div className="space-y-4 border-t border-border pt-4">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Repeat className="h-4 w-4 text-muted-foreground" />
-                Recurrence
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-sm font-medium">Repeat</Label>
-                  <Select value={recurrenceType} onValueChange={(v) => setRecurrenceType(v as typeof recurrenceType)}>
-                    <SelectTrigger className="h-10 w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No repeat</SelectItem>
-                      <SelectItem value="daily">Daily</SelectItem>
-                      <SelectItem value="weekly">Weekly</SelectItem>
-                      <SelectItem value="monthly">Monthly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {recurrenceType !== 'none' && (
-                  <div className="space-y-2">
-                    <Label className="text-sm font-medium">End Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant="outline"
-                          className={cn(
-                            'h-10 w-full justify-start text-left font-normal',
-                            !recurrenceEndDate && 'text-muted-foreground',
-                          )}
-                        >
-                          <Calendar className="mr-2 h-4 w-4" />
-                          {recurrenceEndDate ? formatDate(recurrenceEndDate) : <span>Pick end date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <CalendarComponent mode="single" selected={recurrenceEndDate} onSelect={setRecurrenceEndDate} />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                )}
-              </div>
-            </div>
-
             {/* Attendees Section */}
             <div className="space-y-4 border-t border-border pt-4">
               <h3 className="text-sm font-semibold text-foreground">Attendees</h3>
@@ -359,20 +305,6 @@ export function MeetingDialog({
                     />
                   </div>
                 )}
-              </div>
-            </div>
-
-            {/* Notes Section */}
-            <div className="space-y-4 border-t border-border pt-4">
-              <div className="space-y-2">
-                <Label className="text-sm font-medium">Notes</Label>
-                <Textarea
-                  ref={notesRef}
-                  name="notes"
-                  placeholder="Add meeting notes..."
-                  rows={3}
-                  className="resize-none"
-                />
               </div>
             </div>
           </Form>

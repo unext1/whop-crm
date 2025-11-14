@@ -72,7 +72,7 @@ export function EditableText({
         className={cn(
           size === 'sm' && 'w-full h-8 text-xs font-semibold',
           size === 'md' && 'w-full h-8 text-xs md:text-xs font-semibold',
-          size === 'lg' && 'w-full h-12 text-base md:text-xl font-semibold px-0 md:px-0',
+          size === 'lg' && 'w-full h-12 text-base md:text-xl font-semibold px-0 md:px-0 border-0 ',
           size === undefined && 'w-full h-8 md:text-xs text-xs font-semibold',
           className,
         )}

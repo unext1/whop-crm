@@ -6,6 +6,7 @@ import { Loader2 } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '~/components/ui/table';
 import { getCommonPinningStyles } from './lib/data-table';
 import { cn } from '~/utils';
+import { DataTablePagination } from './data-table-pagination';
 
 interface DataTableProps<TData> extends React.ComponentProps<'div'> {
   table: TanstackTable<TData>;
@@ -74,10 +75,10 @@ export function DataTable<TData>({ table, actionBar, children, className, loadin
         </Table>
       </div>
       {/* PAGINATION */}
-      {/* <div className="flex flex-col gap-4 mt-2">
+      <div className="flex flex-col gap-4 mt-2">
         <DataTablePagination table={table} />
         {actionBar && table.getFilteredSelectedRowModel().rows.length > 0 && actionBar}
-      </div> */}
+      </div>
     </div>
   );
 }

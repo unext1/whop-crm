@@ -9,6 +9,7 @@ export * from './organization';
 export * from './people';
 export * from './people-emails';
 export * from './relations';
+export * from './summary';
 export * from './user';
 
 export * from '../kanban-schemas/board';

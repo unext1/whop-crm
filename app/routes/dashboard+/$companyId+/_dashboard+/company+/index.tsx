@@ -305,7 +305,7 @@ const DashboardPage = () => {
     columns,
     pageCount,
     initialState: {
-      pagination: { pageIndex: 0, pageSize: Number.POSITIVE_INFINITY },
+      pagination: { pageIndex: 0, pageSize: 10 },
     },
     getRowId: (row) => row.id,
     shallow: false, // Important: Set to false to trigger React Router navigation and loader revalidation

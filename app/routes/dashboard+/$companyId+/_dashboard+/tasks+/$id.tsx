@@ -89,7 +89,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
     }
 
-    // Verify task belongs to organization and get old task name for activity log
     const boards = await db.query.boardTable.findMany({
       where: eq(boardTable.companyId, companyId),
       with: {
@@ -853,7 +852,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
 
         {/* Tabs */}
         <div className="border-b border-border px-4">
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-1 overflow-y-auto scrollbar-thin">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -968,21 +967,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
                 </div>
               </div>
 
-              {/* Description */}
               <div>
-                <div className="mb-3">
-                  <h2 className="text-sm font-semibold">Description</h2>
-                </div>
-                <EditableText
-                  size="md"
-                  fieldName="content"
-                  value={task.content || 'No description yet'}
-                  inputLabel="Edit task description"
-                  buttonLabel={`Edit task "${task.name || 'Unnamed'}" description`}
-                >
-                  <input type="hidden" name="intent" value="updateContent" />
-                  <input type="hidden" name="taskId" value={task.id} />
-                </EditableText>
                 <div className="space-y-4 mt-6">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 mb-2">

@@ -100,6 +100,11 @@ export const getWhopCompanyMembership = async ({ request, companyId }: { request
   return memberListResponse;
 };
 
+export const getWhopMemberById = async (memberId: string) => {
+  const member = await whopSdk.members.retrieve(memberId);
+  return member;
+};
+
 export const getAuthorizedUsers = async (companyId: string, role?: 'admin' | 'moderator' | 'owner') => {
   const params = { company_id: companyId, ...(role && { role }) };
   const authorizedUsers = await whopSdk.authorizedUsers.list(params);

@@ -418,7 +418,7 @@ const DashboardPage = ({
               return (
                 <Card
                   key={stat.title}
-                  className="bg-linear-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
+                  className="bg-gradient-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
                 >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -547,7 +547,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent Activity */}
-            <Card className="bg-card shadow-sm border border-border col-span-3">
+            <Card className="bg-muted/30 shadow-sm border border-border col-span-3">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Activity</CardTitle>
@@ -565,7 +565,7 @@ const DashboardPage = ({
                   return (
                     <div
                       key={item.id}
-                      className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted duration-300 transition-colors"
                     >
                       <div
                         className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
@@ -603,7 +603,7 @@ const DashboardPage = ({
           {/* Recent Companies, People, and Deals - 3 Columns */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Recent Companies */}
-            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
+            <Card className="bg-muted/30 shadow border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Companies</CardTitle>
@@ -619,7 +619,7 @@ const DashboardPage = ({
                   <Link
                     key={company.id}
                     to={href('/dashboard/:companyId/company/:id', { companyId, id: company.id })}
-                    className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
                       {company.name?.charAt(0) || 'C'}
@@ -648,7 +648,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent People */}
-            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
+            <Card className="bg-muted/30 shadow border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent People</CardTitle>
@@ -664,7 +664,7 @@ const DashboardPage = ({
                   <Link
                     key={person.id}
                     to={href('/dashboard/:companyId/people/:id', { companyId, id: person.id })}
-                    className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                   >
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary text-sm font-medium">
                       {person.name?.charAt(0) || 'P'}
@@ -693,7 +693,7 @@ const DashboardPage = ({
             </Card>
 
             {/* Recent Deals */}
-            <Card className="bg-card shadow-sm border border-border flex flex-col h-full">
+            <Card className="bg-muted/30 shadow border border-border flex flex-col h-full">
               <CardHeader className="pb-4">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-base font-semibold">Recent Deals</CardTitle>
@@ -710,7 +710,7 @@ const DashboardPage = ({
                     <Link
                       key={deal.id}
                       to={href('/dashboard/:companyId/tasks', { companyId })}
-                      className="flex items-center shadow-s gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
+                      className="flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/50 duration-300 transition-colors"
                     >
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-orange-500/10">
                         <TrendingUp className="h-3.5 w-3.5 text-orange-600" />

@@ -945,7 +945,7 @@ const TaskRoute = ({ loaderData }: Route.ComponentProps) => {
 
         {/* Tabs */}
         <div className="border-b border-border px-4">
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-1 overflow-y-auto scrollbar-thin">
             {tabs.map((tab) => (
               <button
                 key={tab.id}

@@ -1,16 +1,21 @@
-import { and, eq, or } from 'drizzle-orm';
+import { and, eq, gte, or, sql } from 'drizzle-orm';
 import {
   ActivityIcon,
+  BadgeCheck,
+  Bot,
   BriefcaseBusinessIcon,
   Building2,
   Calendar,
   CheckCircle2,
   CheckSquare,
+  ChevronDown,
+  ChevronUp,
   Circle,
   FileText,
   Globe,
   LayoutDashboardIcon,
   Linkedin,
+  Loader2,
   Mail,
   MapPin,
   Menu,
@@ -18,14 +23,16 @@ import {
   Paperclip,
   Phone,
   Plus,
+  SparkleIcon,
   Twitter,
   Users,
   X,
 } from 'lucide-react';
 import { useState } from 'react';
-import { data, Form, Link, redirect, useLoaderData, useNavigate, useSubmit } from 'react-router';
+import { data, Form, href, Link, redirect, useFetcher, useNavigate, useSubmit } from 'react-router';
 import { AddEmailDialog } from '~/components/add-email-dialog';
 import { EditableField } from '~/components/editable-field';
+import { EditableText } from '~/components/kanban/editible-text';
 import { ActivityTimeline } from '~/components/kanban/activity-timeline';
 import { QuickTodoDialog } from '~/components/kanban/quick-todo-dialog';
 import { LogActivityDialog } from '~/components/log-activity-dialog';
@@ -35,7 +42,8 @@ import { NotesTab } from '~/components/notes-tab';
 import { QuickActionsMenu } from '~/components/quick-actions-menu';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
-import { Card } from '~/components/ui/card';
+import { Card, CardContent, CardHeader } from '~/components/ui/card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '~/components/ui/collapsible';
 import { ComboboxMultiple } from '~/components/ui/combobox-multiple';
 import {
   DropdownMenu,
@@ -57,11 +65,52 @@ import {
   meetingsTable,
   peopleEmailsTable,
   peopleTable,
+  summaryTable,
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
-import { requireUser } from '~/services/whop.server';
+import { getWhopMemberById, requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
+import { AI_SUMMARY_DAILY_LIMIT } from '../../api+/ai-summary';
+
+// Type for Whop Member based on API response
+type WhopMember = {
+  id: string;
+  created_at: string;
+  updated_at: string;
+  joined_at: string;
+  access_level: 'no_access' | 'admin' | 'customer';
+  status: 'drafted' | 'joined' | 'left';
+  most_recent_action:
+    | 'canceling'
+    | 'churned'
+    | 'finished_split_pay'
+    | 'paused'
+    | 'paid_subscriber'
+    | 'paid_once'
+    | 'expiring'
+    | 'joined'
+    | 'drafted'
+    | 'left'
+    | 'trialing'
+    | 'pending_entry'
+    | 'renewing'
+    | 'past_due'
+    | null;
+  most_recent_action_at: string | null;
+  user: {
+    id: string;
+    name?: string | null;
+    username?: string | null;
+    email?: string | null;
+  } | null;
+  phone: string | null;
+  usd_total_spent: number;
+  company: {
+    id: string;
+    name?: string | null;
+  };
+};
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
@@ -163,6 +212,25 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   // Filter meetings to only those linked to this person
   const personMeetings = meetings.filter((meeting) => meeting.meetingsPeople?.some((mp) => mp.person.id === personId));
 
+  const personSummaries = await db.query.summaryTable.findMany({
+    where: and(eq(summaryTable.peopleId, personId), eq(summaryTable.organizationId, organizationId)),
+  });
+
+  // Get daily AI summary usage for organization
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString();
+
+  const todaySummaries = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(summaryTable)
+    .where(and(eq(summaryTable.organizationId, organizationId), gte(summaryTable.createdAt, todayStr)));
+
+  const dailyUsage = Number(todaySummaries[0]?.count || 0);
+
+  // Whop Member Info - only fetch if whopUserId exists
+  const whopMemberInfo: WhopMember | null = person.whopUserId ? await getWhopMemberById(person.whopUserId) : null;
+
   return {
     user,
     organizationId,
@@ -172,6 +240,9 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     allCompanies,
     allPeople,
     personMeetings,
+    personSummaries,
+    dailyUsage,
+    whopMemberInfo,
   };
 };
 
@@ -585,15 +656,30 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
       return data({ error: 'Field name required' }, { status: 400 });
     }
 
-    const allowedFields = ['description', 'jobTitle', 'phone', 'address', 'website', 'linkedin', 'twitter', 'notes'];
+    const allowedFields = [
+      'name',
+      'description',
+      'jobTitle',
+      'phone',
+      'address',
+      'website',
+      'linkedin',
+      'twitter',
+      'notes',
+    ];
     if (!allowedFields.includes(fieldName)) {
       return data({ error: 'Invalid field' }, { status: 400 });
+    }
+
+    // Name is required, other fields can be null
+    if (fieldName === 'name' && !fieldValue?.trim()) {
+      return data({ error: 'Name is required' }, { status: 400 });
     }
 
     try {
       await db
         .update(peopleTable)
-        .set({ [fieldName]: fieldValue || null })
+        .set({ [fieldName]: fieldName === 'name' ? fieldValue : fieldValue || null })
         .where(and(eq(peopleTable.id, personId), eq(peopleTable.organizationId, organizationId)));
 
       return data({ success: true });
@@ -828,27 +914,42 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
   return data({ error: 'Invalid intent' }, { status: 400 });
 };
 
-const tabs = [
-  { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
-  { id: 'activity', label: 'Activity', icon: ActivityIcon },
-  { id: 'tasks', label: 'Tasks', icon: CheckSquare },
-  { id: 'notes', label: 'Notes', icon: FileText },
-  // { id: 'files', label: 'Files', icon: Paperclip },
-  // { id: 'emails', label: 'Emails', icon: Mail },
-  { id: 'calendar', label: 'Calendar', icon: Calendar },
-];
-
 function cn(...classes: (string | boolean | undefined)[]) {
   return classes.filter(Boolean).join(' ');
 }
 
-const PersonPage = () => {
-  const { person, tasksByColumn, allCompanies, allPeople, user, organizationId, personMeetings } =
-    useLoaderData<typeof loader>();
+const PersonPage = ({ loaderData }: Route.ComponentProps) => {
+  const {
+    person,
+    tasksByColumn,
+    allCompanies,
+    allPeople,
+    user,
+    organizationId,
+    personMeetings,
+    personSummaries,
+    dailyUsage,
+    whopMemberInfo,
+  } = loaderData;
+
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [aiSummaryOpen, setAiSummaryOpen] = useState(false);
+  const [openSummaryIds, setOpenSummaryIds] = useState<Set<string>>(new Set());
   const navigate = useNavigate();
   const submit = useSubmit();
+
+  const tabs = [
+    { id: 'overview', label: 'Overview', icon: LayoutDashboardIcon },
+    { id: 'activity', label: 'Activity', icon: ActivityIcon },
+    { id: 'tasks', label: 'Tasks', icon: CheckSquare },
+    { id: 'notes', label: 'Notes', icon: FileText },
+    // { id: 'files', label: 'Files', icon: Paperclip },
+    // { id: 'emails', label: 'Emails', icon: Mail },
+    { id: 'calendar', label: 'Calendar', icon: Calendar },
+    { id: 'ai', label: 'AI', icon: SparkleIcon },
+    whopMemberInfo && { id: 'whop', label: 'Whop Member', icon: BadgeCheck },
+  ].filter(Boolean) as { id: string; label: string; icon: React.ElementType }[];
 
   const emails = person.peopleEmails.map((pe) => pe.email);
 
@@ -884,6 +985,12 @@ const PersonPage = () => {
     submit(formData, { method: 'post' });
   };
 
+  const generateFetcher = useFetcher();
+
+  const isGeneratingSummary = generateFetcher.state === 'submitting';
+
+  const isLimitReached = dailyUsage >= AI_SUMMARY_DAILY_LIMIT;
+
   // Sidebar JSX
   const sidebarContent = (
     <div className="flex flex-col w-full">
@@ -905,12 +1012,16 @@ const PersonPage = () => {
             {person.name?.charAt(0) || 'P'}
           </div>
           <div className="flex items-center gap-2 mb-1">
-            <h2 className="text-lg font-semibold">{person.name || 'Unnamed Person'}</h2>
-            {person.whopUserId && (
-              <Badge variant="outline" className="h-5 text-[10px] px-2 bg-primary">
-                Whop
-              </Badge>
-            )}
+            <EditableText
+              size="lg"
+              fieldName="fieldValue"
+              value={person.name || ''}
+              inputLabel="Edit person name"
+              buttonLabel={`Edit person "${person.name || 'Unnamed Person'}" name`}
+            >
+              <input type="hidden" name="intent" value="updatePersonField" />
+              <input type="hidden" name="fieldName" value="name" />
+            </EditableText>
           </div>
         </div>
 
@@ -1156,6 +1267,7 @@ const PersonPage = () => {
               </Badge>
             )}
           </div>
+
           <div className="flex items-center gap-2">
             <QuickActionsMenu
               type="person"
@@ -1179,7 +1291,7 @@ const PersonPage = () => {
 
         {/* Tabs */}
         <div className="border-b border-border px-4">
-          <div className="flex gap-1">
+          <div className="flex gap-1 flex-1 overflow-y-auto scrollbar-thin">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -1193,7 +1305,7 @@ const PersonPage = () => {
                 )}
               >
                 <tab.icon className="h-3.5 w-3.5" />
-                <span>{tab.label}</span>
+                <span className="whitespace-nowrap flex">{tab.label}</span>
               </button>
             ))}
           </div>
@@ -1211,7 +1323,7 @@ const PersonPage = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* Job Title */}
-                  <Card className="p-4 bg-muted shadow-s border-0">
+                  <Card className="p-4 bg-muted/30">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Job Title</p>
@@ -1222,7 +1334,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Companies */}
-                  <Card className="p-4 bg-muted shadow-s border-0">
+                  <Card className="p-4 bg-muted/30">
                     <div>
                       <p className="text-xs font-medium text-muted-foreground mb-2">Companies</p>
                       <div className="flex items-center gap-2">
@@ -1233,7 +1345,7 @@ const PersonPage = () => {
                   </Card>
 
                   {/* Tasks Count */}
-                  <Card className="p-4 bg-muted shadow-s border-0">
+                  <Card className="p-4 bg-muted/30">
                     <div className="flex items-center justify-between text-xs">
                       <div>
                         <p className="text-xs font-medium text-muted-foreground mb-1">Tasks</p>
@@ -1243,6 +1355,160 @@ const PersonPage = () => {
                     </div>
                   </Card>
                 </div>
+              </div>
+
+              <div>
+                <div className="mb-4 flex justify-between items-center">
+                  <div className="flex items-center gap-2">
+                    <SparkleIcon className="h-4 w-4" />
+                    <h2 className="text-sm font-semibold">AI Insights</h2>
+                    <Badge variant="secondary" className="h-5 text-xs">
+                      {dailyUsage}/{AI_SUMMARY_DAILY_LIMIT} today
+                    </Badge>
+                  </div>
+                  <generateFetcher.Form
+                    method="post"
+                    action={href('/dashboard/:companyId/api/ai-summary', { companyId: organizationId })}
+                  >
+                    <input type="hidden" name="intent" value="aiSummary" />
+                    <input type="hidden" name="personId" value={person.id} />
+                    <Button size="sm" className="h-8 text-xs shadow-s" disabled={isGeneratingSummary || isLimitReached}>
+                      {isGeneratingSummary ? (
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <SparkleIcon className="mr-1.5 h-3.5 w-3.5" />
+                      )}
+                      {isGeneratingSummary
+                        ? 'Generating...'
+                        : isLimitReached
+                          ? 'Daily Limit Reached'
+                          : 'Generate Summary'}
+                    </Button>
+                  </generateFetcher.Form>
+                </div>
+                {isLimitReached && (
+                  <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                    You've reached the daily limit of {AI_SUMMARY_DAILY_LIMIT} AI summaries. Please try again tomorrow.
+                  </div>
+                )}
+                {personSummaries.length > 0 ? (
+                  (() => {
+                    const latestSummary = personSummaries.sort(
+                      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+                    )[0];
+                    const insights = JSON.parse(latestSummary.insights);
+
+                    return (
+                      <Collapsible open={aiSummaryOpen} onOpenChange={setAiSummaryOpen}>
+                        <Card className="bg-muted/30 ">
+                          <CollapsibleTrigger asChild>
+                            <CardHeader className="h-auto p-4 cursor-pointer">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Bot className="h-4 w-4 text-muted-foreground" />
+                                  <div>
+                                    <div className="text-muted-foreground font-medium text-xs">Latest Analysis</div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className="text-foreground font-semibold text-sm">
+                                        {latestSummary.ratingScore}/
+                                        <span className="text-muted-foreground text-xs">100</span>
+                                      </span>
+                                      <Badge
+                                        variant="secondary"
+                                        className="bg-primary text-primary-foreground font-medium text-xs"
+                                      >
+                                        {latestSummary.ratingTier.replace('_', ' ').toUpperCase()}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                </div>
+                                {aiSummaryOpen ? (
+                                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                ) : (
+                                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                            </CardHeader>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="rounded-3xl">
+                            <CardContent className="text-sm space-y-4 pt-0 hover:rounded-3xl">
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs font-medium text-foreground">Summary</span>
+                                </div>
+                                <p className="text-muted-foreground text-xs">{latestSummary.description}</p>
+                              </div>
+
+                              <div>
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-xs font-medium text-foreground">Key Insights</span>
+                                </div>
+                                <ul className="space-y-1">
+                                  {insights.map((insight: string, index: number) => (
+                                    <li
+                                      key={`insight-${index}-${insight.slice(0, 20)}`}
+                                      className="flex items-start gap-2 text-xs text-muted-foreground"
+                                    >
+                                      <span className="text-foreground">•</span>
+                                      <span className="flex-1">{insight}</span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+
+                              <div className="">
+                                <div className="flex items-start gap-2">
+                                  <div>
+                                    <span className="text-xs font-medium text-foreground">Recommended Action</span>
+                                    <p className="text-xs text-muted-foreground">{latestSummary.recommendation}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
+                                <span>Generated {new Date(latestSummary.createdAt).toLocaleDateString()}</span>
+                              </div>
+                            </CardContent>
+                          </CollapsibleContent>
+                        </Card>
+                      </Collapsible>
+                    );
+                  })()
+                ) : (
+                  <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 py-10 text-center shadow-sm flex-1">
+                    <SparkleIcon className="mx-auto h-8 w-8 text-muted-foreground" />
+                    <p className="mt-2 text-sm text-foreground">No summaries yet</p>
+                    <p className="text-xs text-muted-foreground">Generate a summary to get started</p>
+                    <generateFetcher.Form
+                      method="post"
+                      action={href('/dashboard/:companyId/api/ai-summary', { companyId: organizationId })}
+                    >
+                      <input type="hidden" name="intent" value="aiSummary" />
+                      <input type="hidden" name="personId" value={person.id} />
+                      <Button
+                        size="sm"
+                        className="h-8 text-xs shadow-s mt-4"
+                        disabled={isGeneratingSummary || isLimitReached}
+                      >
+                        {isGeneratingSummary ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <SparkleIcon className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        {isGeneratingSummary
+                          ? 'Generating...'
+                          : isLimitReached
+                            ? 'Daily Limit Reached'
+                            : 'Generate Summary'}
+                      </Button>
+                    </generateFetcher.Form>
+                    {isLimitReached && (
+                      <p className="mt-2 text-xs text-destructive">
+                        Daily limit reached ({dailyUsage}/{AI_SUMMARY_DAILY_LIMIT})
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Recent Activity */}
@@ -1405,7 +1671,7 @@ const PersonPage = () => {
                                     <MoreHorizontal className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-32">
+                                <DropdownMenuContent align="end" className="w-20">
                                   <DropdownMenuItem asChild>
                                     <Link
                                       to={`/dashboard/${organizationId}/tasks/${task.id}`}
@@ -1511,6 +1777,334 @@ const PersonPage = () => {
               ) : (
                 <MeetingList meetings={personMeetings} />
               )}
+            </div>
+          )}
+
+          {activeTab === 'ai' && (
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-semibold">AI Summaries</h2>
+                  <Badge variant="secondary" className="h-5 text-xs">
+                    {dailyUsage}/{AI_SUMMARY_DAILY_LIMIT} today
+                  </Badge>
+                </div>
+                <generateFetcher.Form
+                  method="post"
+                  action={href('/dashboard/:companyId/api/ai-summary', { companyId: organizationId })}
+                >
+                  <input type="hidden" name="intent" value="aiSummary" />
+                  <input type="hidden" name="personId" value={person.id} />
+                  <Button size="sm" className="h-8 text-xs shadow-s" disabled={isGeneratingSummary || isLimitReached}>
+                    {isGeneratingSummary ? (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <SparkleIcon className="mr-1.5 h-3.5 w-3.5" />
+                    )}
+                    {isGeneratingSummary
+                      ? 'Generating...'
+                      : isLimitReached
+                        ? 'Daily Limit Reached'
+                        : 'Generate Summary'}
+                  </Button>
+                </generateFetcher.Form>
+              </div>
+              {isLimitReached && (
+                <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
+                  You've reached the daily limit of {AI_SUMMARY_DAILY_LIMIT} AI summaries. Please try again tomorrow.
+                </div>
+              )}
+
+              {personSummaries.length > 0 ? (
+                <div className="space-y-4">
+                  {personSummaries
+                    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                    .map((summary) => {
+                      const insights = JSON.parse(summary.insights);
+                      const isOpen = openSummaryIds.has(summary.id);
+                      return (
+                        <Collapsible
+                          key={summary.id}
+                          open={isOpen}
+                          onOpenChange={(open) => {
+                            setOpenSummaryIds((prev) => {
+                              const next = new Set(prev);
+                              if (open) {
+                                next.add(summary.id);
+                              } else {
+                                next.delete(summary.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        >
+                          <Card className="bg-muted/30">
+                            <CollapsibleTrigger asChild>
+                              <CardHeader className="h-auto p-4 cursor-pointer">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Bot className="h-4 w-4 text-muted-foreground" />
+                                    <div>
+                                      <div className="text-muted-foreground font-medium text-xs">AI Analysis</div>
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-foreground font-semibold text-sm">
+                                          {summary.ratingScore}/
+                                          <span className="text-muted-foreground text-xs">100</span>
+                                        </span>
+                                        <Badge
+                                          variant="secondary"
+                                          className="bg-primary text-primary-foreground font-medium text-xs"
+                                        >
+                                          {summary.ratingTier.replace('_', ' ').toUpperCase()}
+                                        </Badge>
+                                      </div>
+                                    </div>
+                                  </div>
+                                  {isOpen ? (
+                                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  )}
+                                </div>
+                              </CardHeader>
+                            </CollapsibleTrigger>
+                            <CollapsibleContent className="rounded-3xl">
+                              <CardContent className="text-sm space-y-4 pt-0 hover:rounded-3xl">
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs font-medium text-foreground">Summary</span>
+                                  </div>
+                                  <p className="text-muted-foreground text-xs">{summary.description}</p>
+                                </div>
+
+                                <div>
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <span className="text-xs font-medium text-foreground">Key Insights</span>
+                                  </div>
+                                  <ul className="space-y-1">
+                                    {insights.map((insight: string, index: number) => (
+                                      <li
+                                        key={`insight-${index}-${insight.slice(0, 20)}`}
+                                        className="flex items-start gap-2 text-xs text-muted-foreground"
+                                      >
+                                        <span className="text-foreground">•</span>
+                                        <span className="flex-1">{insight}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+
+                                <div className="">
+                                  <div className="flex items-start gap-2">
+                                    <div>
+                                      <span className="text-xs font-medium text-foreground">Recommended Action</span>
+                                      <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
+                                  <span>Generated {new Date(summary.createdAt).toLocaleDateString()}</span>
+                                </div>
+                              </CardContent>
+                            </CollapsibleContent>
+                          </Card>
+                        </Collapsible>
+                      );
+                    })}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-border border-dashed flex justify-center items-center flex-col p-4 text-center shadow-sm flex-1">
+                  <SparkleIcon className="mx-auto h-8 w-8 text-muted-foreground" />
+                  <p className="mt-2 text-sm text-foreground">No summaries yet</p>
+                  <p className="text-xs text-muted-foreground">Generate a summary to get started</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'whop' && whopMemberInfo && (
+            <div className="flex-1 flex flex-col max-w-full overflow-x-hidden">
+              <div className="mb-4 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <BadgeCheck className="h-4 w-4" />
+                  <h2 className="text-sm font-semibold">Whop Member Information</h2>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* Member Status & Access Level */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card className="p-4 bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Status</p>
+                        <Badge
+                          variant={
+                            whopMemberInfo.status === 'joined'
+                              ? 'default'
+                              : whopMemberInfo.status === 'left'
+                                ? 'destructive'
+                                : 'secondary'
+                          }
+                          className="h-5 text-xs capitalize"
+                        >
+                          {whopMemberInfo.status}
+                        </Badge>
+                      </div>
+                      <BadgeCheck className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+
+                  <Card className="p-4 bg-muted/30">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Access Level</p>
+                        <Badge
+                          variant={
+                            whopMemberInfo.access_level === 'admin'
+                              ? 'default'
+                              : whopMemberInfo.access_level === 'customer'
+                                ? 'secondary'
+                                : 'outline'
+                          }
+                          className="h-5 text-xs capitalize"
+                        >
+                          {whopMemberInfo.access_level.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </Card>
+                </div>
+
+                {/* User Information */}
+                {whopMemberInfo.user && (
+                  <Card className="p-4 bg-muted/30">
+                    <h3 className="text-xs font-medium text-muted-foreground mb-3">User Information</h3>
+                    <div className="space-y-2">
+                      {whopMemberInfo.user.name && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground text-xs w-20">Name:</span>
+                          <span className="text-foreground font-medium">{whopMemberInfo.user.name}</span>
+                        </div>
+                      )}
+                      {whopMemberInfo.user.username && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground text-xs w-20">Username:</span>
+                          <span className="text-foreground">{whopMemberInfo.user.username}</span>
+                        </div>
+                      )}
+                      {whopMemberInfo.user.email && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="text-muted-foreground text-xs w-20">Email:</span>
+                          <a
+                            href={`mailto:${whopMemberInfo.user.email}`}
+                            className="text-foreground hover:text-primary"
+                          >
+                            {whopMemberInfo.user.email}
+                          </a>
+                        </div>
+                      )}
+                      {whopMemberInfo.phone && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground text-xs w-20">Phone:</span>
+                          <a href={`tel:${whopMemberInfo.phone}`} className="text-foreground hover:text-primary">
+                            {whopMemberInfo.phone}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Financial Information */}
+                <Card className="p-4 bg-muted/30">
+                  <h3 className="text-xs font-medium text-muted-foreground mb-3">Financial Information</h3>
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground text-xs w-20">Total Spent:</span>
+                      <span className="text-foreground font-semibold">
+                        ${whopMemberInfo.usd_total_spent.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+
+                {/* Recent Action */}
+                {whopMemberInfo.most_recent_action && (
+                  <Card className="p-4 bg-muted/30">
+                    <h3 className="text-xs font-medium text-muted-foreground mb-3">Most Recent Action</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="text-muted-foreground text-xs w-20">Action:</span>
+                        <Badge variant="outline" className="h-5 text-xs capitalize">
+                          {whopMemberInfo.most_recent_action.replace('_', ' ')}
+                        </Badge>
+                      </div>
+                      {whopMemberInfo.most_recent_action_at && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                          <span className="text-muted-foreground text-xs w-20">Date:</span>
+                          <span className="text-foreground">
+                            {new Date(whopMemberInfo.most_recent_action_at).toLocaleString('en-US', {
+                              year: 'numeric',
+                              month: 'short',
+                              day: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </Card>
+                )}
+
+                {/* Timestamps */}
+                <Card className="p-4 bg-muted/30">
+                  <h3 className="text-xs font-medium text-muted-foreground mb-3">Timestamps</h3>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-20">Created:</span>
+                      <span className="text-foreground">
+                        {new Date(whopMemberInfo.created_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-20">Joined:</span>
+                      <span className="text-foreground">
+                        {new Date(whopMemberInfo.joined_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground w-20">Updated:</span>
+                      <span className="text-foreground">
+                        {new Date(whopMemberInfo.updated_at).toLocaleString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                </Card>
+              </div>
             </div>
           )}
         </div>

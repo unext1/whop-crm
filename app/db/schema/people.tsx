@@ -4,6 +4,7 @@ import { organizationTable } from './organization';
 import { companiesPeopleTable } from './companies-poeple';
 import { peopleEmailsTable } from './people-emails';
 import { meetingsPeopleTable } from './meetings-people';
+import { summaryTable } from './summary';
 
 export const peopleTable = sqliteTable('people', {
   id: text('id').primaryKey().default(sql`(uuid4())`).notNull(),
@@ -34,6 +35,10 @@ export const peopleRelations = relations(peopleTable, ({ one, many }) => ({
   companiesPeople: many(companiesPeopleTable),
   peopleEmails: many(peopleEmailsTable),
   meetingsPeople: many(meetingsPeopleTable),
+  summary: one(summaryTable, {
+    fields: [peopleTable.id],
+    references: [summaryTable.peopleId],
+  }),
 }));
 
 export type PeopleType = typeof peopleTable.$inferSelect;

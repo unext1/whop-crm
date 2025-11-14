@@ -1,6 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { and, eq, sql } from 'drizzle-orm';
-import { CalendarIcon, Download, Mail, MapPin, Phone, Plus, User, X } from 'lucide-react';
+import { CalendarIcon, Download, ImportIcon, Mail, MapPin, Phone, Plus, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { data, Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
 import { DataTable } from '~/components/data-table/data-table';
@@ -642,8 +642,8 @@ const ImportWhopMembersDialog = () => {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" className="h-8 text-xs">
-          <Download className="mr-1.5 h-3.5 w-3.5" />
+        <Button size="sm" variant="outline" className="h-8 text-xs shadow-s border-0">
+          <ImportIcon className="mr-1.5 h-3.5 w-3.5" />
           Import from Whop
         </Button>
       </DialogTrigger>
@@ -783,7 +783,7 @@ const DashboardPage = () => {
     columns,
     pageCount,
     initialState: {
-      pagination: { pageIndex: 0, pageSize: Number.POSITIVE_INFINITY },
+      pagination: { pageIndex: 0, pageSize: 10 },
     },
     getRowId: (row) => row.id,
     shallow: false,
@@ -826,7 +826,7 @@ const DashboardPage = () => {
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 text-xs shadow-s">
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                <Plus className="md:mr-1.5 h-3.5 w-3.5" />
                 <span className="hidden md:block">Add Person</span>
               </Button>
             </DialogTrigger>

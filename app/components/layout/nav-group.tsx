@@ -58,7 +58,7 @@ const SidebarMenuLink = ({ item, href }: { item: MenuItem; href: string }) => {
         asChild
         isActive={checkIsActive(href, item)}
         tooltip={item.title}
-        className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted text-sm py-0"
+        className="data-[active=true]:bg-gradient-to-b data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted text-sm py-0"
       >
         <Link to={item.url} onClick={() => setOpenMobile(false)}>
           {item.icon && <item.icon />}
@@ -80,7 +80,7 @@ const SidebarMenuCollapsible = ({ item, href }: { item: NavCollapsible; href: st
           <SidebarMenuButton
             tooltip={item.title}
             isActive={isActive}
-            className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+            className="data-[active=true]:bg-gradient-to-b data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
           >
             {item.icon && <item.icon />}
             <span>{item.title}</span>
@@ -95,7 +95,7 @@ const SidebarMenuCollapsible = ({ item, href }: { item: NavCollapsible; href: st
                 <SidebarMenuSubButton
                   asChild
                   isActive={checkIsActive(href, subItem)}
-                  className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+                  className="data-[active=true]:bg-gradient-to-b data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
                 >
                   <Link to={subItem.url} onClick={() => setOpenMobile(false)}>
                     {subItem.icon && <subItem.icon />}
@@ -121,7 +121,7 @@ const SidebarMenuCollapsedDropdown = ({ item, href }: { item: NavCollapsible; hr
           <SidebarMenuButton
             tooltip={item.title}
             isActive={isActive}
-            className="data-[active=true]:bg-linear-to-bl data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
+            className="data-[active=true]:bg-gradient-to-b data-[active=true]:from-muted data-[active=true]:to-muted/30 data-[active=true]:shadow-s data-[active=true]:border-0 hover:bg-muted"
           >
             {item.icon && <item.icon />}
             <span>{item.title}</span>
@@ -138,7 +138,7 @@ const SidebarMenuCollapsedDropdown = ({ item, href }: { item: NavCollapsible; hr
             <DropdownMenuItem key={`${sub.title}-${sub.url}`} asChild>
               <NavLink
                 to={sub.url}
-                className={`${checkIsActive(href, sub) ? 'bg-linear-to-bl from-muted to-muted/30 shadow-s border-0' : ''} hover:bg-muted`}
+                className={`${checkIsActive(href, sub) ? 'bg-gradient-to-b from-muted to-muted/30 shadow-s border-0' : ''} hover:bg-muted`}
               >
                 {sub.icon && <sub.icon />}
                 <span className="max-w-52 text-wrap">{sub.title}</span>

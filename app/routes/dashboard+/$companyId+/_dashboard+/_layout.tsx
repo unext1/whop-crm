@@ -1,17 +1,17 @@
 import { useEffect } from 'react';
 import { data, href, Outlet, redirect } from 'react-router';
 
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { AppSidebar } from '~/components/layout/app-sidebar';
 import { Header } from '~/components/layout/header';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { useToast } from '~/components/ui/use-toast';
+import { db } from '~/db';
+import { boardTable, boardTaskTable, companiesTable, organizationTable, peopleTable, userTable } from '~/db/schema';
 import { popToast } from '~/services/cookie.server';
+import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/services/whop.server';
 import { cn } from '~/utils';
 import type { Route } from './+types/_layout';
-import { boardTable, boardTaskTable, companiesTable, organizationTable, peopleTable, userTable } from '~/db/schema';
-import { db } from '~/db';
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/services/whop.server';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const { companyId } = params;
@@ -88,40 +88,58 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
       where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
     });
 
-    // Get board IDs for task queries
-    const boardIds = await tx.select({ id: boardTable.id }).from(boardTable).where(eq(boardTable.companyId, companyId));
+    // Check if getting started is already completed
+    const gettingStartedCompleted = organization.gettingStartedCompleted;
 
-    const boardIdArray = boardIds.map((b) => b.id);
+    let gettingStartedProgress:
+      | {
+          hasPerson: boolean;
+          hasCompany: boolean;
+          hasTask: boolean;
+          hasDeal: boolean;
+        }
+      | undefined;
+    if (!gettingStartedCompleted) {
+      // Get board IDs for task queries
+      const boardIds = await tx
+        .select({ id: boardTable.id })
+        .from(boardTable)
+        .where(eq(boardTable.companyId, companyId));
 
-    // Batch all count queries for getting started progress
-    const [peopleCount, companiesCount, tasksCount, dealsCount] = await Promise.all([
-      tx.select({ count: sql<number>`count(*)` }).from(peopleTable).where(eq(peopleTable.organizationId, companyId)),
-      tx
-        .select({ count: sql<number>`count(*)` })
-        .from(companiesTable)
-        .where(eq(companiesTable.organizationId, companyId)),
-      boardIdArray.length > 0
-        ? tx
-            .select({ count: sql<number>`count(*)` })
-            .from(boardTaskTable)
-            .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'tasks')))
-        : Promise.resolve([{ count: 0 }]),
-      boardIdArray.length > 0
-        ? tx
-            .select({ count: sql<number>`count(*)` })
-            .from(boardTaskTable)
-            .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'pipeline')))
-        : Promise.resolve([{ count: 0 }]),
-    ]);
+      const boardIdArray = boardIds.map((b) => b.id);
 
-    return {
-      allDeals: deals,
-      gettingStarted: {
+      // Batch all count queries for getting started progress
+      const [peopleCount, companiesCount, tasksCount, dealsCount] = await Promise.all([
+        tx.select({ count: sql<number>`count(*)` }).from(peopleTable).where(eq(peopleTable.organizationId, companyId)),
+        tx
+          .select({ count: sql<number>`count(*)` })
+          .from(companiesTable)
+          .where(eq(companiesTable.organizationId, companyId)),
+        boardIdArray.length > 0
+          ? tx
+              .select({ count: sql<number>`count(*)` })
+              .from(boardTaskTable)
+              .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'tasks')))
+          : Promise.resolve([{ count: 0 }]),
+        boardIdArray.length > 0
+          ? tx
+              .select({ count: sql<number>`count(*)` })
+              .from(boardTaskTable)
+              .where(and(inArray(boardTaskTable.boardId, boardIdArray), eq(boardTaskTable.type, 'pipeline')))
+          : Promise.resolve([{ count: 0 }]),
+      ]);
+
+      gettingStartedProgress = {
         hasPerson: Number(peopleCount[0]?.count || 0) > 0,
         hasCompany: Number(companiesCount[0]?.count || 0) > 0,
         hasTask: Number(tasksCount[0]?.count || 0) > 0,
         hasDeal: Number(dealsCount[0]?.count || 0) > 0,
-      },
+      };
+    }
+
+    return {
+      allDeals: deals,
+      gettingStarted: gettingStartedProgress,
     };
   });
 

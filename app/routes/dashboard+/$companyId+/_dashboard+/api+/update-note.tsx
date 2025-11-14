@@ -1,18 +1,16 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { data } from 'react-router';
+import { db } from '~/db';
 import { boardTaskTable } from '~/db/kanban-schemas/board-task';
 import { boardTable } from '~/db/schema';
 import { companiesTable } from '~/db/schema/companies';
 import { peopleTable } from '~/db/schema/people';
-import { db } from '~/db';
 import { requireUser } from '~/services/whop.server';
-import { logCompanyActivity, logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types/update-note';
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { companyId: organizationId } = params;
-  const { user } = await requireUser(request, organizationId);
-  const userId = user.id;
+  await requireUser(request, organizationId);
 
   const formData = await request.formData();
   const entityType = formData.get('entityType')?.toString();
@@ -32,13 +30,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(and(eq(peopleTable.id, entityId), eq(peopleTable.organizationId, organizationId)));
-
-      await logPersonActivity({
-        personId: entityId,
-        userId,
-        activityType: 'updated',
-        description: 'Updated notes',
-      });
     } else if (entityType === 'company') {
       await db
         .update(companiesTable)
@@ -47,13 +38,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(and(eq(companiesTable.id, entityId), eq(companiesTable.organizationId, organizationId)));
-
-      await logCompanyActivity({
-        companyId: entityId,
-        userId,
-        activityType: 'updated',
-        description: 'Updated notes',
-      });
     } else if (entityType === 'task') {
       // Verify task belongs to organization through board relationship
       const boards = await db.query.boardTable.findMany({
@@ -78,13 +62,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
           updatedAt: sql`CURRENT_TIMESTAMP`,
         })
         .where(eq(boardTaskTable.id, entityId));
-
-      await logTaskActivity({
-        taskId: entityId,
-        userId,
-        activityType: 'updated',
-        description: 'Updated notes',
-      });
     } else {
       return data({ error: 'Invalid entity type' }, { status: 400 });
     }

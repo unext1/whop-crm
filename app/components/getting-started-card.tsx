@@ -1,5 +1,7 @@
 import { Building2, Check, CheckSquareIcon, DollarSign, Rocket, User } from 'lucide-react';
-import { href, Link, useParams } from 'react-router';
+import { href, Link, useParams, useFetcher } from 'react-router';
+import { useEffect, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import { cn } from '~/utils';
 import { ShimmerButton } from './shimmer-button';
 import { Card } from './ui/card';
@@ -49,6 +51,8 @@ const tasks = [
 export function GettingStartedCard({ progress }: GettingStartedCardProps) {
   const params = useParams();
   const companyId = params.companyId || '';
+  const fetcher = useFetcher();
+  const prevCompletedTasksRef = useRef<number>(0);
 
   const completedTasks = [progress.hasPerson, progress.hasCompany, progress.hasTask, progress.hasDeal].filter(
     Boolean,
@@ -56,6 +60,53 @@ export function GettingStartedCard({ progress }: GettingStartedCardProps) {
 
   const totalTasks = 4;
   const percentage = Math.round((completedTasks / totalTasks) * 100);
+
+  // Detect when all tasks are completed and trigger confetti
+  useEffect(() => {
+    const prevCompletedTasks = prevCompletedTasksRef.current;
+    const isJustCompleted = prevCompletedTasks < totalTasks && completedTasks === totalTasks;
+
+    if (isJustCompleted) {
+      // Trigger fireworks confetti
+      const duration = 5 * 1000;
+      const animationEnd = Date.now() + duration;
+      const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 0 };
+
+      const randomInRange = (min: number, max: number) => Math.random() * (max - min) + min;
+
+      const interval = window.setInterval(() => {
+        const timeLeft = animationEnd - Date.now();
+
+        if (timeLeft <= 0) {
+          return clearInterval(interval);
+        }
+
+        const particleCount = 50 * (timeLeft / duration);
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 },
+        });
+
+        confetti({
+          ...defaults,
+          particleCount,
+          origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 },
+        });
+      }, 250);
+
+      // Mark as completed in database
+      const formData = new FormData();
+      formData.append('intent', 'completeGettingStarted');
+      fetcher.submit(formData, {
+        method: 'post',
+        action: href('/dashboard/:companyId/api/complete-getting-started', { companyId }),
+      });
+    }
+
+    prevCompletedTasksRef.current = completedTasks;
+  }, [completedTasks, fetcher, companyId]);
 
   if (completedTasks === totalTasks) {
     return null;
