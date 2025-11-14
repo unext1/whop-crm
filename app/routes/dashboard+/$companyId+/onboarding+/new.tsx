@@ -59,7 +59,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     throw redirect(href('/dashboard/:companyId', { companyId }));
   }
 
-  const monthlyCheckout = await createCheckoutSession(env.WHOP_PREMIUM_PLAN_ID, companyId);
+  const monthlyCheckout = await createCheckoutSession(env.WHOP_MONTHLY_PLAN_ID, companyId);
   const annualCheckout = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
 
   return {
@@ -178,7 +178,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
 
     // Get the appropriate checkout session
-    const planId = selectedPlan === 'monthly' ? env.WHOP_PREMIUM_PLAN_ID : env.WHOP_ANNUAL_PLAN_ID;
+    const planId = selectedPlan === 'monthly' ? env.WHOP_MONTHLY_PLAN_ID : env.WHOP_ANNUAL_PLAN_ID;
     const checkoutSession = await createCheckoutSession(planId, companyId);
 
     if (!checkoutSession) {
@@ -839,7 +839,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                     <div className="grid grid-cols-2 gap-3">
                       {/* Monthly */}
                       <Card
-                        className={`cursor-pointer transition-all border ${
+                        className={`cursor-pointer transition-all border relative ${
                           selectedPlan === 'monthly'
                             ? 'border-primary bg-primary/5'
                             : 'border-border/50 hover:border-border'
@@ -851,6 +851,11 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                           <div className="text-xl font-bold text-foreground">$19</div>
                           <div className="text-xs text-muted-foreground">per month</div>
                         </CardContent>
+                        {selectedPlan === 'monthly' && (
+                          <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
+                            <Check className="h-3 w-3 text-foreground" />
+                          </div>
+                        )}
                       </Card>
 
                       {/* Annual */}
@@ -869,15 +874,16 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                               variant="default"
                               className="absolute left-1/2 -translate-x-1/2 -top-3.5 text-xs h-6  text-primary-foreground"
                             >
-                              Save 17%
+                              Save <span className="font-bold">35%</span> & Get <span className="font-bold">7</span>{' '}
+                              days free trial
                             </Badge>
                           </div>
-                          <div className="text-xl font-bold text-foreground">$190</div>
+                          <div className="text-xl font-bold text-foreground">$149</div>
                           <div className="text-xs text-muted-foreground">per year</div>
                         </CardContent>
                         {selectedPlan === 'annual' && (
                           <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check className="h-3 w-3 text-background" />
+                            <Check className="h-3 w-3 text-foreground" />
                           </div>
                         )}
                       </Card>

@@ -3,6 +3,7 @@ import 'dotenv/config';
 
 const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+
   SESSION_SECRET: z.string().min(1).trim(),
 
   WHOP_WEBHOOK_SECRET: z.string().min(1).trim(),
@@ -11,9 +12,9 @@ const environmentSchema = z.object({
   WHOP_AGENT_USER_ID: z.string().min(1).trim(),
   WHOP_COMPANY_ID: z.string().min(1).trim(),
 
-  WHOP_ACCESS_PASS_ID: z.string().min(1).trim(),
-  WHOP_PREMIUM_PLAN_ID: z.string().min(1).trim(),
+  WHOP_MONTHLY_PLAN_ID: z.string().min(1).trim(),
   WHOP_ANNUAL_PLAN_ID: z.string().min(1).trim(),
+  WHOP_PREMIUM_PRODUCT_ID: z.string().min(1).trim(),
 
   TURSO_DATABASE_URL: z.string().min(1).trim(),
   TURSO_AUTH_TOKEN: z.string().min(1).trim(),
