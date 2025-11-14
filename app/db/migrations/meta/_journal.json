@@ -5,64 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1762288730965,
-      "tag": "0000_jittery_lyja",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1762302233834,
-      "tag": "0001_lush_nomad",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1762780371001,
-      "tag": "0002_unusual_warstar",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1762876451183,
-      "tag": "0003_nostalgic_malcolm_colcord",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1762886501950,
-      "tag": "0004_blue_timeslip",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1762895926772,
-      "tag": "0005_confused_cable",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1763034519233,
-      "tag": "0006_marvelous_lockjaw",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1763123456789,
-      "tag": "0007_add_summary_table",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1763138887315,
-      "tag": "0008_omniscient_swarm",
+      "when": 1763142106528,
+      "tag": "0000_gray_speed_demon",
       "breakpoints": true
     }
   ]

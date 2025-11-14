@@ -16,7 +16,7 @@ export const meetingsTable = sqliteTable('meetings', {
   recurrenceType: text('recurrence_type').default('none').notNull(), // 'none' | 'daily' | 'weekly' | 'monthly'
   recurrenceEndDate: text('recurrence_end_date'), // ISO timestamp, nullable
   organizationId: text('organization_id')
-    .references(() => organizationTable.id)
+    .references(() => organizationTable.id, { onDelete: 'cascade' })
     .notNull(),
   ownerId: text('owner_id').references(() => userTable.id, { onDelete: 'set null' }),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),

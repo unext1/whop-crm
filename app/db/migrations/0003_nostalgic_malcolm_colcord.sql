@@ -1,1 +1,0 @@
-ALTER TABLE `board_task` ADD `parent_task_id` text;

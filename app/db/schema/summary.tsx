@@ -22,10 +22,10 @@ export const summaryTable = sqliteTable('summary', {
 
   // Metadata
   userId: text('user_id')
-    .references(() => userTable.id)
+    .references(() => userTable.id, { onDelete: 'cascade' })
     .notNull(),
   organizationId: text('organization_id')
-    .references(() => organizationTable.id)
+    .references(() => organizationTable.id, { onDelete: 'cascade' })
     .notNull(),
 
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`).notNull(),

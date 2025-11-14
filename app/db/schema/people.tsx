@@ -21,7 +21,7 @@ export const peopleTable = sqliteTable('people', {
   whopUserId: text('whop_user_id'),
 
   organizationId: text('organization_id')
-    .references(() => organizationTable.id)
+    .references(() => organizationTable.id, { onDelete: 'cascade' })
     .notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),

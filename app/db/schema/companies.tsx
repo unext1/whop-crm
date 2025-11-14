@@ -19,7 +19,7 @@ export const companiesTable = sqliteTable('companies', {
   notes: text('notes'),
 
   organizationId: text('organization_id')
-    .references(() => organizationTable.id)
+    .references(() => organizationTable.id, { onDelete: 'cascade' })
     .notNull(),
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
