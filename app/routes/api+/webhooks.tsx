@@ -2,7 +2,8 @@ import { eq } from 'drizzle-orm';
 import type { ActionFunctionArgs } from 'react-router';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
-import { PREMIUM_PRODUCT_ID, whopSdk } from '~/services/whop.server';
+import { env } from '~/services/env.server';
+import { whopSdk } from '~/services/whop.server';
 
 /**
  * Checks if a user is authorized to grant organization-wide premium access
@@ -79,10 +80,10 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       product_id?: string;
     };
 
-    console.warn('Payment webhook:', { company_id, product_id, PREMIUM_PRODUCT_ID });
+    console.warn('Payment webhook:', { company_id, product_id, env: env.WHOP_PREMIUM_PRODUCT_ID });
 
     // Check if this payment is for the premium product
-    if (product_id === PREMIUM_PRODUCT_ID && company_id) {
+    if (product_id === env.WHOP_PREMIUM_PRODUCT_ID && company_id) {
       console.warn('Processing premium payment for company:', company_id);
       await handleOrganizationPremiumAccess(company_id, 'premium').catch((error) => {
         console.error('Error handling payment.succeeded:', error);
@@ -91,7 +92,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       console.warn('Payment not for premium product or missing company_id:', {
         product_id,
         company_id,
-        expectedProductId: PREMIUM_PRODUCT_ID,
+        expectedProductId: env.WHOP_PREMIUM_PRODUCT_ID,
       });
     }
   } else if (
@@ -124,13 +125,13 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       membershipId,
       companyId,
       userId: user?.id,
-      PREMIUM_PRODUCT_ID,
+      env: env.WHOP_PREMIUM_PRODUCT_ID,
       renewal_period_start,
       renewal_period_end,
     });
 
     // Check if this membership is for the premium product
-    if (productId === PREMIUM_PRODUCT_ID && companyId && membershipId) {
+    if (productId === env.WHOP_PREMIUM_PRODUCT_ID && companyId && membershipId) {
       console.warn('Membership is for premium product, checking authorization');
       // Verify the subscribing user is authorized for the organization
       const isAuthorizedUser = user?.id ? await checkUserAuthorization(companyId, user.id) : false;
@@ -160,7 +161,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
         productId,
         companyId,
         membershipId,
-        expectedProductId: PREMIUM_PRODUCT_ID,
+        expectedProductId: env.WHOP_PREMIUM_PRODUCT_ID,
       });
     }
   } else if (
@@ -186,11 +187,11 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       cancel_at_period_end,
       renewal_period_start,
       canceled_at,
-      PREMIUM_PRODUCT_ID,
+      expectedProductId: env.WHOP_PREMIUM_PRODUCT_ID,
     });
 
     // Check if this membership deactivation is for the premium product
-    if (productId === PREMIUM_PRODUCT_ID && companyId) {
+    if (productId === env.WHOP_PREMIUM_PRODUCT_ID && companyId) {
       if (cancel_at_period_end) {
         console.warn('Membership canceled at period end for company:', companyId);
         // Membership is canceled but stays active until period end
@@ -216,7 +217,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       console.warn('Membership deactivation not for premium product or missing company_id:', {
         productId,
         companyId,
-        expectedProductId: PREMIUM_PRODUCT_ID,
+        expectedProductId: env.WHOP_PREMIUM_PRODUCT_ID,
       });
     }
   }

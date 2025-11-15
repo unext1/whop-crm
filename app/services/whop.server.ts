@@ -4,9 +4,6 @@ import { db } from '~/db';
 import { organizationTable, userTable } from '~/db/schema';
 import { env } from './env.server';
 
-// Premium product ID - update this to match your premium product
-export const PREMIUM_PRODUCT_ID = 'prod_refsXJqTNDzUT';
-
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,
   apiKey: env.WHOP_API_KEY,
