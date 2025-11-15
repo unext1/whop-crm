@@ -19,7 +19,12 @@ async function checkUserAuthorization(companyId: string, userId?: string): Promi
   try {
     const accessCheck = await whopSdk.users.checkAccess(companyId, { id: userId });
 
-    console.warn('Access check result:', { companyId, userId, has_access: accessCheck.has_access, access_level: accessCheck.access_level });
+    console.warn('Access check result:', {
+      companyId,
+      userId,
+      has_access: accessCheck.has_access,
+      access_level: accessCheck.access_level,
+    });
 
     // Only allow admin or owner level access to grant organization premium
     const isAuthorized = accessCheck.has_access && accessCheck.access_level === 'admin';
@@ -83,7 +88,11 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
         console.error('Error handling payment.succeeded:', error);
       });
     } else {
-      console.warn('Payment not for premium product or missing company_id:', { product_id, company_id, expectedProductId: PREMIUM_PRODUCT_ID });
+      console.warn('Payment not for premium product or missing company_id:', {
+        product_id,
+        company_id,
+        expectedProductId: PREMIUM_PRODUCT_ID,
+      });
     }
   } else if (
     action === 'membership.activated' ||
@@ -117,7 +126,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       userId: user?.id,
       PREMIUM_PRODUCT_ID,
       renewal_period_start,
-      renewal_period_end
+      renewal_period_end,
     });
 
     // Check if this membership is for the premium product
@@ -151,7 +160,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
         productId,
         companyId,
         membershipId,
-        expectedProductId: PREMIUM_PRODUCT_ID
+        expectedProductId: PREMIUM_PRODUCT_ID,
       });
     }
   } else if (
@@ -177,7 +186,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       cancel_at_period_end,
       renewal_period_start,
       canceled_at,
-      PREMIUM_PRODUCT_ID
+      PREMIUM_PRODUCT_ID,
     });
 
     // Check if this membership deactivation is for the premium product
@@ -207,7 +216,7 @@ async function handleWebhookEvent(action: string, data: Record<string, unknown> 
       console.warn('Membership deactivation not for premium product or missing company_id:', {
         productId,
         companyId,
-        expectedProductId: PREMIUM_PRODUCT_ID
+        expectedProductId: PREMIUM_PRODUCT_ID,
       });
     }
   }
