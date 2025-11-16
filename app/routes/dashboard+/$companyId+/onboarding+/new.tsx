@@ -1,5 +1,5 @@
 import { createSdk } from '@whop/iframe';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { ArrowDown, ArrowUp, ChartArea, Check, CheckSquare, LayoutDashboardIcon, TrendingUp, User } from 'lucide-react';
 import { useState } from 'react';
 import { data, Form, href, redirect, useActionData, useNavigate, useNavigation, useParams } from 'react-router';
@@ -35,8 +35,12 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   // Check if organization exists
   const existingOrg = await db.select().from(organizationTable).where(eq(organizationTable.id, companyId)).limit(1);
 
-  // Check if user profile exists
-  const existingUser = await db.select().from(userTable).where(eq(userTable.whopUserId, userId)).limit(1);
+  // Check if user profile exists for this specific organization
+  const existingUser = await db
+    .select()
+    .from(userTable)
+    .where(and(eq(userTable.whopUserId, userId), eq(userTable.organizationId, companyId)))
+    .limit(1);
 
   const hasOrg = existingOrg.length > 0;
   const hasUser = existingUser.length > 0;
@@ -149,10 +153,17 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       })
       .returning();
 
-    await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
+    // Only set as owner if organization doesn't have one (first user joining)
+    const org = await db.query.organizationTable.findFirst({
+      where: eq(organizationTable.id, companyId),
+    });
 
-    // Update the default board to set the owner
-    await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
+    if (!org?.ownerId) {
+      await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
+
+      // Update the default board to set the owner
+      await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
+    }
 
     return data({ success: true, step: 2, message: 'Profile created' } as const);
   }

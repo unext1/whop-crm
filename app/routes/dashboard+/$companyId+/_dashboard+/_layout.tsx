@@ -30,9 +30,9 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   if (!organization) {
     return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
   }
-  // Check if user exists
+  // Check if user exists for this specific organization
   const user = await db.query.userTable.findFirst({
-    where: eq(userTable.whopUserId, userId),
+    where: and(eq(userTable.whopUserId, userId), eq(userTable.organizationId, companyId)),
   });
 
   // If organization exists, check if it has premium access
