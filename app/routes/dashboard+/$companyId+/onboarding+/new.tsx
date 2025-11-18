@@ -198,16 +198,24 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
   if (intent === 'processPayment') {
     // Check if organization already has premium access
-    const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
+    const org = await db.query.organizationTable.findFirst({
+      where: eq(organizationTable.id, companyId),
+    });
+    if (org?.trialEnd) {
+      const trialEndDate = new Date(org.trialEnd);
+      const now = new Date();
+      if (now > trialEndDate) {
+        // Trial expired, redirect to trial page
+        throw redirect(href('/dashboard/:companyId/onboarding/trial', { companyId }));
+      }
+    }
 
-    // If they already have premium, redirect to dashboard
-    if (hasPremiumAccess) {
-      const headers = await putToast({
-        title: 'Welcome! 🎉',
-        message: 'Your Organization is ready to go',
-        variant: 'default',
-      });
-      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    if (org?.hadPremiumBefore) {
+      // Organization had premium before but lost it - redirect to billing
+      throw redirect(href('/dashboard/:companyId/billing', { companyId }));
+    }
+    if (org?.plan === 'premium') {
+      throw redirect(href('/dashboard/:companyId', { companyId }));
     }
 
     const selectedPlan = formData.get('selectedPlan')?.toString();
