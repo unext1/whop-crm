@@ -196,26 +196,80 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     return redirect(href('/dashboard/:companyId', { companyId }), { headers });
   }
 
-  if (intent === 'processPayment') {
+  if (intent === 'startTrial') {
     // Check if organization already has premium access
+    const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
+
+    // If they already have premium, redirect to dashboard
+    if (hasPremiumAccess) {
+      const headers = await putToast({
+        title: 'Welcome! 🎉',
+        message: 'Your Organization is ready to go',
+        variant: 'default',
+      });
+      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    }
+
+    // Start 3-day trial (no credit card required)
     const org = await db.query.organizationTable.findFirst({
       where: eq(organizationTable.id, companyId),
     });
-    if (org?.trialEnd) {
+
+    if (!org) {
+      return data({ error: 'Organization not found', step: 3 } as const, { status: 404 });
+    }
+
+    // Check if trial already exists and is still active
+    if (org.trialEnd) {
       const trialEndDate = new Date(org.trialEnd);
       const now = new Date();
+      if (now <= trialEndDate) {
+        // Trial is still active, redirect to dashboard
+        const headers = await putToast({
+          title: 'Welcome! 🎉',
+          message: 'Your 3 day free trial is active!',
+          variant: 'default',
+        });
+        return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+      }
       if (now > trialEndDate) {
         // Trial expired, redirect to trial page
         throw redirect(href('/dashboard/:companyId/onboarding/trial', { companyId }));
       }
     }
 
-    if (org?.hadPremiumBefore) {
-      // Organization had premium before but lost it - redirect to billing
-      throw redirect(href('/dashboard/:companyId/billing', { companyId }));
-    }
-    if (org?.plan === 'premium') {
-      throw redirect(href('/dashboard/:companyId', { companyId }));
+    // Start new trial
+    const now = new Date();
+    const trialEnd = new Date(now);
+    trialEnd.setDate(trialEnd.getDate() + 3); // 3 days from now
+
+    await db
+      .update(organizationTable)
+      .set({
+        trialStart: now.toISOString(),
+        trialEnd: trialEnd.toISOString(),
+      })
+      .where(eq(organizationTable.id, companyId));
+
+    // Redirect to dashboard with trial active
+    const headers = await putToast({
+      title: 'Welcome! 🎉',
+      message: 'Your 3 day free trial has started!',
+      variant: 'default',
+    });
+    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+  }
+
+  if (intent === 'processPayment') {
+    const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
+
+    if (hasPremiumAccess) {
+      const headers = await putToast({
+        title: 'Welcome! 🎉',
+        message: 'Your Organization is ready to go',
+        variant: 'default',
+      });
+      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
     }
 
     const selectedPlan = formData.get('selectedPlan')?.toString();
@@ -678,7 +732,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state === 'submitting';
+  const isSubmitting = navigation.state === 'submitting' && navigation.formAction !== 'processPayment';
   const navigate = useNavigate();
 
   const handlePayment = async (plan: 'monthly' | 'annual') => {
@@ -972,22 +1026,32 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                   <p className="text-sm text-destructive text-center">{actionData.error}</p>
                 )}
 
-                <Form method="post" className="flex flex-col gap-6">
-                  <input type="hidden" name="intent" value="processPayment" />
-                  {!loaderData.hasPremiumAccess && <input type="hidden" name="selectedPlan" value={selectedPlan} />}
-
-                  <div className="flex flex-col gap-3">
-                    <Button type="submit" className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90">
-                      Start Free Trial (No Credit Card)
+                <div className="flex flex-col gap-3">
+                  {/* Start Trial Form */}
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="startTrial" />
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
+                    >
+                      {isSubmitting ? 'Starting trial...' : 'Start Free Trial (No Credit Card)'}
                     </Button>
-                    <p className="text-xs text-center text-muted-foreground">
-                      Or upgrade now to unlock premium features immediately
-                    </p>
+                  </Form>
+
+                  <p className="text-xs text-center text-muted-foreground">
+                    Or upgrade now to unlock premium features immediately
+                  </p>
+
+                  {/* Upgrade Form */}
+                  <Form method="post">
+                    <input type="hidden" name="intent" value="processPayment" />
+                    <input type="hidden" name="selectedPlan" value={selectedPlan} />
                     <Button
                       type="submit"
                       disabled={isSubmitting || isProcessingPayment}
                       variant="outline"
-                      className="h-10 text-sm font-semibold"
+                      className="w-full h-10 text-sm font-semibold"
                       onClick={() => handlePayment(selectedPlan)}
                     >
                       {isSubmitting
@@ -998,8 +1062,8 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                             ? 'Upgrade to Monthly Plan'
                             : 'Upgrade to Annual Plan'}
                     </Button>
-                  </div>
-                </Form>
+                  </Form>
+                </div>
 
                 {paymentResult && (
                   <div
