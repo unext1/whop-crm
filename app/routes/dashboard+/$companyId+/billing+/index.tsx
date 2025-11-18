@@ -155,8 +155,8 @@ const BillingPage = () => {
             </div>
           )}
 
-          {/* Pricing Section */}
-          {!orgPremiumAccess && (
+          {/* Pricing Section - Show if on trial (so they can upgrade) OR if no premium access */}
+          {(hasActiveTrial || !orgPremiumAccess) && (
             <div className="space-y-6">
               <div className="text-center">
                 <h2 className="text-2xl font-bold">Choose Your Plan</h2>
