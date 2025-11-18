@@ -18,11 +18,15 @@ export const userTable = sqliteTable('user', {
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });
 
-export const userRelations = relations(userTable, ({ many }) => ({
+export const userRelations = relations(userTable, ({ many, one }) => ({
   memberOfBoard: many(boardMemberTable),
   ownerOfBoard: many(boardTable),
   taskComments: many(taskCommentTable),
   taskAssignees: many(taskAssigneesTable),
+  organization: one(organizationTable, {
+    fields: [userTable.organizationId],
+    references: [organizationTable.id],
+  }),
 }));
 
 export type UserType = typeof userTable.$inferSelect;

@@ -6,6 +6,7 @@ import { peopleTable } from './people';
 import { peopleEmailsTable } from './people-emails';
 import { meetingsTable } from './meetings';
 import { boardTable } from '../kanban-schemas/board';
+import { userTable } from './user';
 
 // Organization relations
 export const organizationRelations = relations(organizationTable, ({ one, many }) => ({
@@ -17,6 +18,7 @@ export const organizationRelations = relations(organizationTable, ({ one, many }
     fields: [organizationTable.id],
     references: [boardTable.companyId],
   }),
+  users: many(userTable),
 }));
 
 // Companies relations - moved to companies.tsx for many-to-many setup

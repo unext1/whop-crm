@@ -303,7 +303,6 @@ ${'notes' in entityData && entityData.notes ? `Notes: ${entityData.notes}` : ''}
             .object({
               score: z.number().min(0).max(100).describe('Lead score from 0-100'),
               tier: z.enum(['cold', 'warm', 'hot', 'very_hot']).describe('Lead temperature tier'),
-              reasoning: z.string().describe('Brief explanation of the rating'),
             })
             .describe('Lead scoring and rating'),
           recommendation: z.string().describe('Specific actionable recommendation'),
@@ -319,7 +318,7 @@ ${'notes' in entityData && entityData.notes ? `Notes: ${entityData.notes}` : ''}
           insights: JSON.stringify(result.object.insights),
           ratingScore: result.object.rating.score,
           ratingTier: result.object.rating.tier,
-          ratingReasoning: result.object.rating.reasoning,
+          ratingReasoning: 'No reasoning provided',
           recommendation: result.object.recommendation,
           peopleId: personId || null,
           companyId: personId ? null : companyId,
