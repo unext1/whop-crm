@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { href, Link, useLoaderData, useParams } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button, buttonVariants } from '~/components/ui/button';
+import { Card, CardContent } from '~/components/ui/card';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
@@ -25,8 +26,23 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     where: eq(organizationTable.id, companyId),
   });
 
-  // Fetch the organization's membership to the app (if it exists)
-  const appMembership = await whopSdk.memberships.retrieve(organization?.membershipId || '');
+  // Check if user has active trial (no membershipId but has trialEnd)
+  let hasActiveTrial = false;
+  if (organization?.trialEnd && !organization.membershipId) {
+    const trialEndDate = new Date(organization.trialEnd);
+    const now = new Date();
+    hasActiveTrial = now <= trialEndDate;
+  }
+
+  // Fetch the organization's membership to the app (if it exists and not in trial)
+  let appMembership = null;
+  if (organization?.membershipId && !hasActiveTrial) {
+    try {
+      appMembership = await whopSdk.memberships.retrieve(organization.membershipId);
+    } catch (_error) {
+      // Membership might not exist, continue without it
+    }
+  }
 
   const monthlyCheckoutSession = await createCheckoutSession(env.WHOP_MONTHLY_PLAN_ID, companyId);
   const annualCheckoutSession = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
@@ -43,6 +59,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     annualCheckoutSession,
     whopAppId: env.WHOP_APP_ID,
     everHadPremium,
+    hasActiveTrial,
   };
 };
 
@@ -55,25 +72,29 @@ const BillingPage = () => {
     annualCheckoutSession,
     whopAppId,
     everHadPremium,
+    hasActiveTrial,
   } = useLoaderData<typeof loader>();
 
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
   const [purchasing, setPurchasing] = useState(false);
   const [purchaseResult, setPurchaseResult] = useState<{ status: string; error?: string } | null>(null);
 
-  const handlePurchase = async () => {
+  const handlePurchase = async (plan: 'monthly' | 'annual') => {
     setPurchasing(true);
     setPurchaseResult(null);
 
     try {
       const iframeSdk = createSdk({ appId: whopAppId });
 
-      const checkoutSession = selectedPlan === 'monthly' ? monthlyCheckoutSession : annualCheckoutSession;
+      const checkoutSession = plan === 'monthly' ? monthlyCheckoutSession : annualCheckoutSession;
       if (!checkoutSession) {
         throw new Error('Checkout session not available');
       }
 
-      const result = await iframeSdk.inAppPurchase({ planId: checkoutSession.plan.id, id: checkoutSession.id });
+      const result = await iframeSdk.inAppPurchase({
+        id: checkoutSession.id,
+        planId: checkoutSession.plan.id,
+      });
       setPurchaseResult(result);
 
       if (result.status === 'ok') {
@@ -142,127 +163,69 @@ const BillingPage = () => {
                 <p className="text-muted-foreground mt-2">Unlock premium features for your entire organization</p>
               </div>
 
-              {/* Pricing Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Pricing Cards - Similar to trial page */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Monthly Plan */}
-                <button
-                  type="button"
-                  className={`relative p-6 border-2 rounded-xl cursor-pointer transition-all duration-200 text-left w-full ${
+                <Card
+                  className={`cursor-pointer transition-all border relative ${
                     selectedPlan === 'monthly'
-                      ? 'border-primary bg-primary/5 shadow-lg'
-                      : 'border-border hover:border-primary/50 bg-card'
+                      ? 'border-primary bg-primary/5 shadow-md'
+                      : 'border-border/50 hover:border-border'
                   }`}
                   onClick={() => setSelectedPlan('monthly')}
                 >
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          selectedPlan === 'monthly' ? 'border-primary bg-primary' : 'border-muted-foreground'
-                        }`}
-                      >
-                        {selectedPlan === 'monthly' && <Check className="w-3 h-3 text-primary-foreground" />}
-                      </div>
-                      <h3 className="text-lg font-semibold">Monthly</h3>
+                  <CardContent className="p-6 text-center space-y-2">
+                    <div className="text-sm font-medium text-muted-foreground">Monthly</div>
+                    <div className="text-3xl font-bold text-foreground">$19</div>
+                    <div className="text-sm text-muted-foreground">per month</div>
+                  </CardContent>
+                  {selectedPlan === 'monthly' && (
+                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
                     </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold">$19</span>
-                      <span className="text-muted-foreground">/month</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">Billed monthly</p>
-                  </div>
-
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>All premium features</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>Unlimited team members</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>Priority support</span>
-                    </li>
-                  </ul>
-                </button>
+                  )}
+                </Card>
 
                 {/* Annual Plan */}
-                <button
-                  type="button"
-                  className={`relative p-6 border-2 rounded-xl cursor-pointer transition-all duration-200 text-left w-full ${
+                <Card
+                  className={`cursor-pointer transition-all border relative ${
                     selectedPlan === 'annual'
-                      ? 'border-primary bg-primary/5 shadow-lg'
-                      : 'border-border hover:border-primary/50 bg-card'
+                      ? 'border-primary bg-primary/5 shadow-md'
+                      : 'border-border/50 hover:border-border'
                   }`}
                   onClick={() => setSelectedPlan('annual')}
                 >
-                  <div className="absolute -top-3 left-6">
-                    <div className="bg-primary text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                      Save 17%
+                  <CardContent className="p-6 text-center space-y-2">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <div className="text-sm font-medium text-muted-foreground">Annual</div>
+                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-semibold">
+                        Save 35%
+                      </span>
                     </div>
-                  </div>
-
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                          selectedPlan === 'annual' ? 'border-primary bg-primary' : 'border-muted-foreground'
-                        }`}
-                      >
-                        {selectedPlan === 'annual' && <Check className="w-3 h-3 text-primary-foreground" />}
-                      </div>
-                      <h3 className="text-lg font-semibold">Annual</h3>
+                    <div className="text-3xl font-bold text-foreground">$149</div>
+                    <div className="text-sm text-muted-foreground">per year</div>
+                  </CardContent>
+                  {selectedPlan === 'annual' && (
+                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
                     </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-3xl font-bold">$190</span>
-                      <span className="text-muted-foreground">/year</span>
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      <span className="line-through text-muted-foreground/70">$228</span> Billed annually
-                    </p>
-                  </div>
-
-                  <ul className="space-y-2 text-sm">
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>All premium features</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>Unlimited team members</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>Priority support</span>
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <div className="w-1.5 h-1.5 bg-primary rounded-full" />
-                      <span>Best value</span>
-                    </li>
-                  </ul>
-                </button>
+                  )}
+                </Card>
               </div>
 
               {/* Purchase Button */}
               <div className="flex justify-center">
                 <Button
-                  onClick={handlePurchase}
+                  onClick={() => handlePurchase(selectedPlan)}
                   size="lg"
-                  className="px-8 py-3 text-base font-semibold"
+                  className="w-full md:w-auto px-8 py-3 text-sm font-semibold"
                   disabled={purchasing}
                 >
-                  <CreditCard className="h-5 w-5 mr-2" />
                   {purchasing
-                    ? 'Redirecting to checkout...'
-                    : `Subscribe to ${selectedPlan === 'monthly' ? 'Monthly' : 'Annual'} Plan`}
+                    ? 'Processing...'
+                    : selectedPlan === 'monthly'
+                      ? 'Upgrade to Monthly Plan'
+                      : 'Upgrade to Annual Plan'}
                 </Button>
               </div>
 
@@ -302,10 +265,19 @@ const BillingPage = () => {
                   <div className="w-4 h-4 bg-primary rounded-full flex items-center justify-center" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-primary-foreground">Premium Active</h3>
+                  <h3 className="font-semibold text-primary-foreground">
+                    {hasActiveTrial ? 'Free Trial Active' : 'Premium Active'}
+                  </h3>
                   <p className="text-sm text-muted-foreground">
-                    Your organization has premium access. All team members can use advanced features.
+                    {hasActiveTrial
+                      ? 'Your 3 day free trial is active. Upgrade anytime to continue using premium features.'
+                      : 'Your organization has premium access. All team members can use advanced features.'}
                   </p>
+                  {hasActiveTrial && organization?.trialEnd && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Trial ends: {new Date(organization.trialEnd).toLocaleDateString()}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -323,31 +295,41 @@ const BillingPage = () => {
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Plan</span>
-                    <Badge variant={organization.plan === 'premium' ? 'default' : 'secondary'} className="h-5 text-xs">
-                      {organization.plan || 'free'}
+                    <Badge
+                      variant={hasActiveTrial || organization.plan === 'premium' ? 'default' : 'secondary'}
+                      className="h-5 text-xs"
+                    >
+                      {hasActiveTrial ? 'Trial' : organization.plan || 'free'}
                     </Badge>
                   </div>
-                  {organization.membershipId && (
+                  {hasActiveTrial && organization.trialStart && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Trial Started</span>
+                      <span className="text-sm">{new Date(organization.trialStart).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {hasActiveTrial && organization.trialEnd && (
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-muted-foreground">Trial Ends</span>
+                      <span className="text-sm">{new Date(organization.trialEnd).toLocaleDateString()}</span>
+                    </div>
+                  )}
+                  {!hasActiveTrial && organization.membershipId && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Membership ID</span>
                       <span className="text-sm font-mono">{organization.membershipId}</span>
                     </div>
                   )}
-                  {organization.subscriptionStart && (
+                  {!hasActiveTrial && organization.subscriptionStart && (
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-muted-foreground">Subscription Start</span>
                       <span className="text-sm">{new Date(organization.subscriptionStart).toLocaleDateString()}</span>
                     </div>
                   )}
-                  {organization.subscriptionEnd && (
+                  {!hasActiveTrial && organization.subscriptionEnd && (
                     <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">
-                        {appMembership?.status === 'trialing' ? 'Trial ends on' : 'Subscription End'}
-                      </span>
-                      <span className="text-sm">
-                        {new Date(organization.subscriptionEnd).toLocaleDateString()}
-                        {appMembership?.status === 'trialing' && ' (will be charged)'}
-                      </span>
+                      <span className="text-sm text-muted-foreground">Subscription End</span>
+                      <span className="text-sm">{new Date(organization.subscriptionEnd).toLocaleDateString()}</span>
                     </div>
                   )}
                 </div>
@@ -355,8 +337,8 @@ const BillingPage = () => {
             </div>
           )}
 
-          {/* Your Subscription */}
-          {appMembership && (
+          {/* Your Subscription - Only show if not in trial and membership exists */}
+          {appMembership && !hasActiveTrial && (
             <div className="p-6 bg-muted/30 backdrop-blur-md border border-border rounded-lg shadow-sm">
               <div className="space-y-4">
                 <div>
