@@ -146,6 +146,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
   if (intent === 'createUser') {
     const firstName = formData.get('firstName')?.toString();
+
     const lastName = formData.get('lastName')?.toString();
 
     if (!firstName || !lastName) {
@@ -164,36 +165,20 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       })
       .returning();
 
-    // Only set as owner if organization doesn't have one (first user joining)
+    await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
+
     const org = await db.query.organizationTable.findFirst({
       where: eq(organizationTable.id, companyId),
     });
 
+    await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
     if (!org?.ownerId) {
-      const now = new Date();
-      const trialEnd = new Date(now);
-      trialEnd.setDate(trialEnd.getDate() + 3); // 3 days from now
-
-      await db
-        .update(organizationTable)
-        .set({
-          ownerId: createdUser.id,
-          trialStart: now.toISOString(),
-          trialEnd: trialEnd.toISOString(),
-        })
-        .where(eq(organizationTable.id, companyId));
-
+      await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
       // Update the default board to set the owner
       await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
     }
 
-    // After user creation, redirect to dashboard (trial is now active)
-    const headers = await putToast({
-      title: 'Welcome! 🎉',
-      message: 'Your 3 day free trial has started!',
-      variant: 'default',
-    });
-    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    return data({ success: true, step: 2, message: 'Profile created' } as const);
   }
 
   if (intent === 'startTrial') {
