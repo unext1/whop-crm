@@ -14,6 +14,8 @@ export const organizationTable = sqliteTable('organizations', {
   lastMembershipCheck: text('last_membership_check'), // timestamp of last Whop API check
   hadPremiumBefore: integer('had_premium_before', { mode: 'boolean' }).default(false),
   gettingStartedCompleted: integer('getting_started_completed', { mode: 'boolean' }).default(false),
+  trialStart: text('trial_start'), // When the 3-day trial started
+  trialEnd: text('trial_end'), // When the 3-day trial ends
   createdAt: text('created_at').default(sql`CURRENT_TIMESTAMP`),
   updatedAt: text('updated_at').default(sql`CURRENT_TIMESTAMP`),
 });

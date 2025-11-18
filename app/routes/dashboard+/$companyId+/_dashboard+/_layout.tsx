@@ -40,6 +40,19 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
 
   const hasOrgPremium = await hasOrganizationPremiumAccess(companyId);
   if (!hasOrgPremium) {
+    // Check if trial has expired
+    if (organization.trialEnd) {
+      const trialEndDate = new Date(organization.trialEnd);
+      const now = new Date();
+      if (now > trialEndDate) {
+        // Trial expired, redirect to trial page
+        const trialPath = href('/dashboard/:companyId/onboarding/trial', { companyId });
+        if (new URL(request.url).pathname !== trialPath) {
+          return redirect(trialPath);
+        }
+      }
+    }
+
     const everHadPremium = organization.hadPremiumBefore;
 
     if (everHadPremium) {

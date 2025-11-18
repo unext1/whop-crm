@@ -49,14 +49,25 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const hasPremiumAccess = hasOrg ? await hasOrganizationPremiumAccess(companyId) : false;
 
   // Determine starting step based on what exists
-  let initialStep = 1;
+  let initialStep = 3;
   if (hasOrg && !hasUser) {
     initialStep = 2; // Skip org creation, go to user profile
   } else if (hasOrg && hasUser) {
     if (hasPremiumAccess) {
       throw redirect(href('/dashboard/:companyId', { companyId }));
     }
-    initialStep = 3; // Org and user exist but no premium - go to payment
+    // Check if trial has expired - redirect to trial page
+    const org = existingOrg[0];
+    if (org?.trialEnd) {
+      const trialEndDate = new Date(org.trialEnd);
+      const now = new Date();
+      if (now > trialEndDate) {
+        // Trial expired, redirect to trial page
+        throw redirect(href('/dashboard/:companyId/onboarding/trial', { companyId }));
+      }
+    }
+
+    initialStep = 3; // Show payment options (but trial is already active)
   }
   // If both exist, redirect to dashboard (onboarding complete)
   if (hasOrg && hasUser && hasPremiumAccess) {
@@ -159,13 +170,30 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     });
 
     if (!org?.ownerId) {
-      await db.update(organizationTable).set({ ownerId: createdUser.id }).where(eq(organizationTable.id, companyId));
+      const now = new Date();
+      const trialEnd = new Date(now);
+      trialEnd.setDate(trialEnd.getDate() + 3); // 3 days from now
+
+      await db
+        .update(organizationTable)
+        .set({
+          ownerId: createdUser.id,
+          trialStart: now.toISOString(),
+          trialEnd: trialEnd.toISOString(),
+        })
+        .where(eq(organizationTable.id, companyId));
 
       // Update the default board to set the owner
       await db.update(boardTable).set({ ownerId: createdUser.id }).where(eq(boardTable.companyId, companyId));
     }
 
-    return data({ success: true, step: 2, message: 'Profile created' } as const);
+    // After user creation, redirect to dashboard (trial is now active)
+    const headers = await putToast({
+      title: 'Welcome! 🎉',
+      message: 'Your 3 day free trial has started!',
+      variant: 'default',
+    });
+    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
   }
 
   if (intent === 'processPayment') {
@@ -709,9 +737,10 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
             <div className="flex flex-col gap-12">
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
-                  <h1 className="text-3xl font-bold text-foreground">Welcome to your CRM</h1>
+                  <h1 className="text-3xl font-bold text-foreground">Close more deals, faster and smarter!</h1>
                   <p className="text-lg text-muted-foreground">
-                    Create your organization workspace to start collaborating with your team and managing deals
+                    Stop losing track of leads. See every activity, close deals in half the time, and never miss a
+                    follow up again.
                   </p>
                 </div>
               </div>
@@ -775,7 +804,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                 <div className="flex flex-col gap-1">
                   <h1 className="text-3xl font-bold text-foreground">Set up your profile</h1>
                   <p className="text-lg text-muted-foreground">
-                    Add your details so your team can assign tasks to you and stay connected
+                    Add your details so your team can collaborate with you and assign deals to you easily.
                   </p>
                 </div>
               </div>
@@ -837,102 +866,99 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
             <div className="flex flex-col gap-12">
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col gap-1">
-                  <h1 className="text-3xl font-bold text-foreground">Unlock full team access</h1>
+                  <h1 className="text-3xl font-bold text-foreground">Start your 3 day free trial</h1>
                   <p className="text-lg text-muted-foreground">
-                    Get unlimited team members, advanced reporting, and priority support to scale your sales process
+                    No credit card required! Experience how organized your sales process can be.
                   </p>
                 </div>
               </div>
 
               <div className="flex flex-col gap-6">
-                {!loaderData.hasPremiumAccess && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      {/* Monthly */}
-                      <Card
-                        className={`cursor-pointer transition-all border relative ${
-                          selectedPlan === 'monthly'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border/50 hover:border-border'
-                        }`}
-                        onClick={() => setSelectedPlan('monthly')}
-                      >
-                        <CardContent className="p-4 text-center space-y-1">
-                          <div className="text-xs font-medium text-muted-foreground">Monthly</div>
-                          <div className="text-xl font-bold text-foreground">$19</div>
-                          <div className="text-xs text-muted-foreground">per month</div>
-                        </CardContent>
-                        {selectedPlan === 'monthly' && (
-                          <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check className="h-3 w-3 text-foreground" />
-                          </div>
-                        )}
-                      </Card>
+                <div className="flex flex-col gap-6">
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Monthly */}
+                    <Card
+                      className={`cursor-pointer transition-all border relative py-2 ${
+                        selectedPlan === 'monthly'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border/50 hover:border-border'
+                      }`}
+                      onClick={() => setSelectedPlan('monthly')}
+                    >
+                      <CardContent className="p-4 text-center space-y-1">
+                        <div className="text-xs font-medium text-muted-foreground">Monthly</div>
+                        <div className="text-xl font-bold text-foreground">$19</div>
+                        <div className="text-xs text-muted-foreground">per month</div>
+                      </CardContent>
+                      {selectedPlan === 'monthly' && (
+                        <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
+                          <Check className="h-3 w-3 text-foreground" />
+                        </div>
+                      )}
+                    </Card>
 
-                      {/* Annual */}
-                      <Card
-                        className={`cursor-pointer transition-all border relative ${
-                          selectedPlan === 'annual'
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border/50 hover:border-border'
-                        }`}
-                        onClick={() => setSelectedPlan('annual')}
-                      >
-                        <CardContent className="p-4 text-center space-y-1">
-                          <div className="flex items-center justify-center gap-1.5">
-                            <div className="text-xs font-medium text-muted-foreground">Annual</div>
-                            <Badge
-                              variant="default"
-                              className="absolute left-1/2 -translate-x-1/2 -top-3.5 text-xs h-6  text-primary-foreground"
-                            >
-                              Save <span className="font-bold">35%</span> & Get <span className="font-bold">7</span>{' '}
-                              days free trial
-                            </Badge>
-                          </div>
-                          <div className="text-xl font-bold text-foreground">$149</div>
-                          <div className="text-xs text-muted-foreground">per year</div>
-                        </CardContent>
-                        {selectedPlan === 'annual' && (
-                          <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
-                            <Check className="h-3 w-3 text-foreground" />
-                          </div>
-                        )}
-                      </Card>
-                    </div>
+                    {/* Annual */}
+                    <Card
+                      className={`cursor-pointer transition-all border relative py-2 ${
+                        selectedPlan === 'annual'
+                          ? 'border-primary bg-primary/5'
+                          : 'border-border/50 hover:border-border'
+                      }`}
+                      onClick={() => setSelectedPlan('annual')}
+                    >
+                      <CardContent className="p-4 text-center space-y-1">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div className="text-xs font-medium text-muted-foreground">Annual</div>
+                          <Badge
+                            variant="default"
+                            className="absolute left-1/2 -translate-x-1/2 -top-3.5 text-xs h-6  text-primary-foreground"
+                          >
+                            Save <span className="font-bold">35%</span>
+                          </Badge>
+                        </div>
+                        <div className="text-xl font-bold text-foreground">$149</div>
+                        <div className="text-xs text-muted-foreground">per year</div>
+                      </CardContent>
+                      {selectedPlan === 'annual' && (
+                        <div className="absolute -top-1.5 -right-1.5 h-5 w-5 bg-primary rounded-full flex items-center justify-center">
+                          <Check className="h-3 w-3 text-foreground" />
+                        </div>
+                      )}
+                    </Card>
+                  </div>
 
-                    {/* Feature highlights */}
-                    <div className="space-y-3 mb-2">
-                      <div className="grid grid-cols-2 gap-3 text-xs">
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>People & contact management</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Visual sales pipeline</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Team task management</span>
-                        </div>
+                  {/* Feature highlights */}
+                  <div className="space-y-3 mb-2">
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>People & contact management</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>Visual sales pipeline</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>Team task management</span>
+                      </div>
 
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Activity timeline & notes</span>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>Activity timeline & notes</span>
+                      </div>
 
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Unlimited team members</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          <span>Priority support</span>
-                        </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>Unlimited team members</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Check className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span>Priority support</span>
                       </div>
                     </div>
-                  </>
-                )}
+                  </div>
+                </div>
 
                 {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 3 && (
                   <p className="text-sm text-destructive text-center">{actionData.error}</p>
@@ -942,22 +968,29 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                   <input type="hidden" name="intent" value="processPayment" />
                   {!loaderData.hasPremiumAccess && <input type="hidden" name="selectedPlan" value={selectedPlan} />}
 
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting || isProcessingPayment}
-                    className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
-                    onClick={() => handlePayment(selectedPlan)}
-                  >
-                    {isSubmitting
-                      ? 'Processing...'
-                      : isProcessingPayment
-                        ? 'Processing payment...'
-                        : loaderData.hasPremiumAccess
-                          ? 'Get Started'
+                  <div className="flex flex-col gap-3">
+                    <Button type="submit" className="h-10 text-sm font-semibold bg-primary hover:bg-primary/90">
+                      Start Free Trial (No Credit Card)
+                    </Button>
+                    <p className="text-xs text-center text-muted-foreground">
+                      Or upgrade now to unlock premium features immediately
+                    </p>
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting || isProcessingPayment}
+                      variant="outline"
+                      className="h-10 text-sm font-semibold"
+                      onClick={() => handlePayment(selectedPlan)}
+                    >
+                      {isSubmitting
+                        ? 'Processing...'
+                        : isProcessingPayment
+                          ? 'Processing payment...'
                           : selectedPlan === 'monthly'
-                            ? 'Subscribe to Monthly Plan'
-                            : 'Start Free Today'}
-                  </Button>
+                            ? 'Upgrade to Monthly Plan'
+                            : 'Upgrade to Annual Plan'}
+                    </Button>
+                  </div>
                 </Form>
 
                 {paymentResult && (
@@ -988,17 +1021,17 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
           <div className="mt-8 text-center">
             {step === 1 && (
               <p className="text-sm text-muted-foreground">
-                Your dashboard shows key metrics, growth trends, and recent activity across your business
+                See exactly where every deal stands. Know what to do next, every single day.
               </p>
             )}
             {step === 2 && (
               <p className="text-sm text-muted-foreground">
-                Organize contacts, companies, and relationships with powerful search and filtering
+                Never lose a lead again. Every activity, task, and note in one place.
               </p>
             )}
             {step === 3 && (
               <p className="text-sm text-muted-foreground">
-                Track deals through your sales pipeline with visual kanban boards and metrics
+                Watch your pipeline grow. Move deals forward with confidence and close more.
               </p>
             )}
           </div>

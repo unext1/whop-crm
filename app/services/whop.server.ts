@@ -139,6 +139,7 @@ export const isAdminCheck = async (request: Request, experienceId: string) => {
 
 /**
  * Checks if an organization has premium access based on database record
+ * Returns true if they have active trial, premium subscription, or valid membership
  */
 export const hasOrganizationPremiumAccess = async (companyId: string): Promise<boolean> => {
   try {
@@ -147,6 +148,15 @@ export const hasOrganizationPremiumAccess = async (companyId: string): Promise<b
     });
 
     if (!organization) return false;
+
+    // Check for active trial period (3 days, no credit card required)
+    if (organization.trialEnd) {
+      const trialEndDate = new Date(organization.trialEnd);
+      const now = new Date();
+      if (now <= trialEndDate) {
+        return true; // Trial is still active
+      }
+    }
 
     // If plan is not premium, no access
     if (organization.plan !== 'premium') return false;
