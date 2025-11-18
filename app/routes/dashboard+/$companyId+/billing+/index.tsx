@@ -6,6 +6,7 @@ import { href, Link, useLoaderData, useParams } from 'react-router';
 import { Badge } from '~/components/ui/badge';
 import { Button, buttonVariants } from '~/components/ui/button';
 import { Card, CardContent } from '~/components/ui/card';
+import { useToast } from '~/components/ui/use-toast';
 import { db } from '~/db';
 import { organizationTable } from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
@@ -77,11 +78,11 @@ const BillingPage = () => {
 
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('annual');
   const [purchasing, setPurchasing] = useState(false);
-  const [purchaseResult, setPurchaseResult] = useState<{ status: string; error?: string } | null>(null);
+
+  const { toast } = useToast();
 
   const handlePurchase = async (plan: 'monthly' | 'annual') => {
     setPurchasing(true);
-    setPurchaseResult(null);
 
     try {
       const iframeSdk = createSdk({ appId: whopAppId });
@@ -95,14 +96,22 @@ const BillingPage = () => {
         id: checkoutSession.id,
         planId: checkoutSession.plan.id,
       });
-      setPurchaseResult(result);
 
       if (result.status === 'ok') {
+        toast({
+          title: 'Success',
+          description: 'Purchase successful!',
+          variant: 'default',
+        });
         // Reload page after successful purchase
-        setTimeout(() => window.location.reload(), 2000);
+        setTimeout(() => window.location.reload(), 1000);
       }
     } catch (error) {
-      setPurchaseResult({ status: 'error', error: String(error) });
+      toast({
+        title: 'Error',
+        description: String(error),
+        variant: 'destructive',
+      });
     } finally {
       setPurchasing(false);
     }
@@ -152,108 +161,6 @@ const BillingPage = () => {
                   </p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Pricing Section - Show if on trial (so they can upgrade) OR if no premium access */}
-          {(hasActiveTrial || !orgPremiumAccess) && (
-            <div className="space-y-6">
-              <div className="text-center">
-                <h2 className="text-2xl font-bold">Choose Your Plan</h2>
-                <p className="text-muted-foreground mt-2">Unlock premium features for your entire organization</p>
-              </div>
-
-              {/* Pricing Cards - Similar to trial page */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Monthly Plan */}
-                <Card
-                  className={`cursor-pointer transition-all border relative ${
-                    selectedPlan === 'monthly'
-                      ? 'border-primary bg-primary/5 shadow-md'
-                      : 'border-border/50 hover:border-border'
-                  }`}
-                  onClick={() => setSelectedPlan('monthly')}
-                >
-                  <CardContent className="p-6 text-center space-y-2">
-                    <div className="text-sm font-medium text-muted-foreground">Monthly</div>
-                    <div className="text-3xl font-bold text-foreground">$19</div>
-                    <div className="text-sm text-muted-foreground">per month</div>
-                  </CardContent>
-                  {selectedPlan === 'monthly' && (
-                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
-                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
-                    </div>
-                  )}
-                </Card>
-
-                {/* Annual Plan */}
-                <Card
-                  className={`cursor-pointer transition-all border relative ${
-                    selectedPlan === 'annual'
-                      ? 'border-primary bg-primary/5 shadow-md'
-                      : 'border-border/50 hover:border-border'
-                  }`}
-                  onClick={() => setSelectedPlan('annual')}
-                >
-                  <CardContent className="p-6 text-center space-y-2">
-                    <div className="flex items-center justify-center gap-1.5 mb-1">
-                      <div className="text-sm font-medium text-muted-foreground">Annual</div>
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-semibold">
-                        Save 35%
-                      </span>
-                    </div>
-                    <div className="text-3xl font-bold text-foreground">$149</div>
-                    <div className="text-sm text-muted-foreground">per year</div>
-                  </CardContent>
-                  {selectedPlan === 'annual' && (
-                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
-                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
-                    </div>
-                  )}
-                </Card>
-              </div>
-
-              {/* Purchase Button */}
-              <div className="flex justify-center">
-                <Button
-                  onClick={() => handlePurchase(selectedPlan)}
-                  size="lg"
-                  className="w-full md:w-auto px-8 py-3 text-sm font-semibold"
-                  disabled={purchasing}
-                >
-                  {purchasing
-                    ? 'Processing...'
-                    : selectedPlan === 'monthly'
-                      ? 'Upgrade to Monthly Plan'
-                      : 'Upgrade to Annual Plan'}
-                </Button>
-              </div>
-
-              {/* Trust indicators */}
-              <div className="flex justify-center gap-6 text-sm text-muted-foreground">
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  <span>Secure payment via Whop</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-                  <span>Cancel anytime</span>
-                </div>
-              </div>
-
-              {purchaseResult && (
-                <div className="max-w-md mx-auto">
-                  <div
-                    className={`p-4 rounded-md border ${
-                      purchaseResult.status === 'ok'
-                        ? 'bg-green-50 border-green-200 text-green-800'
-                        : 'bg-red-50 border-red-200 text-red-800'
-                    }`}
-                  >
-                    <pre className="text-xs overflow-auto">{JSON.stringify(purchaseResult, null, 2)}</pre>
-                  </div>
-                </div>
-              )}
             </div>
           )}
 
@@ -418,6 +325,94 @@ const BillingPage = () => {
                       </div>
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pricing Section - Show if on trial (so they can upgrade) OR if no premium access */}
+          {(hasActiveTrial || !orgPremiumAccess) && (
+            <div className="space-y-6">
+              <div className="text-center">
+                <h2 className="text-2xl font-bold">Choose Your Plan</h2>
+                <p className="text-muted-foreground mt-2">Unlock premium features for your entire organization</p>
+              </div>
+
+              {/* Pricing Cards - Similar to trial page */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Monthly Plan */}
+                <Card
+                  className={`cursor-pointer transition-all border relative ${
+                    selectedPlan === 'monthly'
+                      ? 'border-primary bg-primary/5 shadow-md'
+                      : 'border-border/50 hover:border-border'
+                  }`}
+                  onClick={() => setSelectedPlan('monthly')}
+                >
+                  <CardContent className="p-6 text-center space-y-2">
+                    <div className="text-sm font-medium text-muted-foreground">Monthly</div>
+                    <div className="text-3xl font-bold text-foreground">$19</div>
+                    <div className="text-sm text-muted-foreground">per month</div>
+                  </CardContent>
+                  {selectedPlan === 'monthly' && (
+                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
+                    </div>
+                  )}
+                </Card>
+
+                {/* Annual Plan */}
+                <Card
+                  className={`cursor-pointer transition-all border relative ${
+                    selectedPlan === 'annual'
+                      ? 'border-primary bg-primary/5 shadow-md'
+                      : 'border-border/50 hover:border-border'
+                  }`}
+                  onClick={() => setSelectedPlan('annual')}
+                >
+                  <CardContent className="p-6 text-center space-y-2">
+                    <div className="flex items-center justify-center gap-1.5 mb-1">
+                      <div className="text-sm font-medium text-muted-foreground">Annual</div>
+                      <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-semibold">
+                        Save 35%
+                      </span>
+                    </div>
+                    <div className="text-3xl font-bold text-foreground">$149</div>
+                    <div className="text-sm text-muted-foreground">per year</div>
+                  </CardContent>
+                  {selectedPlan === 'annual' && (
+                    <div className="absolute -top-2 -right-2 h-6 w-6 bg-primary rounded-full flex items-center justify-center">
+                      <Check className="h-3.5 w-3.5 text-primary-foreground" />
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              {/* Purchase Button */}
+              <div className="flex justify-center">
+                <Button
+                  onClick={() => handlePurchase(selectedPlan)}
+                  size="lg"
+                  className="w-full md:w-auto px-8 py-3 text-sm font-semibold"
+                  disabled={purchasing}
+                >
+                  {purchasing
+                    ? 'Processing...'
+                    : selectedPlan === 'monthly'
+                      ? 'Upgrade to Monthly Plan'
+                      : 'Upgrade to Annual Plan'}
+                </Button>
+              </div>
+
+              {/* Trust indicators */}
+              <div className="flex justify-center gap-6 text-sm text-muted-foreground">
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                  <span>Secure payment via Whop</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+                  <span>Cancel anytime</span>
                 </div>
               </div>
             </div>
