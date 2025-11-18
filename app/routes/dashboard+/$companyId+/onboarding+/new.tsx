@@ -49,7 +49,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   const hasPremiumAccess = hasOrg ? await hasOrganizationPremiumAccess(companyId) : false;
 
   // Determine starting step based on what exists
-  let initialStep = 3;
+  let initialStep = 1;
   if (hasOrg && !hasUser) {
     initialStep = 2; // Skip org creation, go to user profile
   } else if (hasOrg && hasUser) {
@@ -732,7 +732,9 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state === 'submitting' && navigation.formAction !== 'processPayment';
+
+  const isSubmitting = navigation.state === 'submitting';
+
   const navigate = useNavigate();
 
   const handlePayment = async (plan: 'monthly' | 'annual') => {
@@ -1049,18 +1051,16 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                     <input type="hidden" name="selectedPlan" value={selectedPlan} />
                     <Button
                       type="submit"
-                      disabled={isSubmitting || isProcessingPayment}
+                      disabled={isProcessingPayment}
                       variant="outline"
                       className="w-full h-10 text-sm font-semibold"
                       onClick={() => handlePayment(selectedPlan)}
                     >
-                      {isSubmitting
+                      {isProcessingPayment
                         ? 'Processing...'
-                        : isProcessingPayment
-                          ? 'Processing payment...'
-                          : selectedPlan === 'monthly'
-                            ? 'Upgrade to Monthly Plan'
-                            : 'Upgrade to Annual Plan'}
+                        : selectedPlan === 'monthly'
+                          ? 'Upgrade to Monthly Plan'
+                          : 'Upgrade to Annual Plan'}
                     </Button>
                   </Form>
                 </div>
