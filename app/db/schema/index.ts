@@ -2,6 +2,7 @@ export * from './activities';
 export * from './companies';
 export * from './companies-poeple';
 export * from './emails';
+export * from './forms';
 export * from './meetings';
 export * from './meetings-companies';
 export * from './meetings-people';

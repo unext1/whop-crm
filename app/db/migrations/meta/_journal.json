@@ -15,6 +15,13 @@
       "when": 1763485975485,
       "tag": "0001_futuristic_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1763555053736,
+      "tag": "0002_nifty_titanium_man",
+      "breakpoints": true
     }
   ]
 }

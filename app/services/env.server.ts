@@ -5,6 +5,7 @@ const environmentSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
 
   SESSION_SECRET: z.string().min(1).trim(),
+  CSRF_SECRET: z.string().min(1).trim(),
 
   WHOP_WEBHOOK_SECRET: z.string().min(1).trim(),
   WHOP_API_KEY: z.string().min(1).trim(),

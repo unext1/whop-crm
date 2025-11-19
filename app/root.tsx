@@ -14,21 +14,23 @@ import { ToastProvider } from '@radix-ui/react-toast';
 import { NuqsAdapter } from 'nuqs/adapters/react-router/v7';
 import { Toaster } from './components/ui/toaster';
 import tailwindStyleSheetUrl from './tailwind.css?url';
+import { csrf } from './services/csrf.server';
+import { AuthenticityTokenProvider } from 'remix-utils/csrf/react';
 
 export const links: Route.LinksFunction = () => {
   return [{ rel: 'stylesheet', href: tailwindStyleSheetUrl }].filter(Boolean);
 };
 
-export const loader = () => {
+export const loader = async ({ request }: Route.LoaderArgs) => {
+  const [csrfToken, cookieHeader] = await csrf.commitToken(request);
+
   const colorScheme = 'system';
 
-  return data({
-    colorScheme,
-  });
+  return data({ csrfToken, colorScheme }, { headers: { 'Set-Cookie': cookieHeader || '' } });
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const { colorScheme } = useLoaderData<typeof loader>();
+  const { colorScheme, csrfToken } = useLoaderData<typeof loader>();
 
   return (
     <html lang="en" className="antialiased min-h-screen h-screen" style={{ colorScheme }} data-theme={colorScheme}>
@@ -42,7 +44,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex-1 flex flex-col max-h-screen overflow-hidden">
           <ToastProvider>
             <Toaster />
-            <NuqsAdapter>{children}</NuqsAdapter>
+            <NuqsAdapter>
+              <AuthenticityTokenProvider token={csrfToken}>{children}</AuthenticityTokenProvider>
+            </NuqsAdapter>
           </ToastProvider>
         </div>
         <ScrollRestoration />

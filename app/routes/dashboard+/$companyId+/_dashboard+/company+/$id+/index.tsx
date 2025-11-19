@@ -61,6 +61,7 @@ import {
   companiesPeopleTable,
   companiesTable,
   meetingsTable,
+  organizationTable,
   peopleTable,
   summaryTable,
 } from '~/db/schema';
@@ -68,7 +69,6 @@ import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
 import { getTodayUTC } from '~/utils';
-import { AI_SUMMARY_DAILY_LIMIT } from '../../api+/ai-summary';
 import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
@@ -185,6 +185,20 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   const dailyUsage = Number(todaySummaries[0]?.count || 0);
 
+  // Get AI summary limit based on trial status
+  const organization = await db.query.organizationTable.findFirst({
+    where: eq(organizationTable.id, organizationId),
+  });
+
+  let aiSummaryLimit = 50; // Default for paid users
+  if (organization?.trialEnd && !organization.membershipId) {
+    const trialEndDate = new Date(organization.trialEnd);
+    const now = new Date();
+    if (now <= trialEndDate) {
+      aiSummaryLimit = 10; // Trial users get 10
+    }
+  }
+
   return {
     userId,
     organizationId,
@@ -195,6 +209,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     allCompanies,
     companySummaries,
     dailyUsage,
+    aiSummaryLimit,
   };
 };
 
@@ -660,6 +675,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
     allCompanies,
     companySummaries,
     dailyUsage,
+    aiSummaryLimit,
   } = loaderData;
   const [activeTab, setActiveTab] = useState('overview');
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -672,7 +688,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
   const generateFetcher = useFetcher();
   const isGeneratingSummary = generateFetcher.state === 'submitting';
 
-  const isLimitReached = dailyUsage >= AI_SUMMARY_DAILY_LIMIT;
+  const isLimitReached = dailyUsage >= aiSummaryLimit;
 
   // Get currently selected people IDs
   const selectedPeopleIds = company.companiesPeople.map((cp) => cp.person.id);
@@ -1018,7 +1034,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                     <SparkleIcon className="h-4 w-4" />
                     <h2 className="text-sm font-semibold">AI Insights</h2>
                     <Badge variant="secondary" className="h-5 text-xs">
-                      {dailyUsage}/{AI_SUMMARY_DAILY_LIMIT} today
+                      {dailyUsage}/{aiSummaryLimit} today
                     </Badge>
                   </div>
                   <generateFetcher.Form
@@ -1043,7 +1059,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                 </div>
                 {isLimitReached && (
                   <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-                    You've reached the daily limit of {AI_SUMMARY_DAILY_LIMIT} AI summaries. Please try again tomorrow.
+                    You've reached the daily limit of {aiSummaryLimit} AI summaries. Please try again tomorrow.
                   </div>
                 )}
                 {companySummaries.length > 0 ? (
@@ -1159,7 +1175,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                     </generateFetcher.Form>
                     {isLimitReached && (
                       <p className="mt-2 text-xs text-destructive">
-                        Daily limit reached ({dailyUsage}/{AI_SUMMARY_DAILY_LIMIT})
+                        Daily limit reached ({dailyUsage}/{aiSummaryLimit})
                       </p>
                     )}
                   </div>
@@ -1473,7 +1489,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-semibold">AI Summaries</h2>
                   <Badge variant="secondary" className="h-5 text-xs">
-                    {dailyUsage}/{AI_SUMMARY_DAILY_LIMIT} today
+                    {dailyUsage}/{aiSummaryLimit} today
                   </Badge>
                 </div>
                 <generateFetcher.Form
@@ -1498,7 +1514,7 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
               </div>
               {isLimitReached && (
                 <div className="mb-4 rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-                  You've reached the daily limit of {AI_SUMMARY_DAILY_LIMIT} AI summaries. Please try again tomorrow.
+                  You've reached the daily limit of {aiSummaryLimit} AI summaries. Please try again tomorrow.
                 </div>
               )}
 

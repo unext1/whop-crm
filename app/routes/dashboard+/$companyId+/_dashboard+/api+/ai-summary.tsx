@@ -4,13 +4,45 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { data } from 'react-router';
 import z from 'zod';
 import { db } from '~/db';
-import { activitiesTable, boardTaskTable, companiesTable, peopleTable, summaryTable } from '~/db/schema';
+import {
+  activitiesTable,
+  boardTaskTable,
+  companiesTable,
+  organizationTable,
+  peopleTable,
+  summaryTable,
+} from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { getTodayUTC } from '~/utils';
 import type { Route } from './+types/ai-summary';
 
-export const AI_SUMMARY_DAILY_LIMIT = 50;
+/**
+ * Get the AI summary daily limit based on trial status
+ * Trial users: 10 summaries per day
+ * Paid users: 50 summaries per day
+ */
+function getAiSummaryLimit(organizationId: string): Promise<number> {
+  return db.query.organizationTable
+    .findFirst({
+      where: eq(organizationTable.id, organizationId),
+    })
+    .then((org) => {
+      if (!org) return 50; // Default to 50 if org not found
+
+      // Check if user has active trial (no membershipId but has trialEnd)
+      if (org.trialEnd && !org.membershipId) {
+        const trialEndDate = new Date(org.trialEnd);
+        const now = new Date();
+        if (now <= trialEndDate) {
+          return 10; // Trial users get 10
+        }
+      }
+
+      // Paid users or no trial get 50
+      return 50;
+    });
+}
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { companyId: organizationId } = params;
@@ -38,13 +70,16 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 
     const todayCount = Number(todaySummaries[0]?.count || 0);
 
-    if (todayCount >= AI_SUMMARY_DAILY_LIMIT) {
+    // Get the limit based on trial status
+    const dailyLimit = await getAiSummaryLimit(organizationId);
+
+    if (todayCount >= dailyLimit) {
       const headers = await putToast({
         title: 'Daily Limit Reached',
-        message: `You've reached the daily limit of ${AI_SUMMARY_DAILY_LIMIT} AI summaries. Please try again tomorrow.`,
+        message: `You've reached the daily limit of ${dailyLimit} AI summaries. Please try again tomorrow.`,
         variant: 'destructive',
       });
-      return data({ error: 'Daily limit reached', limit: AI_SUMMARY_DAILY_LIMIT, used: todayCount }, { headers });
+      return data({ error: 'Daily limit reached', limit: dailyLimit, used: todayCount }, { headers });
     }
 
     try {
@@ -341,7 +376,7 @@ ${'notes' in entityData && entityData.notes ? `Notes: ${entityData.notes}` : ''}
           rating: result.object.rating,
           recommendation: result.object.recommendation,
           usage: todayCount + 1,
-          limit: AI_SUMMARY_DAILY_LIMIT,
+          limit: dailyLimit,
         },
         { headers },
       );

@@ -1,4 +1,12 @@
-import { Building2Icon, CheckSquareIcon, FileTextIcon, KanbanIcon, LayoutDashboardIcon, UsersIcon } from 'lucide-react';
+import {
+  Building2Icon,
+  CheckSquareIcon,
+  ClipboardListIcon,
+  FileTextIcon,
+  KanbanIcon,
+  LayoutDashboardIcon,
+  UsersIcon,
+} from 'lucide-react';
 import { href, Link, useParams } from 'react-router';
 import {
   Sidebar,
@@ -52,6 +60,11 @@ export function AppSidebar({
           title: 'Notes',
           url: href('/dashboard/:companyId/notes', { companyId: params.companyId || '' }),
           icon: FileTextIcon,
+        },
+        {
+          title: 'Forms',
+          url: href('/dashboard/:companyId/forms', { companyId: params.companyId || '' }),
+          icon: ClipboardListIcon,
         },
       ],
     },
