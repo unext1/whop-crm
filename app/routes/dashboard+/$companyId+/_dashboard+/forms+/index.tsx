@@ -82,17 +82,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
       formData.get('successMessage')?.toString() || "Thank you for your submission! We'll be in touch soon.";
     const fields = formData.get('fields')?.toString();
 
-    // Debug logging
-    console.log('[Form Action] Received data:', {
-      intent,
-      formId,
-      name,
-      description,
-      entityType,
-      fieldsLength: fields?.length,
-      hasFields: !!fields,
-    });
-
     if (!name || !fields) {
       const headers = await putToast({
         title: 'Error',
@@ -104,7 +93,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
 
     try {
       if (intent === 'updateForm' && formId) {
-        console.log('[Form Action] Updating form:', formId);
         await db
           .update(formsTable)
           .set({
@@ -121,7 +109,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
           })
           .where(and(eq(formsTable.id, formId), eq(formsTable.organizationId, companyId)));
 
-        console.log('[Form Action] Form updated successfully');
         const headers = await putToast({
           title: 'Success',
           message: 'Form updated successfully',
@@ -131,8 +118,7 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
         return data({ success: true, formId }, { headers });
       }
 
-      console.log('[Form Action] Creating new form');
-      const result = await db
+      await db
         .insert(formsTable)
         .values({
           name,
@@ -149,7 +135,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
         })
         .returning();
 
-      console.log('[Form Action] Form created successfully:', result[0]?.id);
       const headers = await putToast({
         title: 'Success',
         message: 'Form created successfully',
@@ -157,7 +142,6 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
       });
       return redirect(`/dashboard/${companyId}/forms`, { headers });
     } catch (error) {
-      console.error('[Form Action] Error saving form:', error);
       const headers = await putToast({
         title: 'Error',
         message: `Failed to save form: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -262,7 +246,7 @@ const FormsPage = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 scrollbar-thin flex flex-col">
-        {forms.length === 3 ? (
+        {forms.length === 0 ? (
           <div className="rounded-lg border border-border border-dashed p-12 bg-muted/30 flex-1 items-center justify-center text-center flex-col flex">
             <h2 className="text-lg font-semibold mb-2">No forms yet</h2>
             <p className="text-sm text-muted-foreground mb-4">Create your first form to start collecting leads</p>
