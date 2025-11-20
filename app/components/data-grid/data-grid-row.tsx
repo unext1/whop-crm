@@ -91,6 +91,7 @@ function DataGridRowImpl<TData>({
   }, [virtualRowIndex, rowVirtualizer, rowMapRef]);
 
   return (
+    /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization */
     <div
       key={row.id}
       role="row"
@@ -109,8 +110,10 @@ function DataGridRowImpl<TData>({
     >
       {row.getVisibleCells().map((cell, colIndex) => {
         const isCellFocused = focusedCell?.rowIndex === virtualRowIndex && focusedCell?.columnId === cell.column.id;
+        const isPinned = cell.column.getIsPinned() !== false;
 
         return (
+          /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization */
           <div
             key={cell.id}
             role="gridcell"
@@ -120,7 +123,7 @@ function DataGridRowImpl<TData>({
             tabIndex={-1}
             className={cn({
               'border-r': cell.column.id !== 'select',
-              'bg-background': cell.column.id === 'select',
+              'bg-background': cell.column.id === 'select' || isPinned,
             })}
             style={{
               ...getCommonPinningStyles({ column: cell.column }),

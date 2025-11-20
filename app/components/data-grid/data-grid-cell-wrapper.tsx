@@ -156,6 +156,7 @@ export function DataGridCellWrapper<TData>({
   const rowHeight = meta?.rowHeight ?? 'short';
 
   return (
+    /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for accessibility */
     <div
       ref={composedRefs}
       role="button"

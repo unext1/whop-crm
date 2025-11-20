@@ -25,7 +25,7 @@ export function getCommonPinningStyles<TData>({
     right: isPinned === 'right' ? `${column.getAfter('right')}px` : undefined,
     opacity: isPinned ? 0.97 : 1,
     position: isPinned ? 'sticky' : 'relative',
-    background: isPinned ? 'var(--background)' : 'var(--background)',
+    // Background is handled via className (bg-background) for better CSS variable resolution
     width: column.getSize(),
     zIndex: isPinned ? 1 : undefined,
   };

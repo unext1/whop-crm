@@ -155,6 +155,7 @@ export function ShortTextCell<TData>({
       isSelected={isSelected}
       onKeyDown={onWrapperKeyDown}
     >
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: contentEditable div is required for inline editing */}
       <div
         data-slot="grid-cell-content"
         contentEditable={isEditing}
@@ -619,8 +620,8 @@ export function UrlCell<TData>({
           </a>
         </div>
       ) : (
+        // biome-ignore lint/a11y/noStaticElementInteractions: contentEditable div is required for inline editing
         <div
-          role="textbox"
           data-slot="grid-cell-content"
           contentEditable={isEditing}
           tabIndex={-1}
@@ -1914,8 +1915,7 @@ export function FileCell<TData>({
               <span id={labelId} className="sr-only">
                 File upload
               </span>
-              <div
-                role="region"
+              <section
                 aria-labelledby={labelId}
                 aria-describedby={descriptionId}
                 aria-invalid={!!error}
@@ -1943,7 +1943,7 @@ export function FileCell<TData>({
                       ? `Max ${maxFiles} files`
                       : 'Select files to upload'}
                 </p>
-              </div>
+              </section>
               <input
                 type="file"
                 aria-labelledby={labelId}

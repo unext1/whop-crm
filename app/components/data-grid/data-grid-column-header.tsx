@@ -99,9 +99,8 @@ export function DataGridColumnHeader<TData, TValue>({
           const updated = [...prev];
           updated[existingSortIndex] = newSort;
           return updated;
-        } else {
-          return [...prev, newSort];
         }
+        return [...prev, newSort];
       });
     },
     [column.id, table],
@@ -263,6 +262,7 @@ function DataGridColumnResizerImpl<TData, TValue>({ header, table, label }: Data
   }, [header.column]);
 
   return (
+    // biome-ignore lint/a11y/useSemanticElements: div with role="separator" needed for interactive resizing handlers
     <div
       role="separator"
       aria-orientation="vertical"

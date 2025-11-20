@@ -12,9 +12,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '~/components/
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
-import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import { db } from '~/db';
-import { boardColumnTable, boardTaskTable, boardTable } from '~/db/kanban-schemas';
+import { boardColumnTable, boardTable, boardTaskTable } from '~/db/kanban-schemas';
 import {
   companiesPeopleTable,
   companiesTable,
@@ -36,6 +35,7 @@ import {
   verifyWhopToken,
   whopSdk,
 } from '~/services/whop.server';
+import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types/new';
 
 export const loader = async ({ request, params }: Route.LoaderArgs) => {
@@ -641,7 +641,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 };
 
 function formatNumber(n: number) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000_000) return `${Number((n / 1_000_000).toFixed(1))}M`;
   if (n >= 1_000) return n.toLocaleString();
   return n.toString();
 }

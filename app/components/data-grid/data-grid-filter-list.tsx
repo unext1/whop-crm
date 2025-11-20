@@ -99,17 +99,15 @@ export function DataGridFilterList<TData>({
 
   const onFilterUpdate = React.useCallback(
     (filterId: string, updates: Partial<Omit<ExtendedColumnFilter<TData>, 'filterId'>>) => {
-      debouncedSetFilters((prevFilters) => {
-        const updatedFilters = prevFilters.map((filter) => {
-          if (filter.filterId === filterId) {
-            return { ...filter, ...updates } as ExtendedColumnFilter<TData>;
-          }
-          return filter;
-        });
-        return updatedFilters;
+      const updatedFilters = filters.map((filter) => {
+        if (filter.filterId === filterId) {
+          return { ...filter, ...updates } as ExtendedColumnFilter<TData>;
+        }
+        return filter;
       });
+      debouncedSetFilters(updatedFilters);
     },
-    [debouncedSetFilters],
+    [debouncedSetFilters, filters],
   );
 
   const onFilterRemove = React.useCallback(
@@ -682,4 +680,3 @@ function onFilterInputRender<TData>({
       return null;
   }
 }
-

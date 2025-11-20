@@ -274,8 +274,12 @@ function DataGridKeyboardShortcutsImpl({ enableSearch = false }: DataGridKeyboar
                 <div key={shortcutGroup.title} className="flex flex-col gap-2">
                   <h3 className="font-semibold text-foreground text-sm">{shortcutGroup.title}</h3>
                   <div className="divide-y divide-border rounded-md border">
-                    {shortcutGroup.shortcuts.map((shortcut, index) => (
-                      <ShortcutCard key={index} keys={shortcut.keys} description={shortcut.description} />
+                    {shortcutGroup.shortcuts.map((shortcut) => (
+                      <ShortcutCard
+                        key={`${shortcut.keys.join('-')}-${shortcut.description}`}
+                        keys={shortcut.keys}
+                        description={shortcut.description}
+                      />
                     ))}
                   </div>
                 </div>

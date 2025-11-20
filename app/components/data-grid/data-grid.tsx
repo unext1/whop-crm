@@ -54,6 +54,7 @@ export function DataGrid<TData>({
     <div data-slot="grid-wrapper" className={cn('relative flex w-full flex-col', className)} {...props}>
       {searchState && <DataGridSearch {...searchState} />}
       <DataGridContextMenu table={table} />
+      {/* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization and styling */}
       <div
         role="grid"
         aria-label="Data grid"
@@ -69,6 +70,7 @@ export function DataGrid<TData>({
         }}
         onContextMenu={onGridContextMenu}
       >
+        {/* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization */}
         <div
           role="rowgroup"
           data-slot="grid-header"
@@ -76,6 +78,7 @@ export function DataGrid<TData>({
           className="sticky top-0 z-10 grid border-b bg-background"
         >
           {table.getHeaderGroups().map((headerGroup, rowIndex) => (
+            /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles */
             <div
               key={headerGroup.id}
               role="row"
@@ -88,8 +91,10 @@ export function DataGrid<TData>({
                 const sorting = table.getState().sorting;
                 const currentSort = sorting.find((sort) => sort.id === header.column.id);
                 const isSortable = header.column.getCanSort();
+                const isPinned = header.column.getIsPinned() !== false;
 
                 return (
+                  /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles */
                   <div
                     key={header.id}
                     role="columnheader"
@@ -107,7 +112,7 @@ export function DataGrid<TData>({
                     tabIndex={-1}
                     className={cn('relative', {
                       'border-r': header.column.id !== 'select',
-                      'bg-background': header.column.id === 'select',
+                      'bg-background': header.column.id === 'select' || isPinned,
                     })}
                     style={{
                       ...getCommonPinningStyles({ column: header.column }),
@@ -127,6 +132,7 @@ export function DataGrid<TData>({
             </div>
           ))}
         </div>
+        {/* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization */}
         <div
           role="rowgroup"
           data-slot="grid-body"
@@ -153,12 +159,14 @@ export function DataGrid<TData>({
           })}
         </div>
         {onRowAdd && (
+          /* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles for virtualization */
           <div
             role="rowgroup"
             data-slot="grid-footer"
             ref={footerRef}
             className="sticky bottom-0 z-10 grid border-t bg-background"
           >
+            {/* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles */}
             <div
               role="row"
               aria-rowindex={rows.length + 2}
@@ -166,6 +174,7 @@ export function DataGrid<TData>({
               tabIndex={-1}
               className="flex w-full"
             >
+              {/* biome-ignore lint/a11y/useSemanticElements: Custom grid widget requires div with ARIA roles */}
               <div
                 role="gridcell"
                 tabIndex={0}
