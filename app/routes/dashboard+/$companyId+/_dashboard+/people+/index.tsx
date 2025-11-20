@@ -1,6 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { CalendarIcon, Download, ImportIcon, Mail, MapPin, Phone, Plus, User, X } from 'lucide-react';
+import { CalendarIcon, Download, ImportIcon, Mail, MapPin, Phone, Plus, Search, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { data, Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
 import { DataTable } from '~/components/data-table/data-table';
@@ -63,6 +63,7 @@ type PeopleWithCompany = PeopleType & {
 
 type WhopMember = {
   id: string;
+  status?: 'drafted' | 'joined' | 'left';
   user: {
     id: string;
     name?: string | null;
@@ -644,6 +645,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 const ImportWhopMembersDialog = () => {
   const [open, setOpen] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
 
@@ -659,12 +661,60 @@ const ImportWhopMembersDialog = () => {
     if (importFetcher.data && 'close' in importFetcher.data && importFetcher.data.close) {
       setOpen(false);
       setSelectedMembers(new Set());
+      setSearchQuery('');
     }
   }, [importFetcher.data]);
 
-  const members: WhopMember[] = fetcher.data && 'members' in fetcher.data ? (fetcher.data.members as WhopMember[]) : [];
+  // Reset search when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery('');
+    }
+  }, [open]);
+
+  const allMembers: WhopMember[] =
+    fetcher.data && 'members' in fetcher.data ? (fetcher.data.members as WhopMember[]) : [];
   const isLoading = fetcher.state === 'loading' || fetcher.state === 'submitting';
   const isImporting = importFetcher.state === 'submitting';
+
+  // Filter members based on search query
+  const members = allMembers.filter((member) => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    const name = member.user?.name?.toLowerCase() || '';
+    const username = member.user?.username?.toLowerCase() || '';
+    const email = member.user?.email?.toLowerCase() || '';
+    const phone = member.phone?.toLowerCase() || '';
+    return name.includes(query) || username.includes(query) || email.includes(query) || phone.includes(query);
+  });
+
+  // Get status badge variant
+  const getStatusVariant = (status?: string) => {
+    switch (status) {
+      case 'joined':
+        return 'default';
+      case 'drafted':
+        return 'secondary';
+      case 'left':
+        return 'outline';
+      default:
+        return 'secondary';
+    }
+  };
+
+  // Get status label
+  const getStatusLabel = (status?: string) => {
+    switch (status) {
+      case 'joined':
+        return 'Joined';
+      case 'drafted':
+        return 'Drafted';
+      case 'left':
+        return 'Left';
+      default:
+        return 'Unknown';
+    }
+  };
 
   const handleToggleMember = (memberId: string) => {
     const newSelected = new Set(selectedMembers);
@@ -677,10 +727,22 @@ const ImportWhopMembersDialog = () => {
   };
 
   const handleToggleAll = () => {
-    if (selectedMembers.size === members.length) {
-      setSelectedMembers(new Set());
+    const filteredIds = members.map((m) => m.id);
+    const allFilteredSelected = filteredIds.every((id) => selectedMembers.has(id));
+    if (allFilteredSelected) {
+      // Deselect all filtered members
+      const newSelected = new Set(selectedMembers);
+      for (const id of filteredIds) {
+        newSelected.delete(id);
+      }
+      setSelectedMembers(newSelected);
     } else {
-      setSelectedMembers(new Set(members.map((m) => m.id)));
+      // Select all filtered members
+      const newSelected = new Set(selectedMembers);
+      for (const id of filteredIds) {
+        newSelected.add(id);
+      }
+      setSelectedMembers(newSelected);
     }
   };
 
@@ -689,7 +751,7 @@ const ImportWhopMembersDialog = () => {
 
     const formData = new FormData();
     formData.append('intent', 'importWhopMembers');
-    formData.append('membersData', JSON.stringify(members));
+    formData.append('membersData', JSON.stringify(allMembers));
     Array.from(selectedMembers).forEach((id) => {
       formData.append('memberIds', id);
     });
@@ -738,7 +800,7 @@ const ImportWhopMembersDialog = () => {
               <Skeleton className="h-12 w-full bg-muted" />
               <Skeleton className="h-12 w-full bg-muted" />
             </div>
-          ) : members.length === 0 ? (
+          ) : allMembers.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
               <User className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-semibold mb-2">No members found</h3>
@@ -746,53 +808,79 @@ const ImportWhopMembersDialog = () => {
             </div>
           ) : (
             <div className="space-y-2">
+              {/* Search Input */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Search by name, email, or phone..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+
               {/* Select All */}
               <div className="flex items-center gap-3 p-3 border border-border rounded-lg bg-muted/50">
                 <Checkbox
-                  checked={selectedMembers.size === members.length && members.length > 0}
+                  checked={members.length > 0 && members.every((m) => selectedMembers.has(m.id))}
                   onCheckedChange={handleToggleAll}
                 />
                 <div className="flex-1">
                   <p className="text-sm font-medium">Select All</p>
                   <p className="text-xs text-muted-foreground">
-                    {selectedMembers.size} of {members.length} selected
+                    {members.filter((m) => selectedMembers.has(m.id)).length} of {members.length} selected
+                    {searchQuery && allMembers.length !== members.length && ` (${allMembers.length} total)`}
                   </p>
                 </div>
               </div>
 
               {/* Member List */}
-              <div className="space-y-2">
-                {members.map((member) => (
-                  <div
-                    key={member.id}
-                    className="flex items-center gap-3 p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                  >
-                    <Checkbox
-                      checked={selectedMembers.has(member.id)}
-                      onCheckedChange={() => handleToggleMember(member.id)}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
-                          {member.user?.name?.charAt(0) || member.user?.username?.charAt(0) || 'U'}
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-medium text-sm truncate">
-                            {member.user?.name || member.user?.username || 'Unknown'}
-                          </span>
-                          <span className="text-xs text-muted-foreground truncate">{member.user?.email}</span>
+              {members.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Search className="h-8 w-8 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">No members match your search.</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {members.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center gap-3 p-3 border border-border rounded-lg hover:bg-muted/50 transition-colors"
+                    >
+                      <Checkbox
+                        checked={selectedMembers.has(member.id)}
+                        onCheckedChange={() => handleToggleMember(member.id)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+                            {member.user?.name?.charAt(0) || member.user?.username?.charAt(0) || 'U'}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium text-sm truncate">
+                                {member.user?.name || member.user?.username || 'Unknown'}
+                              </span>
+                              {member.status && (
+                                <Badge variant={getStatusVariant(member.status)} className="h-4 text-[10px] px-1.5">
+                                  {getStatusLabel(member.status)}
+                                </Badge>
+                              )}
+                            </div>
+                            <span className="text-xs text-muted-foreground truncate">{member.user?.email}</span>
+                          </div>
                         </div>
                       </div>
+                      {member.phone && (
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Phone className="h-3 w-3" />
+                          <span className="text-xs">{member.phone}</span>
+                        </div>
+                      )}
                     </div>
-                    {member.phone && (
-                      <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        <span className="text-xs">{member.phone}</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
