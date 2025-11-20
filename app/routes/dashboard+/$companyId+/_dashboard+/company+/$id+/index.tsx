@@ -1,4 +1,4 @@
-import { and, eq, gte, or, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import {
   ActivityIcon,
   Bot,
@@ -24,6 +24,7 @@ import {
   Plus,
   SparkleIcon,
   Twitter,
+  Unplug,
   Users,
   X,
 } from 'lucide-react';
@@ -68,7 +69,6 @@ import {
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
-import { getTodayUTC } from '~/utils';
 import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
@@ -175,13 +175,11 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   // Get daily AI summary usage for organization
-  // Use UTC to match database timestamps (stored as UTC)
-  const todayStr = getTodayUTC();
-
+  // Use SQLite date() function to compare dates properly (SQLite stores timestamps as text)
   const todaySummaries = await db
     .select({ count: sql<number>`count(*)` })
     .from(summaryTable)
-    .where(and(eq(summaryTable.organizationId, organizationId), gte(summaryTable.createdAt, todayStr)));
+    .where(and(eq(summaryTable.organizationId, organizationId), sql`date(${summaryTable.createdAt}) = date('now')`));
 
   const dailyUsage = Number(todaySummaries[0]?.count || 0);
 
@@ -1470,8 +1468,8 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                                 submit(formData, { method: 'post' });
                               }}
                             >
-                              <X className="mr-2 h-3 w-3" />
-                              Remove Association
+                              <Unplug className="mr-2 h-3 w-3" />
+                              Detach
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>

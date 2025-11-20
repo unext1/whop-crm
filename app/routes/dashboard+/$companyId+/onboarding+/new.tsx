@@ -331,8 +331,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         return data({ error: 'User not found in database', step: 4 } as const, { status: 404 });
       }
 
-      const userId_db = dbUser.id;
-
       const pipelineBoard = await db.query.boardTable.findFirst({
         where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
         with: {
@@ -450,7 +448,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             // Log activity
             await logPersonActivity({
               personId: newPerson.id,
-              userId: userId_db,
+              userId: dbUser.id,
               activityType: 'created',
               description: 'Added to CRM',
               tx,
@@ -511,13 +509,13 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                 personId: deal.personId,
                 companyId: deal.companyId,
                 content: deal.content,
-                ownerId: userId_db,
+                ownerId: dbUser.id,
               })
               .returning();
 
             await logTaskActivity({
               taskId: task.id,
-              userId: userId_db,
+              userId: dbUser.id,
               activityType: 'created',
               description: `Deal "${deal.name}" was created`,
               tx,
@@ -526,7 +524,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             if (deal.personId) {
               await logPersonActivity({
                 personId: deal.personId,
-                userId: userId_db,
+                userId: dbUser.id,
                 activityType: 'task_created',
                 description: `Created deal "${deal.name}"`,
                 relatedEntityId: task.id,

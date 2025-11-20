@@ -1,6 +1,6 @@
 import { google } from '@ai-sdk/google';
 import { generateObject } from 'ai';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { data } from 'react-router';
 import z from 'zod';
 import { db } from '~/db';
@@ -14,7 +14,6 @@ import {
 } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
-import { getTodayUTC } from '~/utils';
 import type { Route } from './+types/ai-summary';
 
 /**
@@ -60,13 +59,12 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
 
     // Check daily limit for organization
-    // Use UTC to match database timestamps (stored as UTC)
-    const todayStr = getTodayUTC();
-
+    // Use SQLite date() function to compare dates properly (SQLite stores timestamps as text)
+    // Compare using date() function which extracts YYYY-MM-DD from timestamps
     const todaySummaries = await db
       .select({ count: sql<number>`count(*)` })
       .from(summaryTable)
-      .where(and(eq(summaryTable.organizationId, organizationId), gte(summaryTable.createdAt, todayStr)));
+      .where(and(eq(summaryTable.organizationId, organizationId), sql`date(${summaryTable.createdAt}) = date('now')`));
 
     const todayCount = Number(todaySummaries[0]?.count || 0);
 

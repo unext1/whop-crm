@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { CalendarIcon, Download, ImportIcon, Mail, MapPin, Phone, Plus, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { data, Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
@@ -7,6 +7,7 @@ import { DataTable } from '~/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '~/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '~/components/data-table/data-table-column-header';
 import { DataTableFilterList } from '~/components/data-table/data-table-filter-list';
+import { PeopleTableActionBar } from '~/components/data-table/people-table-action-bar';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
 import { Checkbox } from '~/components/ui/checkbox';
@@ -72,6 +73,28 @@ type WhopMember = {
 };
 
 const columns: ColumnDef<PeopleWithCompany>[] = [
+  {
+    id: 'select',
+    header: ({ table }) => (
+      <Checkbox
+        aria-label="Select all"
+        className="translate-y-0.5"
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label="Select row"
+        className="translate-y-0.5"
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+    size: 40,
+  },
   {
     id: 'name',
     accessorKey: 'name',
@@ -489,6 +512,41 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         variant: 'destructive',
       });
       return data({ error: 'Failed to import members', close: false }, { headers, status: 500 });
+    }
+  }
+
+  // Delete people
+  if (intent === 'deletePeople') {
+    const personIds = formData.getAll('personIds') as string[];
+
+    if (personIds.length === 0) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'No people selected for deletion',
+        variant: 'destructive',
+      });
+      return data({ error: 'No person IDs provided', close: false }, { headers, status: 400 });
+    }
+
+    try {
+      await db
+        .delete(peopleTable)
+        .where(and(eq(peopleTable.organizationId, params.companyId), inArray(peopleTable.id, personIds)));
+
+      const headers = await putToast({
+        title: 'Success',
+        message: `Successfully deleted ${personIds.length} ${personIds.length === 1 ? 'person' : 'people'}`,
+        variant: 'default',
+      });
+
+      return data({ error: null, close: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to delete people',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to delete people', close: false }, { headers, status: 500 });
     }
   }
 
@@ -977,7 +1035,11 @@ const DashboardPage = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 scrollbar-thin">
-        <DataTable table={table} loading={navigation.state === 'loading'}>
+        <DataTable
+          table={table}
+          loading={navigation.state === 'loading'}
+          actionBar={<PeopleTableActionBar table={table} />}
+        >
           <DataTableAdvancedToolbar table={table}>
             <DataTableFilterList table={table} shallow={false} />
           </DataTableAdvancedToolbar>

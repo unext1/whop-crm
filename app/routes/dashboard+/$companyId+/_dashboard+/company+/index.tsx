@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { Building2, CalendarIcon, Globe, MapPin, Phone, Plus, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { data, Form, Link, useActionData, useLoaderData, useNavigation } from 'react-router';
@@ -7,8 +7,10 @@ import { DataTable } from '~/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '~/components/data-table/data-table-advanced-toolbar';
 import { DataTableColumnHeader } from '~/components/data-table/data-table-column-header';
 import { DataTableFilterList } from '~/components/data-table/data-table-filter-list';
+import { CompaniesTableActionBar } from '~/components/data-table/companies-table-action-bar';
 import { Badge } from '~/components/ui/badge';
 import { Button } from '~/components/ui/button';
+import { Checkbox } from '~/components/ui/checkbox';
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
@@ -31,6 +33,28 @@ import {
 import type { Route } from './+types';
 
 const columns: ColumnDef<CompanyType>[] = [
+  {
+    id: 'select',
+    header: ({ table }) => (
+      <Checkbox
+        aria-label="Select all"
+        className="translate-y-0.5"
+        checked={table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate')}
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        aria-label="Select row"
+        className="translate-y-0.5"
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+      />
+    ),
+    enableSorting: false,
+    enableHiding: false,
+    size: 40,
+  },
   {
     id: 'name',
     accessorKey: 'name',
@@ -226,6 +250,41 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
   const userId = user.id;
   const formData = await request.formData();
   const intent = formData.get('intent');
+
+  // Delete companies
+  if (intent === 'deleteCompanies') {
+    const companyIds = formData.getAll('companyIds') as string[];
+
+    if (companyIds.length === 0) {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'No companies selected for deletion',
+        variant: 'destructive',
+      });
+      return data({ error: 'No company IDs provided', close: false }, { headers, status: 400 });
+    }
+
+    try {
+      await db
+        .delete(companiesTable)
+        .where(and(eq(companiesTable.organizationId, organizationId), inArray(companiesTable.id, companyIds)));
+
+      const headers = await putToast({
+        title: 'Success',
+        message: `Successfully deleted ${companyIds.length} ${companyIds.length === 1 ? 'company' : 'companies'}`,
+        variant: 'default',
+      });
+
+      return data({ error: null, close: true }, { headers });
+    } catch {
+      const headers = await putToast({
+        title: 'Error',
+        message: 'Failed to delete companies',
+        variant: 'destructive',
+      });
+      return data({ error: 'Failed to delete companies', close: false }, { headers, status: 500 });
+    }
+  }
 
   if (intent === 'createCompany') {
     const name = formData.get('name')?.toString();
@@ -496,7 +555,11 @@ const DashboardPage = () => {
 
       {/* Content */}
       <div className="flex-1 overflow-auto p-4 scrollbar-thin">
-        <DataTable table={table} loading={navigation.state === 'loading'}>
+        <DataTable
+          table={table}
+          loading={navigation.state === 'loading'}
+          actionBar={<CompaniesTableActionBar table={table} />}
+        >
           <DataTableAdvancedToolbar table={table}>
             <DataTableFilterList table={table} shallow={false} />
           </DataTableAdvancedToolbar>

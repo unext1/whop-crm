@@ -1,4 +1,4 @@
-import { and, eq, gte, or, sql } from 'drizzle-orm';
+import { and, eq, or, sql } from 'drizzle-orm';
 import {
   ActivityIcon,
   BadgeCheck,
@@ -71,7 +71,6 @@ import {
 import { putToast } from '~/services/cookie.server';
 import { getWhopMemberById, requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
-import { getTodayUTC } from '~/utils';
 import type { Route } from './+types';
 
 // Type for Whop Member based on API response
@@ -218,13 +217,11 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
   });
 
   // Get daily AI summary usage for organization
-  // Use UTC to match database timestamps (stored as UTC)
-  const todayStr = getTodayUTC();
-
+  // Use SQLite date() function to compare dates properly (SQLite stores timestamps as text)
   const todaySummaries = await db
     .select({ count: sql<number>`count(*)` })
     .from(summaryTable)
-    .where(and(eq(summaryTable.organizationId, organizationId), gte(summaryTable.createdAt, todayStr)));
+    .where(and(eq(summaryTable.organizationId, organizationId), sql`date(${summaryTable.createdAt}) = date('now')`));
 
   const dailyUsage = Number(todaySummaries[0]?.count || 0);
 
