@@ -800,7 +800,7 @@ const TaskDetailPage = ({ loaderData }: Route.ComponentProps) => {
   return (
     <div className="flex flex-1 overflow-hidden bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden lg:flex lg:min-w-80 lg:border-border lg:border-r lg:bg-muted/30">{sidebarContent}</div>
+      <div className="hidden lg:flex lg:w-80 lg:border-border lg:border-r lg:bg-muted/30">{sidebarContent}</div>
 
       {/* Mobile Sheet */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>

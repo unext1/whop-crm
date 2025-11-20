@@ -12,14 +12,26 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '~/components/
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
+import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import { db } from '~/db';
-import { boardColumnTable, boardTable, organizationTable, userTable } from '~/db/schema';
+import { boardColumnTable, boardTaskTable, boardTable } from '~/db/kanban-schemas';
+import {
+  companiesPeopleTable,
+  companiesTable,
+  emailsTable,
+  organizationTable,
+  peopleEmailsTable,
+  peopleTable,
+  userTable,
+} from '~/db/schema';
 import { createCheckoutSession } from '~/services/checkout.server';
 import { putToast } from '~/services/cookie.server';
 import { env } from '~/services/env.server';
 import {
   getAuthorizedUserId,
   getPublicUser,
+  getWhopCompanyMembers,
+  hasAccess,
   hasOrganizationPremiumAccess,
   verifyWhopToken,
   whopSdk,
@@ -53,12 +65,14 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
   if (hasOrg && !hasUser) {
     initialStep = 2; // Skip org creation, go to user profile
   } else if (hasOrg && hasUser) {
-    if (hasPremiumAccess) {
-      throw redirect(href('/dashboard/:companyId', { companyId }));
-    }
-    // Check if trial has expired - redirect to trial page
+    // Check if trial is active
     const org = existingOrg[0];
-    if (org?.trialEnd) {
+    const hasActiveTrial = org?.trialEnd
+      ? new Date(org.trialEnd) > new Date() && new Date(org.trialStart || '') <= new Date()
+      : false;
+
+    // Check if trial has expired - redirect to trial page
+    if (org?.trialEnd && !hasActiveTrial) {
       const trialEndDate = new Date(org.trialEnd);
       const now = new Date();
       if (now > trialEndDate) {
@@ -67,15 +81,58 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
       }
     }
 
-    initialStep = 3; // Show payment options (but trial is already active)
-  }
-  // If both exist, redirect to dashboard (onboarding complete)
-  if (hasOrg && hasUser && hasPremiumAccess) {
-    throw redirect(href('/dashboard/:companyId', { companyId }));
+    if (hasPremiumAccess || hasActiveTrial) {
+      // Check if user has completed setup (has data or skipped)
+      const hasPeople = await db.select().from(peopleTable).where(eq(peopleTable.organizationId, companyId)).limit(1);
+      const hasCompanies = await db
+        .select()
+        .from(companiesTable)
+        .where(eq(companiesTable.organizationId, companyId))
+        .limit(1);
+
+      // If no data exists, show step 4
+      if (hasPeople.length === 0 && hasCompanies.length === 0) {
+        initialStep = 4;
+      } else {
+        // Has data, onboarding complete
+        throw redirect(href('/dashboard/:companyId', { companyId }));
+      }
+    } else {
+      // No premium access yet, show payment step
+      initialStep = 3;
+    }
   }
 
   const monthlyCheckout = await createCheckoutSession(env.WHOP_MONTHLY_PLAN_ID, companyId);
   const annualCheckout = await createCheckoutSession(env.WHOP_ANNUAL_PLAN_ID, companyId);
+
+  // Load Whop members for preview (only if user has access)
+  let whopMembers: Array<{
+    id: string;
+    user: {
+      id: string;
+      name?: string | null;
+      username?: string | null;
+      email?: string | null;
+    } | null;
+    phone?: string | null;
+  }> = [];
+  try {
+    const isAdmin = await hasAccess({ request, companyId });
+    if (isAdmin) {
+      const allPeople = await db.query.peopleTable.findMany({
+        where: eq(peopleTable.organizationId, companyId),
+      });
+      const allWhopCompanyMembers = await getWhopCompanyMembers({ request, companyId });
+      // Filter out members without email or already imported
+      whopMembers = allWhopCompanyMembers.filter(
+        (member) => member.user?.email && !allPeople.some((p) => p.whopUserId === member.id),
+      );
+    }
+  } catch {
+    // If we can't load members, just continue with empty array
+    whopMembers = [];
+  }
 
   return {
     whopUser: {
@@ -92,6 +149,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
     annualCheckout,
     whopAppId: env.WHOP_APP_ID,
     whopCompany,
+    whopMembers,
   };
 };
 
@@ -185,14 +243,9 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     // Check if organization already has premium access
     const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
 
-    // If they already have premium, redirect to dashboard
+    // If they already have premium, redirect to step 4
     if (hasPremiumAccess) {
-      const headers = await putToast({
-        title: 'Welcome! 🎉',
-        message: 'Your Organization is ready to go',
-        variant: 'default',
-      });
-      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+      return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
     }
 
     // Start 3-day trial (no credit card required)
@@ -209,13 +262,8 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       const trialEndDate = new Date(org.trialEnd);
       const now = new Date();
       if (now <= trialEndDate) {
-        // Trial is still active, redirect to dashboard
-        const headers = await putToast({
-          title: 'Welcome! 🎉',
-          message: 'Your 3 day free trial is active!',
-          variant: 'default',
-        });
-        return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+        // Trial is still active, redirect to step 4
+        return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
       }
       if (now > trialEndDate) {
         // Trial expired, redirect to trial page
@@ -236,25 +284,16 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       })
       .where(eq(organizationTable.id, companyId));
 
-    // Redirect to dashboard with trial active
-    const headers = await putToast({
-      title: 'Welcome! 🎉',
-      message: 'Your 3 day free trial has started!',
-      variant: 'default',
-    });
-    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    // Redirect to step 4 (setup data)
+    return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
   }
 
   if (intent === 'processPayment') {
     const hasPremiumAccess = await hasOrganizationPremiumAccess(companyId);
 
     if (hasPremiumAccess) {
-      const headers = await putToast({
-        title: 'Welcome! 🎉',
-        message: 'Your Organization is ready to go',
-        variant: 'default',
-      });
-      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+      // Redirect to step 4 (setup data)
+      return redirect(href('/dashboard/:companyId/onboarding/new', { companyId }));
     }
 
     const selectedPlan = formData.get('selectedPlan')?.toString();
@@ -279,6 +318,323 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       checkoutSession,
       message: `Processing ${selectedPlan} payment`,
     } as const);
+  }
+
+  if (intent === 'loadDemoData') {
+    try {
+      // Get the database user ID (not the Whop authorized user ID)
+      const dbUser = await db.query.userTable.findFirst({
+        where: and(eq(userTable.whopUserId, userId), eq(userTable.organizationId, companyId)),
+      });
+
+      if (!dbUser) {
+        return data({ error: 'User not found in database', step: 4 } as const, { status: 404 });
+      }
+
+      const userId_db = dbUser.id;
+
+      const pipelineBoard = await db.query.boardTable.findFirst({
+        where: and(eq(boardTable.companyId, companyId), eq(boardTable.type, 'pipeline')),
+        with: {
+          columns: {
+            orderBy: (columns, { asc }) => [asc(columns.order)],
+          },
+        },
+      });
+
+      if (!pipelineBoard || !pipelineBoard.columns.length) {
+        return data({ error: 'Pipeline board not found', step: 4 } as const, { status: 500 });
+      }
+
+      const columns = pipelineBoard.columns;
+
+      await db.transaction(async (tx) => {
+        // Create demo companies
+        const demoCompanies = [
+          { name: 'TechCorp Solutions', industry: 'Technology', domain: 'techcorp.com' },
+          { name: 'Global Marketing Inc', industry: 'Marketing', domain: 'globalmarketing.com' },
+        ];
+
+        const createdCompanies = await Promise.all(
+          demoCompanies.map((company) =>
+            tx
+              .insert(companiesTable)
+              .values({
+                name: company.name,
+                industry: company.industry,
+                domain: company.domain,
+                website: `https://${company.domain}`,
+                organizationId: companyId,
+              })
+              .returning(),
+          ),
+        );
+
+        // Create demo people
+        const demoPeople = [
+          {
+            name: 'Sarah Johnson',
+            jobTitle: 'VP of Sales',
+            email: 'sarah.johnson@techcorp.com',
+            phone: '+1 (555) 123-4567',
+            companyName: 'TechCorp Solutions',
+          },
+          {
+            name: 'Michael Chen',
+            jobTitle: 'CEO',
+            email: 'michael.chen@techcorp.com',
+            phone: '+1 (555) 234-5678',
+            companyName: 'TechCorp Solutions',
+          },
+          {
+            name: 'Emily Rodriguez',
+            jobTitle: 'Marketing Director',
+            email: 'emily@globalmarketing.com',
+            phone: '+1 (555) 345-6789',
+            companyName: 'Global Marketing Inc',
+          },
+          {
+            name: 'David Kim',
+            jobTitle: 'Product Manager',
+            email: 'david.kim@techcorp.com',
+            phone: '+1 (555) 456-7890',
+            companyName: 'TechCorp Solutions',
+          },
+          {
+            name: 'Lisa Anderson',
+            jobTitle: 'Account Executive',
+            email: 'lisa@globalmarketing.com',
+            phone: '+1 (555) 567-8901',
+            companyName: 'Global Marketing Inc',
+          },
+        ];
+
+        const createdPeople = await Promise.all(
+          demoPeople.map(async (person) => {
+            const company = createdCompanies.find((c) => c[0].name === person.companyName);
+
+            const [newPerson] = await tx
+              .insert(peopleTable)
+              .values({
+                name: person.name,
+                jobTitle: person.jobTitle,
+                phone: person.phone,
+                organizationId: companyId,
+              })
+              .returning();
+
+            // Create email
+            const [newEmail] = await tx
+              .insert(emailsTable)
+              .values({
+                email: person.email,
+                type: 'work',
+                isPrimary: true,
+                organizationId: companyId,
+              })
+              .returning();
+
+            await tx.insert(peopleEmailsTable).values({
+              personId: newPerson.id,
+              emailId: newEmail.id,
+            });
+
+            // Link to company if exists
+            if (company) {
+              await tx.insert(companiesPeopleTable).values({
+                companyId: company[0].id,
+                personId: newPerson.id,
+              });
+            }
+
+            // Log activity
+            await logPersonActivity({
+              personId: newPerson.id,
+              userId: userId_db,
+              activityType: 'created',
+              description: 'Added to CRM',
+              tx,
+            });
+
+            return { person: newPerson, company };
+          }),
+        );
+
+        // Create demo deals in pipeline
+        const demoDeals = [
+          {
+            name: 'Enterprise Software License',
+            amount: 45000,
+            columnIndex: 0, // Lead
+            personId: createdPeople[0].person.id,
+            companyId: createdPeople[0].company?.[0].id,
+            content: 'Large enterprise looking for annual license. High priority.',
+          },
+          {
+            name: 'Marketing Campaign Q1',
+            amount: 12000,
+            columnIndex: 1, // Qualified
+            personId: createdPeople[2].person.id,
+            companyId: createdPeople[2].company?.[0].id,
+            content: 'Qualified lead for Q1 marketing campaign. Follow up scheduled.',
+          },
+          {
+            name: 'Product Integration',
+            amount: 32000,
+            columnIndex: 2, // Proposal
+            personId: createdPeople[1].person.id,
+            companyId: createdPeople[1].company?.[0].id,
+            content: 'Proposal sent. Waiting for technical review.',
+          },
+        ];
+
+        await Promise.all(
+          demoDeals.map(async (deal, index) => {
+            const column = columns[deal.columnIndex] || columns[0];
+
+            const maxOrderTask = await tx.query.boardTaskTable.findFirst({
+              where: eq(boardTaskTable.columnId, column.id),
+              orderBy: (tasks, { desc }) => [desc(tasks.order)],
+            });
+            const nextOrder = maxOrderTask?.order ? maxOrderTask.order + 1 : index + 1;
+
+            const [task] = await tx
+              .insert(boardTaskTable)
+              .values({
+                columnId: column.id,
+                boardId: pipelineBoard.id,
+                name: deal.name,
+                order: nextOrder,
+                type: 'pipeline',
+                status: 'open',
+                amount: deal.amount,
+                personId: deal.personId,
+                companyId: deal.companyId,
+                content: deal.content,
+                ownerId: userId_db,
+              })
+              .returning();
+
+            await logTaskActivity({
+              taskId: task.id,
+              userId: userId_db,
+              activityType: 'created',
+              description: `Deal "${deal.name}" was created`,
+              tx,
+            });
+
+            if (deal.personId) {
+              await logPersonActivity({
+                personId: deal.personId,
+                userId: userId_db,
+                activityType: 'task_created',
+                description: `Created deal "${deal.name}"`,
+                relatedEntityId: task.id,
+                relatedEntityType: 'task',
+                tx,
+              });
+            }
+          }),
+        );
+      });
+
+      const headers = await putToast({
+        title: 'Demo data loaded! 🎉',
+        message: 'Your workspace is ready with sample data',
+        variant: 'default',
+      });
+
+      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    } catch {
+      return data({ error: 'Failed to load demo data', step: 4 } as const, { status: 500 });
+    }
+  }
+
+  if (intent === 'importAllWhopMembers') {
+    try {
+      const allPeople = await db.query.peopleTable.findMany({
+        where: eq(peopleTable.organizationId, companyId),
+      });
+      const allWhopCompanyMembers = await getWhopCompanyMembers({ request, companyId });
+
+      // Filter out members without user or user.email, and those already imported
+      const validMembers = allWhopCompanyMembers.filter(
+        (member) => member.user?.email && !allPeople.some((p) => p.whopUserId === member.id),
+      );
+
+      if (validMembers.length === 0) {
+        const headers = await putToast({
+          title: 'No members to import',
+          message: 'All Whop members are already imported or have no email addresses',
+          variant: 'default',
+        });
+        return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+      }
+
+      await db.transaction(async (tx) => {
+        await Promise.all(
+          validMembers.map(async (member) => {
+            // Create the person
+            const [newPerson] = await tx
+              .insert(peopleTable)
+              .values({
+                name: member.user?.name || member.user?.username || 'Unknown',
+                organizationId: companyId,
+                phone: member.phone || undefined,
+                whopUserId: member.id,
+              })
+              .returning();
+
+            // Create email if member has one
+            if (member.user?.email) {
+              const [newEmail] = await tx
+                .insert(emailsTable)
+                .values({
+                  email: member.user.email,
+                  type: 'work',
+                  isPrimary: true,
+                  organizationId: companyId,
+                })
+                .returning();
+
+              // Link person to email
+              await tx.insert(peopleEmailsTable).values({
+                personId: newPerson.id,
+                emailId: newEmail.id,
+              });
+            }
+
+            // Log activity for imported person
+            await logPersonActivity({
+              personId: newPerson.id,
+              userId: authorizedUser.id,
+              activityType: 'created',
+              description: 'Imported from Whop',
+              tx,
+            });
+          }),
+        );
+      });
+
+      const headers = await putToast({
+        title: 'Members imported! 🎉',
+        message: `Successfully imported ${validMembers.length} ${validMembers.length === 1 ? 'member' : 'members'}`,
+        variant: 'default',
+      });
+
+      return redirect(href('/dashboard/:companyId', { companyId }), { headers });
+    } catch {
+      return data({ error: 'Failed to import members', step: 4 } as const, { status: 500 });
+    }
+  }
+
+  if (intent === 'skipSetup') {
+    const headers = await putToast({
+      title: 'Welcome! 🎉',
+      message: 'Your workspace is ready. Start adding your data!',
+      variant: 'default',
+    });
+    return redirect(href('/dashboard/:companyId', { companyId }), { headers });
   }
 
   return data({ error: 'Invalid intent' } as const, { status: 400 });
@@ -704,6 +1060,146 @@ const SalesFeaturesMockup = () => (
   </div>
 );
 
+const DemoDataPreview = () => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border-b border-border px-4">
+      <div className="flex items-center gap-3">
+        <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
+          <LayoutDashboardIcon className="h-3.5 w-3.5" />
+        </div>
+        <h1 className="text-base font-semibold">Demo Workspace</h1>
+      </div>
+    </div>
+
+    {/* Content Preview */}
+    <div className="space-y-4 p-4">
+      {/* Stats Cards */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 bg-muted/30 border border-border/50 rounded-lg text-center">
+          <div className="text-lg font-semibold mb-1">5</div>
+          <div className="text-xs text-muted-foreground">People</div>
+        </div>
+        <div className="p-3 bg-muted/30 border border-border/50 rounded-lg text-center">
+          <div className="text-lg font-semibold mb-1">2</div>
+          <div className="text-xs text-muted-foreground">Companies</div>
+        </div>
+        <div className="p-3 bg-muted/30 border border-border/50 rounded-lg text-center">
+          <div className="text-lg font-semibold mb-1">3</div>
+          <div className="text-xs text-muted-foreground">Deals</div>
+        </div>
+      </div>
+
+      {/* Sample People */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 p-2 bg-muted/20 border border-border/30 rounded-lg">
+          <div className="h-8 w-8 rounded bg-primary text-xs font-semibold text-primary-foreground flex items-center justify-center shrink-0">
+            SJ
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium">Sarah Johnson</div>
+            <div className="text-xs text-muted-foreground">VP of Sales</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 p-2 bg-muted/20 border border-border/30 rounded-lg">
+          <div className="h-8 w-8 rounded bg-primary text-xs font-semibold text-primary-foreground flex items-center justify-center shrink-0">
+            MC
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-medium">Michael Chen</div>
+            <div className="text-xs text-muted-foreground">CEO</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sample Deal */}
+      <div className="p-2 bg-muted/20 border border-border/30 rounded-lg">
+        <div className="flex justify-between items-center mb-1">
+          <div className="text-xs font-medium">Enterprise Software License</div>
+          <div className="text-xs font-semibold">$45K</div>
+        </div>
+        <div className="text-xs text-muted-foreground">Lead stage</div>
+      </div>
+    </div>
+  </div>
+);
+
+const WhopMembersPreview = ({
+  members,
+}: {
+  members: Array<{
+    id: string;
+    user: { name?: string | null; username?: string | null; email?: string | null } | null;
+    phone?: string | null;
+  }>;
+}) => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border-b border-border px-4">
+      <div className="flex items-center gap-3">
+        <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
+          <User className="h-3.5 w-3.5" />
+        </div>
+        <h1 className="text-base font-semibold">Whop Members</h1>
+      </div>
+    </div>
+
+    {/* Content Preview */}
+    <div className="space-y-4 p-4">
+      <div className="p-3 bg-muted/30 border border-border/50 rounded-lg text-center">
+        <div className="text-lg font-semibold">{members.length}</div>
+        <div className="text-xs text-muted-foreground">{members.length === 1 ? 'member' : 'members'} to import</div>
+      </div>
+
+      {/* Members List */}
+      <div className="space-y-2 max-h-[400px] overflow-y-auto">
+        {members.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-xs">No members available to import</div>
+        ) : (
+          members.map((member) => (
+            <div key={member.id} className="flex items-center gap-3 p-2 bg-muted/20 border border-border/30 rounded-lg">
+              <div className="h-8 w-8 rounded bg-primary text-xs font-semibold text-primary-foreground flex items-center justify-center shrink-0">
+                {(member.user?.name?.charAt(0) || member.user?.username?.charAt(0) || 'U').toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-medium truncate">
+                  {member.user?.name || member.user?.username || 'Unknown'}
+                </div>
+                <div className="text-xs text-muted-foreground truncate">{member.user?.email}</div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  </div>
+);
+
+const EmptyWorkspacePreview = () => (
+  <div className="w-full max-w-2xl space-y-4">
+    {/* Header */}
+    <div className="flex h-14 items-center justify-between border-b border-border px-4">
+      <div className="flex items-center gap-3">
+        <div className="h-6 w-6 rounded bg-primary flex items-center justify-center text-xs font-semibold text-primary-foreground">
+          <LayoutDashboardIcon className="h-3.5 w-3.5" />
+        </div>
+        <h1 className="text-base font-semibold">Empty Workspace</h1>
+      </div>
+    </div>
+
+    {/* Content Preview */}
+    <div className="space-y-4 p-4">
+      <div className="text-center py-8">
+        <div className="text-4xl mb-3">🚀</div>
+        <div className="text-sm font-medium mb-3">Start Fresh</div>
+        <div className="text-xs text-muted-foreground max-w-xs mx-auto mb-4">
+          Your workspace is ready. Follow the "Get Started" guide in the sidebar to navigate around the app.
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
 const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const params = useParams();
   const step = loaderData.initialStep;
@@ -714,6 +1210,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'annual'>('monthly');
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{ status: string; [key: string]: unknown } | null>(null);
+  const [selectedOption, setSelectedOption] = useState<'demo' | 'import' | 'fresh'>('fresh');
 
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -761,7 +1258,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
     }
   };
 
-  const totalSteps = 3;
+  const totalSteps = 4;
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -1064,6 +1561,117 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
               </div>
             </div>
           )}
+
+          {step === 4 && (
+            <div className="flex flex-col gap-12">
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1">
+                  <h1 className="text-3xl font-bold text-foreground">You're all set! 🎉</h1>
+                  <p className="text-lg text-muted-foreground">
+                    Choose how you'd like to get started with your workspace.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {/* Start Fresh Option */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedOption('fresh')}
+                  className={`w-full cursor-pointer rounded-lg border p-4 transition-all text-left ${
+                    selectedOption === 'fresh' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-border'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="h-10 w-10 rounded-lg bg-muted/20 flex items-center justify-center text-lg shrink-0">
+                      🚀
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold mb-1">Start Fresh</div>
+                      <div className="text-xs text-muted-foreground">
+                        Begin with an empty workspace and add your own data
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Demo Data Option */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedOption('demo')}
+                  className={`w-full cursor-pointer rounded-lg border p-4 transition-all text-left ${
+                    selectedOption === 'demo' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-border'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-lg shrink-0">
+                      ✨
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold mb-1">Load Demo Workspace</div>
+                      <div className="text-xs text-muted-foreground mb-2">See how your CRM works with sample data</div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Import Whop Members Option */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedOption('import')}
+                  className={`w-full cursor-pointer rounded-lg border p-4 transition-all text-left ${
+                    selectedOption === 'import' ? 'border-primary bg-primary/5' : 'border-border/50 hover:border-border'
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="h-10 w-10 rounded-lg bg-muted/20 flex items-center justify-center text-lg shrink-0">
+                      👥
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold mb-1">Import Whop Members</div>
+                      <div className="text-xs text-muted-foreground">
+                        Import all members from your Whop as contacts in People table (
+                        {loaderData.whopMembers?.length || 0} available)
+                      </div>
+                    </div>
+                  </div>
+                </button>
+
+                {/* Complete Button */}
+                {selectedOption && (
+                  <Form method="post" className="mt-4">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value={
+                        selectedOption === 'demo'
+                          ? 'loadDemoData'
+                          : selectedOption === 'import'
+                            ? 'importAllWhopMembers'
+                            : 'skipSetup'
+                      }
+                    />
+                    <Button
+                      type="submit"
+                      disabled={isSubmitting}
+                      className="w-full h-10 text-sm font-semibold bg-primary hover:bg-primary/90"
+                    >
+                      {isSubmitting
+                        ? 'Processing...'
+                        : selectedOption === 'demo'
+                          ? 'Load Demo Workspace'
+                          : selectedOption === 'import'
+                            ? `Import ${loaderData.whopMembers?.length || 0} Members`
+                            : 'Continue to Workspace'}
+                    </Button>
+                  </Form>
+                )}
+
+                {actionData && 'error' in actionData && 'step' in actionData && actionData.step === 4 && (
+                  <p className="text-sm text-destructive text-center">{actionData.error}</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1073,6 +1681,13 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
           {step === 1 && <DashboardMockup orgName={orgName} userName={loaderData.whopUser?.name || ''} />}
           {step === 2 && <TaskDetailMockup />}
           {step === 3 && <SalesFeaturesMockup />}
+          {step === 4 && (
+            <>
+              {selectedOption === 'fresh' && <EmptyWorkspacePreview />}
+              {selectedOption === 'demo' && <DemoDataPreview />}
+              {selectedOption === 'import' && <WhopMembersPreview members={loaderData.whopMembers || []} />}
+            </>
+          )}
 
           {/* Explanatory text */}
           <div className="mt-8 text-center">
