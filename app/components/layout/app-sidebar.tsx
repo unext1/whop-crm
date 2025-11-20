@@ -38,6 +38,7 @@ export function AppSidebar({
     hasCompany: boolean;
     hasTask: boolean;
     hasDeal: boolean;
+    hasForms: boolean;
   };
 } & React.ComponentProps<typeof Sidebar>) {
   const params = useParams();

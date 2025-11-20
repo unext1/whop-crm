@@ -1,4 +1,4 @@
-import { Building2, Check, CheckSquareIcon, DollarSign, Rocket, User } from 'lucide-react';
+import { Building2, Check, CheckSquareIcon, ClipboardListIcon, DollarSign, Rocket, User } from 'lucide-react';
 import { href, Link, useParams, useFetcher } from 'react-router';
 import { useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
@@ -14,6 +14,7 @@ interface GettingStartedCardProps {
     hasCompany: boolean;
     hasTask: boolean;
     hasDeal: boolean;
+    hasForms: boolean;
   };
 }
 
@@ -46,6 +47,13 @@ const tasks = [
     completed: false,
     url: (companyId: string) => href('/dashboard/:companyId/projects', { companyId }),
   },
+  {
+    id: 'forms',
+    label: 'Create your first form',
+    icon: ClipboardListIcon,
+    completed: false,
+    url: (companyId: string) => href('/dashboard/:companyId/forms', { companyId }),
+  },
 ];
 
 export function GettingStartedCard({ progress }: GettingStartedCardProps) {
@@ -54,11 +62,15 @@ export function GettingStartedCard({ progress }: GettingStartedCardProps) {
   const fetcher = useFetcher();
   const prevCompletedTasksRef = useRef<number>(0);
 
-  const completedTasks = [progress.hasPerson, progress.hasCompany, progress.hasTask, progress.hasDeal].filter(
-    Boolean,
-  ).length;
+  const completedTasks = [
+    progress.hasPerson,
+    progress.hasCompany,
+    progress.hasTask,
+    progress.hasDeal,
+    progress.hasForms,
+  ].filter(Boolean).length;
 
-  const totalTasks = 4;
+  const totalTasks = 5;
   const percentage = Math.round((completedTasks / totalTasks) * 100);
 
   // Detect when all tasks are completed and trigger confetti
@@ -122,7 +134,9 @@ export function GettingStartedCard({ progress }: GettingStartedCardProps) {
             ? 'hasCompany'
             : task.id === 'task'
               ? 'hasTask'
-              : 'hasDeal'
+              : task.id === 'forms'
+                ? 'hasForms'
+                : 'hasDeal'
       ],
   }));
 

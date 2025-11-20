@@ -7,7 +7,15 @@ import { Header } from '~/components/layout/header';
 import { SidebarProvider } from '~/components/ui/sidebar';
 import { useToast } from '~/components/ui/use-toast';
 import { db } from '~/db';
-import { boardTable, boardTaskTable, companiesTable, organizationTable, peopleTable, userTable } from '~/db/schema';
+import {
+  boardTable,
+  boardTaskTable,
+  companiesTable,
+  formsTable,
+  organizationTable,
+  peopleTable,
+  userTable,
+} from '~/db/schema';
 import { popToast } from '~/services/cookie.server';
 import { hasAccess, hasOrganizationPremiumAccess, verifyWhopToken } from '~/services/whop.server';
 import { cn } from '~/utils';
@@ -110,6 +118,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
           hasCompany: boolean;
           hasTask: boolean;
           hasDeal: boolean;
+          hasForms: boolean;
         }
       | undefined;
     if (!gettingStartedCompleted) {
@@ -122,7 +131,8 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
       const boardIdArray = boardIds.map((b) => b.id);
 
       // Batch all count queries for getting started progress
-      const [peopleCount, companiesCount, tasksCount, dealsCount] = await Promise.all([
+      const [formsCount, peopleCount, companiesCount, tasksCount, dealsCount] = await Promise.all([
+        tx.select({ count: sql<number>`count(*)` }).from(formsTable).where(eq(formsTable.organizationId, companyId)),
         tx.select({ count: sql<number>`count(*)` }).from(peopleTable).where(eq(peopleTable.organizationId, companyId)),
         tx
           .select({ count: sql<number>`count(*)` })
@@ -147,6 +157,7 @@ export const loader = async ({ request, params }: Route.LoaderArgs) => {
         hasCompany: Number(companiesCount[0]?.count || 0) > 0,
         hasTask: Number(tasksCount[0]?.count || 0) > 0,
         hasDeal: Number(dealsCount[0]?.count || 0) > 0,
+        hasForms: Number(formsCount[0]?.count || 0) > 0,
       };
     }
 
