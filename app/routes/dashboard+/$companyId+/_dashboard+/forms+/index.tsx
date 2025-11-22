@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { ClipboardList, Copy, ExternalLink, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
-import { data, Form, redirect, useLoaderData, useSubmit } from 'react-router';
+import { data, redirect, useLoaderData, useSubmit } from 'react-router';
 import { FormBuilder } from '~/components/form-builder';
 import {
   AlertDialog,
@@ -19,8 +19,7 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '~/componen
 import { db } from '~/db';
 import { boardTable, formsTable } from '~/db/schema';
 import { putToast } from '~/services/cookie.server';
-import { env } from '~/services/env.server';
-import { requireUser } from '~/services/whop.server';
+import { requireUser, whopSdk } from '~/services/whop.server';
 import type { Route } from './+types';
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
@@ -71,19 +70,12 @@ export const action = async ({ params, request }: Route.ActionArgs) => {
   const intent = formData.get('intent');
 
   if (intent === 'noti') {
-    const req = await fetch('https://api.whop.com/v1/notifications', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.WHOP_API_KEY}`,
-      },
-      body: JSON.stringify({
-        company_id: 'biz_c3bzBZkL3lIHLo',
-        content: 'New Update Available',
-        title: 'New Update Available',
-      }),
+    const notification = await whopSdk.notifications.create({
+      experience_id: 'exp_FrQ52Yq3OqaRVz',
+      content: 'New Update Available',
+      title: 'New Update Available',
+      user_ids: ['user_ug7AUOS0wuIBu'],
     });
-    const notification = await req.json();
 
     console.log(notification);
   }
@@ -238,10 +230,6 @@ const FormsPage = () => {
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-background">
-      <Form method="post">
-        <input type="hidden" name="intent" value="noti" />
-        <Button type="submit">Send Notification</Button>
-      </Form>
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-3">
