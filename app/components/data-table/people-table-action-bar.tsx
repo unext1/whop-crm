@@ -16,6 +16,7 @@ type PersonRow = {
   phone?: string | null;
   address?: string | null;
   website?: string | null;
+  whopUserId?: string | null;
   emails?: Array<{
     id: string;
     email: string;

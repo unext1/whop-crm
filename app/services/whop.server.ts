@@ -1,8 +1,8 @@
-import Whop from '@whop/sdk';
 import { eq } from 'drizzle-orm';
 import { db } from '~/db';
 import { organizationTable, userTable } from '~/db/schema';
 import { env } from './env.server';
+import Whop from '@whop/sdk';
 
 export const whopSdk = new Whop({
   appID: env.WHOP_APP_ID,

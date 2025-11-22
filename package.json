@@ -79,7 +79,7 @@
     "@whop/api": "^0.0.51",
     "@whop/iframe": "^0.0.3",
     "@whop/react": "^0.3.0",
-    "@whop/sdk": "^0.0.4",
+    "@whop/sdk": "^0.0.7",
     "ai": "^5.0.93",
     "better-sqlite3": "^11.9.1",
     "canvas-confetti": "^1.9.4",

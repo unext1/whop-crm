@@ -580,6 +580,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
                 organizationId: companyId,
                 phone: member.phone || undefined,
                 whopUserId: member.id,
+                whopUserName: member.user?.username || undefined,
               })
               .returning();
 

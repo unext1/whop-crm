@@ -198,8 +198,8 @@ importers:
         specifier: ^0.3.0
         version: 0.3.0(@types/react-dom@19.2.3(@types/react@19.2.4))(@types/react@19.2.4)(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       '@whop/sdk':
-        specifier: ^0.0.4
-        version: 0.0.4
+        specifier: ^0.0.7
+        version: 0.0.7
       ai:
         specifier: ^5.0.93
         version: 5.0.93(zod@3.25.76)
@@ -3219,8 +3219,8 @@ packages:
     peerDependencies:
       react: ^19.0.0
 
-  '@whop/sdk@0.0.4':
-    resolution: {integrity: sha512-ZLNpae2q2Ct+97tbUsh1k55S9ymmO2bOlQRj49ze6lxg5a6qW3zrjlsker1G6RjXrgdE4BItcBWrh1EzvY1Crg==}
+  '@whop/sdk@0.0.7':
+    resolution: {integrity: sha512-6KHWyUoeN9EMtMR6tmi6saBY5PeBRPQZyW2N11CArozBjAPCsY9VDTiafQzNoe7ZwkFw8TczXe77q9/YXbO20g==}
 
   abbrev@2.0.0:
     resolution: {integrity: sha512-6/mh1E2u2YgEsCHdY0Yx5oW+61gZU+1vXaoiHHrpKeuRNNgFvS+/jrwHiQhB5apAf5oB7UB7E19ol2R2LKH8hQ==}
@@ -4119,6 +4119,9 @@ packages:
   jose@6.1.1:
     resolution: {integrity: sha512-GWSqjfOPf4cWOkBzw5THBjtGPhXKqYnfRBzh4Ni+ArTrQQ9unvmsA3oFLqaYKoKe5sjWmGu5wVKg9Ft1i+LQfg==}
 
+  jose@6.1.2:
+    resolution: {integrity: sha512-MpcPtHLE5EmztuFIqB0vzHAWJPpmN1E6L4oo+kze56LIs3MyXIj9ZHMDxqOvkP38gBR7K1v3jqd4WU2+nrfONQ==}
+
   js-base64@3.7.8:
     resolution: {integrity: sha512-hNngCeKxIUQiEUN3GPJOkz4wF/YvdUdbNL9hsBcMQTkKzboD7T/q3OYOuuPZLUE6dBxSGpwhk5mwuDud7JVAow==}
 
@@ -4450,8 +4453,8 @@ packages:
       react-router-dom:
         optional: true
 
-  oauth4webapi@3.8.2:
-    resolution: {integrity: sha512-FzZZ+bht5X0FKe7Mwz3DAVAmlH1BV5blSak/lHMBKz0/EBMhX6B10GlQYI51+oRp8ObJaX0g6pXrAxZh5s8rjw==}
+  oauth4webapi@3.8.3:
+    resolution: {integrity: sha512-pQ5BsX3QRTgnt5HxgHwgunIRaDXBdkT23tf8dfzmtTIL2LTpdmxgbpbBm0VgFWAIDlezQvQCTgnVIUmHupXHxw==}
 
   object-assign@4.1.1:
     resolution: {integrity: sha512-rJgTQnkUnH1sFw8yT6VSU3zD3sWmu6sZhIseY8VX+GRu3P6F7Fu+JNDoXfklElbLJSnc3FUQHVe4cU5hj+BcUg==}
@@ -5392,8 +5395,8 @@ snapshots:
   '@auth/core@0.40.0':
     dependencies:
       '@panva/hkdf': 1.2.1
-      jose: 6.1.1
-      oauth4webapi: 3.8.2
+      jose: 6.1.2
+      oauth4webapi: 3.8.3
       preact: 10.24.3
       preact-render-to-string: 6.5.11(preact@10.24.3)
 
@@ -8678,7 +8681,7 @@ snapshots:
       - '@types/react-dom'
       - react-dom
 
-  '@whop/sdk@0.0.4':
+  '@whop/sdk@0.0.7':
     dependencies:
       jose: 6.1.1
       standardwebhooks: 1.0.0
@@ -9543,6 +9546,8 @@ snapshots:
 
   jose@6.1.1: {}
 
+  jose@6.1.2: {}
+
   js-base64@3.7.8: {}
 
   js-beautify@1.15.4:
@@ -9812,7 +9817,7 @@ snapshots:
       react-router: 7.9.5(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
       react-router-dom: 6.30.0(react-dom@19.2.0(react@19.2.0))(react@19.2.0)
 
-  oauth4webapi@3.8.2: {}
+  oauth4webapi@3.8.3: {}
 
   object-assign@4.1.1: {}
 

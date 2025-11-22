@@ -1,7 +1,20 @@
 import type { ColumnDef } from '@tanstack/react-table';
+import { createSdk } from '@whop/iframe';
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import { CalendarIcon, Download, ImportIcon, Mail, MapPin, Phone, Plus, Search, User, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import {
+  CalendarIcon,
+  Download,
+  ExternalLink,
+  ImportIcon,
+  Mail,
+  MapPin,
+  Phone,
+  Plus,
+  Search,
+  User,
+  X,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { data, Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from 'react-router';
 import { DataTable } from '~/components/data-table/data-table';
 import { DataTableAdvancedToolbar } from '~/components/data-table/data-table-advanced-toolbar';
@@ -25,6 +38,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '~
 import { Skeleton } from '~/components/ui/skeleton';
 import { Switch } from '~/components/ui/switch';
 import { Textarea } from '~/components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '~/components/ui/tooltip';
 import { logPersonActivity } from '~/utils/activity.server';
 import { db } from '~/db';
 import {
@@ -37,6 +51,7 @@ import {
 } from '~/db/schema';
 import { useDataTable } from '~/hooks/use-data-table';
 import { putToast } from '~/services/cookie.server';
+import { env } from '~/services/env.server';
 import { getWhopCompanyMembers, requireUser, verifyWhopToken, whopSdk } from '~/services/whop.server';
 import {
   buildOrderByClause,
@@ -73,7 +88,73 @@ type WhopMember = {
   phone?: string | null;
 };
 
-const columns: ColumnDef<PeopleWithCompany>[] = [
+// Person Name Cell Component with clickable Whop profile link
+const PersonNameCell = ({
+  person,
+  name,
+  whopAppId,
+}: {
+  person: PeopleWithCompany;
+  name: string;
+  whopAppId: string;
+}) => {
+  const iframeSdk = useMemo(() => createSdk({ appId: whopAppId }), [whopAppId]);
+
+  const handleOpenWhopProfile = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (person.whopUserName) {
+      iframeSdk.openExternalUrl({ url: `https://whop.com/@${person.whopUserName}` });
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2.5 group">
+      <Link to={`${person.id}`} className="flex items-center gap-2.5 flex-1 min-w-0">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
+          {name?.charAt(0) || 'P'}
+        </div>
+        <div className="flex flex-col min-w-0">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-sm group-hover:text-primary transition-colors truncate">
+              {name || 'Unnamed Person'}
+            </span>
+            {person.whopUserId && (
+              <Badge variant="outline" className="h-4 text-[10px] px-2 mt-0.5 bg-primary">
+                Whop
+              </Badge>
+            )}
+          </div>
+          {person.jobTitle && <span className="text-xs text-muted-foreground truncate">{person.jobTitle}</span>}
+        </div>
+      </Link>
+      {person.whopUserName && (
+        <TooltipProvider delayDuration={200}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleOpenWhopProfile}
+                className="opacity-0 group group-hover:opacity-100 transition-opacity p-1.5 hover:bg-primary/10 rounded shrink-0 w-7 h-7 flex items-center justify-center border border-transparent hover:border-primary/20 cursor-pointer"
+                aria-label="Open Whop profile"
+              >
+                <ExternalLink className="h-3.5 w-3.5 text-primary" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="left" className="max-w-[200px]">
+              <div className="flex flex-col gap-0.5">
+                <p className="font-medium">View on Whop</p>
+                <p className="text-xs opacity-90">@{person.whopUserName}</p>
+              </div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+  );
+};
+
+const createColumns = (whopAppId: string): ColumnDef<PeopleWithCompany>[] => [
   {
     id: 'select',
     header: ({ table }) => (
@@ -103,26 +184,7 @@ const columns: ColumnDef<PeopleWithCompany>[] = [
     cell: ({ row }) => {
       const name = row.getValue('name') as string;
       const person = row.original;
-      return (
-        <Link to={`${row.original.id}`} className="flex items-center gap-2.5 group">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
-            {name?.charAt(0) || 'P'}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-medium text-sm group-hover:text-primary transition-colors truncate">
-                {name || 'Unnamed Person'}
-              </span>
-              {person.whopUserId && (
-                <Badge variant="outline" className="h-4 text-[10px] px-2 mt-0.5 bg-primary">
-                  Whop
-                </Badge>
-              )}
-            </div>
-            {person.jobTitle && <span className="text-xs text-muted-foreground truncate">{person.jobTitle}</span>}
-          </div>
-        </Link>
-      );
+      return <PersonNameCell person={person} name={name} whopAppId={whopAppId} />;
     },
     meta: {
       label: 'Person',
@@ -286,6 +348,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   // Parse data table state from URL
   const url = new URL(request.url);
+  const columns = createColumns(env.WHOP_APP_ID);
   const columnIds = getColumnIds(columns);
 
   const { filters, sorting, joinOperator, page, perPage } = parseDataTableSearchParams<PeopleType>(
@@ -408,6 +471,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     companies,
     totalCount,
     pageCount: Math.ceil(totalCount / perPage),
+    whopAppId: env.WHOP_APP_ID,
   };
 };
 
@@ -465,6 +529,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
               organizationId: params.companyId,
               phone: member.phone || undefined,
               whopUserId: member.id,
+              whopUserName: member.user?.username || undefined,
             })
             .returning();
 
@@ -642,12 +707,20 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
 };
 
 // Import Whop Members Dialog Component
-const ImportWhopMembersDialog = () => {
+const ImportWhopMembersDialog = ({ whopAppId }: { whopAppId: string }) => {
   const [open, setOpen] = useState(false);
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
   const fetcher = useFetcher<typeof action>();
   const importFetcher = useFetcher<typeof action>();
+
+  const iframeSdk = createSdk({ appId: whopAppId });
+
+  const handleOpenProfile = (username?: string | null) => {
+    if (username) {
+      iframeSdk.openExternalUrl({ url: `https://whop.com/@${username}` });
+    }
+  };
 
   // Load members when dialog opens
   useEffect(() => {
@@ -856,11 +929,20 @@ const ImportWhopMembersDialog = () => {
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-primary text-xs font-semibold text-primary-foreground">
                             {member.user?.name?.charAt(0) || member.user?.username?.charAt(0) || 'U'}
                           </div>
-                          <div className="flex flex-col min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium text-sm truncate">
+                          <div className="flex flex-col min-w-0 flex-1">
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenProfile(member.user?.username)}
+                                disabled={!member.user?.username}
+                                className={`font-medium text-sm truncate text-left ${
+                                  member.user?.username
+                                    ? 'hover:text-primary transition-colors cursor-pointer'
+                                    : 'cursor-default'
+                                }`}
+                              >
                                 {member.user?.name || member.user?.username || 'Unknown'}
-                              </span>
+                              </button>
                               {member.status && (
                                 <Badge variant={getStatusVariant(member.status)} className="h-4 text-[10px] px-1.5">
                                   {getStatusLabel(member.status)}
@@ -922,8 +1004,10 @@ const DashboardPage = () => {
     companies,
     totalCount,
     pageCount,
+    whopAppId,
   } = useLoaderData<typeof loader>();
 
+  const columns = createColumns(whopAppId);
   const { table } = useDataTable<PeopleWithCompany>({
     data: people as PeopleWithCompany[],
     columns,
@@ -968,7 +1052,7 @@ const DashboardPage = () => {
           )}
         </div>
         <div className="flex items-center gap-2">
-          <ImportWhopMembersDialog />
+          <ImportWhopMembersDialog whopAppId={whopAppId} />
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" className="h-8 text-xs shadow-s">

@@ -19,6 +19,7 @@ export const peopleTable = sqliteTable('people', {
   notes: text('notes'),
 
   whopUserId: text('whop_user_id'),
+  whopUserName: text('whop_user_name'),
 
   organizationId: text('organization_id')
     .references(() => organizationTable.id, { onDelete: 'cascade' })
