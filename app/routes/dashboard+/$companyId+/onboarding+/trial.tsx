@@ -139,7 +139,7 @@ const TrialEndedPage = ({ loaderData }: Route.ComponentProps) => {
           >
             <CardContent className="p-6 text-center space-y-2">
               <div className="text-sm font-medium text-muted-foreground">Monthly</div>
-              <div className="text-3xl font-bold text-foreground">$19</div>
+              <div className="text-3xl font-bold text-foreground">$9</div>
               <div className="text-sm text-muted-foreground">per month</div>
             </CardContent>
             {selectedPlan === 'monthly' && (
@@ -162,10 +162,10 @@ const TrialEndedPage = ({ loaderData }: Route.ComponentProps) => {
               <div className="flex items-center justify-center gap-1.5 mb-1">
                 <div className="text-sm font-medium text-muted-foreground">Annual</div>
                 <span className="text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full font-semibold">
-                  Save 35%
+                  Save 30%
                 </span>
               </div>
-              <div className="text-3xl font-bold text-foreground">$149</div>
+              <div className="text-3xl font-bold text-foreground">$75</div>
               <div className="text-sm text-muted-foreground">per year</div>
             </CardContent>
             {selectedPlan === 'annual' && (

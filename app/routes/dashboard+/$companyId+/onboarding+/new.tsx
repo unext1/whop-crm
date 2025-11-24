@@ -1432,7 +1432,7 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                     >
                       <CardContent className="p-4 text-center space-y-1">
                         <div className="text-xs font-medium text-muted-foreground">Monthly</div>
-                        <div className="text-xl font-bold text-foreground">$19</div>
+                        <div className="text-xl font-bold text-foreground">$9</div>
                         <div className="text-xs text-muted-foreground">per month</div>
                       </CardContent>
                       {selectedPlan === 'monthly' && (
@@ -1458,10 +1458,10 @@ const OnboardingPage = ({ loaderData }: Route.ComponentProps) => {
                             variant="default"
                             className="absolute left-1/2 -translate-x-1/2 -top-3.5 text-xs h-6  text-primary-foreground"
                           >
-                            Save <span className="font-bold">35%</span>
+                            Save <span className="font-bold">30%</span>
                           </Badge>
                         </div>
-                        <div className="text-xl font-bold text-foreground">$149</div>
+                        <div className="text-xl font-bold text-foreground">$75</div>
                         <div className="text-xs text-muted-foreground">per year</div>
                       </CardContent>
                       {selectedPlan === 'annual' && (
