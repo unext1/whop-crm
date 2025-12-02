@@ -1,4 +1,4 @@
-# Spark
+# CRM
 
 A modern social platform built with React Router v7, featuring experiences, posts, leaderboards, and user profiles.
 
@@ -7,7 +7,7 @@ A modern social platform built with React Router v7, featuring experiences, post
 - **Framework**: React Router v7 (Framework Mode)
 - **Language**: TypeScript
 - **Styling**: Tailwind CSS v4, Shadcn UI, Framer Motion
-- **Database**: DrizzleORM with SQLite/PostgreSQL
+- **Database**: DrizzleORM with SQLite
 - **Auth**: Whop SDK integration
 - **Deployment**: Ready for production with SSR
 
