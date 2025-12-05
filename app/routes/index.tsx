@@ -63,7 +63,7 @@ const DiscoverPage = () => {
               </motion.div>
             </Link>
 
-            <a href="https://whop.com/apps/app_o0RdcVfY4NUmlR/install" target="_blank" rel="noopener">
+            <a href="https://whop.com/apps/app_yGI58V5bhzIDJq" target="_blank" rel="noopener">
               <Button
                 variant="default"
                 className="hover:text-foreground hover:scale-105 transition-transform bg-primary rounded-full p-2 hover:bg-primary/90"
@@ -113,7 +113,7 @@ const DiscoverPage = () => {
 
             {/* CTA Buttons */}
             <motion.div className="mt-12 flex  items-center justify-center gap-4 md:flex-row" variants={fadeInUp}>
-              <a href="https://whop.com/apps/app_o0RdcVfY4NUmlR/install" target="_blank" rel="noopener">
+              <a href="https://whop.com/apps/app_yGI58V5bhzIDJq" target="_blank" rel="noopener">
                 <Button
                   size="lg"
                   className="rounded-xl px-8 py-6 text-base bg-gradient-to-r from-primary to-primary hover:shadow-lg hover:shadow-primary/50 transition-all"
@@ -133,7 +133,7 @@ const DiscoverPage = () => {
             transition={{ delay: 0.6, duration: 0.8 }}
           >
             <div className="relative mx-auto max-w-5xl overflow-hidden rounded-2xl border border-border bg-card p-4 shadow-2xl">
-              <img src="/feed.png" alt="CRM App Preview" className="w-full rounded-xl" />
+              <img src="/main.png" alt="CRM App Preview" className="w-full rounded-xl" />
             </div>
           </motion.div>
         </div>
@@ -222,7 +222,7 @@ const DiscoverPage = () => {
               className="flex flex-col sm:flex-row gap-4 justify-center items-center mb-8"
               variants={fadeInUp}
             >
-              <a href="https://whop.com/apps/app_o0RdcVfY4NUmlR/install" target="_blank" rel="noopener">
+              <a href="https://whop.com/apps/app_yGI58V5bhzIDJq" target="_blank" rel="noopener">
                 <Button
                   size="lg"
                   className="rounded-2xl px-12 py-6 text-lg font-semibold bg-gradient-to-r from-primary to-primary hover:shadow-2xl hover:shadow-primary/50 transition-all transform hover:scale-105"
@@ -235,7 +235,7 @@ const DiscoverPage = () => {
             </motion.div>
 
             <motion.p className="text-sm text-muted-foreground" variants={fadeInUp}>
-              14-day free trial • No credit card required • Premium features included
+              3-day(no credit card required!) free trial • Premium features included
             </motion.p>
           </motion.div>
         </div>
