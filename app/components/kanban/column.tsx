@@ -1,12 +1,14 @@
-import { useSubmit } from 'react-router';
+import { DollarSign, KanbanIcon, ListTodo } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useSubmit } from 'react-router';
 
+import { formatCurrency } from '~/utils';
 import { Card } from '../ui/card';
 import { EditableText } from './editible-text';
-import { NewTaskTodo } from './new-task-todo';
 import { NewTaskDeal } from './new-task-deal';
-import TaskTodo from './task-todo';
+import { NewTaskTodo } from './new-task-todo';
 import TaskDeal from './task-deal';
+import TaskTodo from './task-todo';
 
 export interface TaskType {
   id: string;
@@ -84,6 +86,9 @@ const Column = ({
     listRef.current.scrollTop = listRef.current.scrollHeight;
   }
 
+  // Calculate total amount for pipeline columns
+  const totalAmount = taskType === 'pipeline' ? tasks.reduce((sum, task) => sum + (task.amount ?? 0), 0) : 0;
+
   return (
     <Card
       className={`shrink-0 flex flex-col max-h-full w-72  bg-muted/30 backdrop-blur-md border border-border/50 shadow-sm ${acceptDrop ? 'ring-2 ring-primary' : ''}`}
@@ -119,29 +124,31 @@ const Column = ({
         setAcceptDrop(false);
       }}
     >
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {disableEdit ? (
-            <h3 className="text-xs py-2 font-semibold truncate">{name}</h3>
-          ) : (
-            <div className="w-[300px]">
-              <EditableText
-                fieldName="name"
-                value={name}
-                inputLabel="Edit column name"
-                buttonLabel={`Edit column "${name}" name`}
-              >
-                <input type="hidden" name="intent" value="updateColumn" />
-                <input type="hidden" name="columnId" value={columnId} />
-              </EditableText>
+      <div className="p-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {disableEdit ? (
+              <h3 className="text-xs py-2 font-semibold truncate">{name}</h3>
+            ) : (
+              <div className="w-[300px]">
+                <EditableText
+                  fieldName="name"
+                  value={name}
+                  inputLabel="Edit column name"
+                  buttonLabel={`Edit column "${name}" name`}
+                >
+                  <input type="hidden" name="intent" value="updateColumn" />
+                  <input type="hidden" name="columnId" value={columnId} />
+                </EditableText>
+              </div>
+            )}
+          </div>
+          {tasks.length > 0 && (
+            <div className="text-xs px-1.5 py-0.5 bg-secondary/50 rounded font-medium text-muted-foreground shrink-0 ml-2">
+              {tasks.length}
             </div>
           )}
         </div>
-        {tasks.length > 0 && (
-          <div className="text-xs px-1.5 py-0.5 bg-secondary/50 rounded font-medium text-muted-foreground shrink-0 ml-2">
-            {tasks.length}
-          </div>
-        )}
       </div>
       <ul
         ref={listRef}
@@ -191,6 +198,27 @@ const Column = ({
             );
           })}
       </ul>
+
+      {/* Summary Section */}
+      {tasks.length > 0 && (
+        <div className="px-4 pb-3 border-t border-border/50 pt-3 space-y-2">
+          <div className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-1.5 text-muted-foreground">
+              {taskType === 'tasks' ? <ListTodo className="h-3 w-3" /> : <KanbanIcon className="h-3 w-3" />}
+              <span className="font-medium">
+                {tasks.length} {taskType === 'tasks' ? 'todo' : 'deal'}
+                {tasks.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {taskType === 'pipeline' && totalAmount > 0 && (
+              <div className="flex items-center gap-1 font-semibold text-foreground">
+                <DollarSign className="h-3 w-3 text-primary" />
+                <span>${formatCurrency(totalAmount)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {taskType === 'tasks' ? (
         <NewTaskTodo
