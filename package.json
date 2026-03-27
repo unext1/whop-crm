@@ -28,6 +28,7 @@
     "@libsql/client": "^0.15.15",
     "@mjackson/headers": "^0.10.0",
     "@nasa-gcn/remix-seo": "^2.0.1",
+    "@openrouter/ai-sdk-provider": "^1.5.4",
     "@oslojs/crypto": "^1.0.1",
     "@oslojs/encoding": "^1.1.0",
     "@radix-ui/colors": "^3.0.0",
