@@ -171,7 +171,13 @@ export default function ComboboxCreatableDemo() {
       </Combobox>
 
       <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-        <DialogContent initialFocus={createInputRef} className="sm:max-w-md">
+        <DialogContent
+          onOpenAutoFocus={(event) => {
+            event.preventDefault();
+            createInputRef.current?.focus();
+          }}
+          className="sm:max-w-md"
+        >
           <DialogTitle>Create new label</DialogTitle>
           <DialogDescription>Add a new label to select.</DialogDescription>
           <form onSubmit={handleCreateSubmit}>

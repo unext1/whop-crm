@@ -1331,7 +1331,7 @@ function useDataGrid<TData>({
         getIsActiveSearchMatch,
         onRowHeightChange,
         onRowSelect,
-        onRowsDelete: onRowsDeleteProp ? onRowsDelete : undefined,
+        onRowsDelete: onRowsDeleteProp ? (_rows: TData[], rowIndices: number[]) => onRowsDelete(rowIndices) : undefined,
         onDataUpdate,
         onColumnClick,
         onCellClick,
@@ -1443,7 +1443,7 @@ function useDataGrid<TData>({
   }
 
   const onScrollToRow = React.useCallback(
-    async (opts: Partial<CellPosition>) => {
+    (opts: Partial<CellPosition>) => {
       const rowIndex = opts?.rowIndex ?? 0;
       const columnId = opts?.columnId;
 
@@ -1619,10 +1619,8 @@ function useDataGrid<TData>({
         const isInsidePopover =
           target instanceof HTMLElement &&
           (target.closest('[data-grid-cell-editor]') || target.closest('[data-grid-popover]'));
-        
-        const isInsideActionBar =
-          target instanceof HTMLElement &&
-          target.closest('[data-grid-action-bar]');
+
+        const isInsideActionBar = target instanceof HTMLElement && target.closest('[data-grid-action-bar]');
 
         if (!isInsidePopover && !isInsideActionBar) {
           blurCell();

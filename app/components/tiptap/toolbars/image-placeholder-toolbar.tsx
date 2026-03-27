@@ -18,7 +18,7 @@ const ImagePlaceholderToolbar = React.forwardRef<HTMLButtonElement, React.Button
             className={cn('h-8 w-8 p-0 sm:h-9 sm:w-9', editor?.isActive('image-placeholder') && 'bg-accent', className)}
             onClick={(e) => {
               e.preventDefault();
-              editor?.chain().focus().insertImagePlaceholder().run();
+              editor?.chain().focus().insertContent({ type: 'image-placeholder' }).run();
               onClick?.(e);
             }}
             ref={ref}

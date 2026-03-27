@@ -684,6 +684,7 @@ const People2Page = () => {
       updatedAt: new Date().toISOString(),
       emails: [],
       primaryEmail: null,
+      whopUserName: null,
     };
 
     setData((prev) => [...prev, newPerson]);

@@ -152,7 +152,7 @@ export function KanbanFilterList({
       },
       ...additionalFields,
     ],
-    [companies, people, additionalFields],
+    [companies, people, users, additionalFields],
   );
 
   const [filters, setFilters] = useQueryState(

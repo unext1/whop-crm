@@ -96,7 +96,7 @@ export function Combobox({
                     <CommandItem
                       key={option.label}
                       value={option.label}
-                      onSelect={(currentValue) => {
+                      onSelect={() => {
                         if (onChange) {
                           if (mode === 'multiple' && Array.isArray(selected)) {
                             onChange(

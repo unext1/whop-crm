@@ -21,14 +21,24 @@ export function applyDataGridFilters<TData>(
 }
 
 function evaluateFilter<TData>(rowValue: unknown, filter: ExtendedColumnFilter<TData>): boolean {
-  const { operator, value, variant } = filter;
+  const { operator, value } = filter;
 
   // Handle empty operators
   if (operator === 'isEmpty') {
-    return rowValue === null || rowValue === undefined || rowValue === '' || (typeof rowValue === 'string' && rowValue.trim() === '');
+    return (
+      rowValue === null ||
+      rowValue === undefined ||
+      rowValue === '' ||
+      (typeof rowValue === 'string' && rowValue.trim() === '')
+    );
   }
   if (operator === 'isNotEmpty') {
-    return rowValue !== null && rowValue !== undefined && rowValue !== '' && !(typeof rowValue === 'string' && rowValue.trim() === '');
+    return (
+      rowValue !== null &&
+      rowValue !== undefined &&
+      rowValue !== '' &&
+      !(typeof rowValue === 'string' && rowValue.trim() === '')
+    );
   }
 
   // Skip if value is empty for other operators
@@ -58,7 +68,7 @@ function evaluateFilter<TData>(rowValue: unknown, filter: ExtendedColumnFilter<T
         if (Array.isArray(filterValue)) {
           return filterValue.some((v) => arrayString.includes(v.toLowerCase()));
         }
-        return arrayString.includes(filterValueLower);
+        return arrayString.includes(filterValueLower as string);
       case 'inArray':
         if (!Array.isArray(value)) return true;
         return value.some((v) => rowValue.includes(String(v)));
@@ -114,4 +124,3 @@ function evaluateFilter<TData>(rowValue: unknown, filter: ExtendedColumnFilter<T
       return true;
   }
 }
-

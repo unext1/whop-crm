@@ -3,7 +3,6 @@ import type { SelectProps } from '@radix-ui/react-select';
 import type { ComponentRef, ReactNode } from 'react';
 import type { FormProps } from 'react-router';
 import type { z } from 'zod';
-import type { InputProps } from './ui/input';
 import {
   FormProvider,
   getFormProps,
@@ -112,10 +111,10 @@ type FormInputLabelProps = {
   label?: string;
   type?: InputType;
   defaultValue?: string;
-} & Omit<InputProps, 'type'>;
+} & Omit<React.InputHTMLAttributes<HTMLInputElement>, 'type'>;
 
 export const CustomInput = ({ field, label, type = 'text', defaultValue, ...props }: FormInputLabelProps) => {
-  const { key, ...inputProps } = getInputProps(field, { type });
+  const { ...inputProps } = getInputProps(field, { type });
 
   return (
     <FormInputWrapper inputId={field.id} field={field} label={label}>
@@ -132,7 +131,7 @@ type FormTextareaProps = {
 } & React.TextareaHTMLAttributes<HTMLTextAreaElement>;
 
 export const CustomTextarea = ({ field, label, placeholder, ...props }: FormTextareaProps) => {
-  const { key, ...textareaProps } = getTextareaProps(field);
+  const { ...textareaProps } = getTextareaProps(field);
 
   return (
     <FormInputWrapper inputId={field.id} field={field} label={label}>
@@ -150,7 +149,7 @@ type FormSelectProps = Omit<SelectProps, 'defaultValue'> & {
 };
 
 export const FormSelect = ({ field, label, options, placeholder, defaultValue, ...props }: FormSelectProps) => {
-  const { key, ...selectProps } = getSelectProps(field);
+  const { ...selectProps } = getSelectProps(field);
   return (
     <FormInputWrapper inputId={field.id} field={field} label={label}>
       <Select {...selectProps} {...props} defaultValue={defaultValue?.toString()}>
