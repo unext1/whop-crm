@@ -63,54 +63,17 @@ import {
   companiesTable,
   emailsTable,
   meetingsTable,
-  organizationTable,
   peopleEmailsTable,
   peopleTable,
   summaryTable,
 } from '~/db/schema';
+import { getAiSummaryLimit } from '~/services/ai.server';
 import { putToast } from '~/services/cookie.server';
 import { getWhopMemberById, requireUser } from '~/services/whop.server';
 import { logPersonActivity, logTaskActivity } from '~/utils/activity.server';
 import type { Route } from './+types';
 
-// Type for Whop Member based on API response
-type WhopMember = {
-  id: string;
-  created_at: string;
-  updated_at: string;
-  joined_at: string;
-  access_level: 'no_access' | 'admin' | 'customer';
-  status: 'drafted' | 'joined' | 'left';
-  most_recent_action:
-    | 'canceling'
-    | 'churned'
-    | 'finished_split_pay'
-    | 'paused'
-    | 'paid_subscriber'
-    | 'paid_once'
-    | 'expiring'
-    | 'joined'
-    | 'drafted'
-    | 'left'
-    | 'trialing'
-    | 'pending_entry'
-    | 'renewing'
-    | 'past_due'
-    | null;
-  most_recent_action_at: string | null;
-  user: {
-    id: string;
-    name?: string | null;
-    username?: string | null;
-    email?: string | null;
-  } | null;
-  phone: string | null;
-  usd_total_spent: number;
-  company: {
-    id: string;
-    name?: string | null;
-  };
-};
+
 
 export const loader = async ({ params, request }: Route.LoaderArgs) => {
   const { companyId: organizationId, id: personId } = params;
@@ -216,8 +179,9 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     where: and(eq(summaryTable.peopleId, personId), eq(summaryTable.organizationId, organizationId)),
   });
 
-  // Get daily AI summary usage for organization
-  // Use SQLite date() function to compare dates properly (SQLite stores timestamps as text)
+  // Daily usage = count of summaries whose createdAt falls on the same calendar day as "now"
+  // (SQLite date()). At midnight the next calendar day, this count resets to 0 for everyone—
+  // there is no "morning vs evening" partial reset; both same-day runs count together.
   const todaySummaries = await db
     .select({ count: sql<number>`count(*)` })
     .from(summaryTable)
@@ -225,22 +189,10 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   const dailyUsage = Number(todaySummaries[0]?.count || 0);
 
-  // Get AI summary limit based on trial status
-  const organization = await db.query.organizationTable.findFirst({
-    where: eq(organizationTable.id, organizationId),
-  });
-
-  let aiSummaryLimit = 50; // Default for paid users
-  if (organization?.trialEnd && !organization.membershipId) {
-    const trialEndDate = new Date(organization.trialEnd);
-    const now = new Date();
-    if (now <= trialEndDate) {
-      aiSummaryLimit = 10; // Trial users get 10
-    }
-  }
+  const aiSummaryLimit = await getAiSummaryLimit(organizationId);
 
   // Whop Member Info - only fetch if whopUserId exists
-  const whopMemberInfo: WhopMember | null = person.whopUserId ? await getWhopMemberById(person.whopUserId) : null;
+  const whopMemberInfo = person.whopUserId ? await getWhopMemberById(person.whopUserId) : null;
 
   return {
     user,
@@ -1478,6 +1430,11 @@ const PersonPage = ({ loaderData }: Route.ComponentProps) => {
                                 </div>
                               </div>
 
+                              <div>
+                                <span className="text-xs font-medium text-foreground">Score Reasoning</span>
+                                <p className="text-xs text-muted-foreground">{latestSummary.ratingReasoning}</p>
+                              </div>
+
                               <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
                                 <span>Generated {new Date(latestSummary.createdAt).toLocaleDateString()}</span>
                               </div>
@@ -1914,6 +1871,11 @@ const PersonPage = ({ loaderData }: Route.ComponentProps) => {
                                       <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
                                     </div>
                                   </div>
+                                </div>
+
+                                <div>
+                                  <span className="text-xs font-medium text-foreground">Score Reasoning</span>
+                                  <p className="text-xs text-muted-foreground">{summary.ratingReasoning}</p>
                                 </div>
 
                                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">

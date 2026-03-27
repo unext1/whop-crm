@@ -62,10 +62,10 @@ import {
   companiesPeopleTable,
   companiesTable,
   meetingsTable,
-  organizationTable,
   peopleTable,
   summaryTable,
 } from '~/db/schema';
+import { getAiSummaryLimit } from '~/services/ai.server';
 import { putToast } from '~/services/cookie.server';
 import { requireUser } from '~/services/whop.server';
 import { logCompanyActivity, logTaskActivity } from '~/utils/activity.server';
@@ -174,8 +174,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
     where: and(eq(summaryTable.companyId, companyId), eq(summaryTable.organizationId, organizationId)),
   });
 
-  // Get daily AI summary usage for organization
-  // Use SQLite date() function to compare dates properly (SQLite stores timestamps as text)
+  // Daily usage = summaries on today's calendar date (SQLite date()). Resets at the next day boundary for all rows.
   const todaySummaries = await db
     .select({ count: sql<number>`count(*)` })
     .from(summaryTable)
@@ -183,19 +182,7 @@ export const loader = async ({ params, request }: Route.LoaderArgs) => {
 
   const dailyUsage = Number(todaySummaries[0]?.count || 0);
 
-  // Get AI summary limit based on trial status
-  const organization = await db.query.organizationTable.findFirst({
-    where: eq(organizationTable.id, organizationId),
-  });
-
-  let aiSummaryLimit = 50; // Default for paid users
-  if (organization?.trialEnd && !organization.membershipId) {
-    const trialEndDate = new Date(organization.trialEnd);
-    const now = new Date();
-    if (now <= trialEndDate) {
-      aiSummaryLimit = 10; // Trial users get 10
-    }
-  }
+  const aiSummaryLimit = await getAiSummaryLimit(organizationId);
 
   return {
     userId,
@@ -1134,6 +1121,11 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                                 </div>
                               </div>
 
+                              <div>
+                                <span className="text-xs font-medium text-foreground">Score Reasoning</span>
+                                <p className="text-xs text-muted-foreground">{latestSummary.ratingReasoning}</p>
+                              </div>
+
                               <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
                                 <span>Generated {new Date(latestSummary.createdAt).toLocaleDateString()}</span>
                               </div>
@@ -1602,6 +1594,11 @@ const CompanyPage = ({ loaderData }: Route.ComponentProps) => {
                                       <p className="text-xs text-muted-foreground">{summary.recommendation}</p>
                                     </div>
                                   </div>
+                                </div>
+
+                                <div>
+                                  <span className="text-xs font-medium text-foreground">Score Reasoning</span>
+                                  <p className="text-xs text-muted-foreground">{summary.ratingReasoning}</p>
                                 </div>
 
                                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
