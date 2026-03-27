@@ -91,7 +91,7 @@ const Column = ({
 
   return (
     <Card
-      className={`shrink-0 flex flex-col max-h-full w-72  bg-muted/30 backdrop-blur-md border border-border/50 shadow-sm ${acceptDrop ? 'ring-2 ring-primary' : ''}`}
+      className={`shrink-0 flex flex-col max-h-full w-72 bg-muted/30 backdrop-blur-md border border-border/50 shadow-sm ${acceptDrop ? 'ring-2 ring-primary' : ''}`}
       onDragOver={(event) => {
         if (tasks.length === 0 && event.dataTransfer.types.includes('application/remix-card')) {
           event.preventDefault();
@@ -152,7 +152,7 @@ const Column = ({
       </div>
       <ul
         ref={listRef}
-        className="grow mb-3 space-y-2.5 px-4 scrollbar-thin overflow-y-auto min-h-0 overscroll-contain overflow-x-hidden"
+        className="grow mb-3 space-y-2.5 px-4 scrollbar-thin min-h-0 overscroll-contain"
       >
         {tasks
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
