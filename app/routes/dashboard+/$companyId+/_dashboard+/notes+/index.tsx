@@ -19,22 +19,21 @@ type NoteItem = {
   notes: string;
   updatedAt: string;
   link: string;
-  boardType?: 'tasks' | 'pipeline'; // Only for task entities
+  boardType?: 'tasks' | 'pipeline';
 };
 
 export async function loader({ request, params }: Route.LoaderArgs) {
   const { companyId: organizationId } = params;
   const { user } = await requireUser(request, organizationId);
 
-  // Fetch all entities with notes
-  const [people, companies, board] = await Promise.all([
-    db.query.peopleTable.findMany({
+  const [people, companies, board] = await db.transaction(async (tx) => {
+    const people = await tx.query.peopleTable.findMany({
       where: and(eq(peopleTable.organizationId, organizationId), isNotNull(peopleTable.notes)),
-    }),
-    db.query.companiesTable.findMany({
+    });
+    const companies = await tx.query.companiesTable.findMany({
       where: and(eq(companiesTable.organizationId, organizationId), isNotNull(companiesTable.notes)),
-    }),
-    db.query.boardTable.findMany({
+    });
+    const board = await tx.query.boardTable.findMany({
       where: eq(boardTable.companyId, organizationId),
       with: {
         tasks: {
@@ -44,18 +43,19 @@ export async function loader({ request, params }: Route.LoaderArgs) {
           },
         },
       },
-    }),
-  ]);
+    });
+    return [people, companies, board];
+  });
 
   // Combine and format all notes
-  const allNotes: NoteItem[] = [
+  const allNotes = [
     ...people.map((person) => ({
       id: person.id,
       entityType: 'person' as const,
       entityName: person.name || 'Unnamed Person',
       entityId: person.id,
       notes: person.notes || '',
-      updatedAt: person.updatedAt || person.id, // Fallback to id for sorting
+      updatedAt: person.updatedAt || person.id, 
       link: `/dashboard/${organizationId}/people/${person.id}`,
     })),
     ...companies.map((company) => ({
@@ -84,7 +84,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ),
   ];
 
-  // Sort by most recently updated
   const sortedNotes = allNotes.sort((a, b) => {
     const dateA = new Date(a.updatedAt).getTime();
     const dateB = new Date(b.updatedAt).getTime();
@@ -98,10 +97,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   };
 }
 
-// Helper to strip HTML tags and truncate text
 function stripHtml(html: string): string {
   if (typeof document === 'undefined') {
-    // Server-side: simple regex approach
     return html.replace(/<[^>]*>/g, '').trim();
   }
   const tmp = document.createElement('DIV');

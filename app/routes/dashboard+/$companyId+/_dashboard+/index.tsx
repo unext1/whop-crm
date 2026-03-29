@@ -418,7 +418,7 @@ const DashboardPage = ({
               return (
                 <Card
                   key={stat.title}
-                  className="bg-gradient-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
+                  className="bg-linear-to-b from-muted to-muted/30 shadow col-span-2 border transition-all duration-300 transform"
                 >
                   <CardContent className="p-5">
                     <div className="flex items-center justify-between mb-3">
@@ -471,7 +471,7 @@ const DashboardPage = ({
                 </div>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px] w-full">
+                <ChartContainer config={chartConfig} className="h-75 w-full">
                   <AreaChart
                     accessibilityLayer
                     data={chartData}

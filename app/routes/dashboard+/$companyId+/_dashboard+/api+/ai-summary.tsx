@@ -32,37 +32,20 @@ const openrouter = createOpenRouter({
 
 export const action = async ({ request, params }: Route.ActionArgs) => {
   const { companyId: organizationId } = params;
-  console.warn('[ai-summary] action entry', {
-    organizationId,
-    method: request.method,
-    url: request.url,
-    origin: request.headers.get('origin'),
-    host: request.headers.get('host'),
-    xForwardedHost: request.headers.get('x-forwarded-host'),
-  });
-
   const { user } = await requireUser(request, organizationId);
-  console.warn('[ai-summary] after requireUser', { userId: user.id });
 
   const formData = await request.formData();
   const intent = formData.get('intent')?.toString();
-  console.warn('[ai-summary] formData', {
-    intent,
-    hasPersonId: !!formData.get('personId'),
-    hasCompanyId: !!formData.get('companyId'),
-  });
 
   if (intent === 'aiSummary') {
     const personId = formData.get('personId')?.toString();
     const companyId = formData.get('companyId')?.toString();
 
     if (!personId && !companyId) {
-      console.warn('[ai-summary] missing personId and companyId');
       return data({ error: 'personId or companyId required' }, { status: 400 });
     }
 
     const dailyLimit = await getAiSummaryLimit(organizationId);
-    console.warn('[ai-summary] dailyLimit', { organizationId, dailyLimit });
 
     try {
       let contextData = '';
@@ -92,7 +75,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         });
 
         if (!branchData?.personData) {
-          console.warn('[ai-summary] person not found', { personId });
           return data({ error: 'Person not found' }, { status: 404 });
         }
 
@@ -128,7 +110,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         });
 
         if (!branchData?.companyData) {
-          console.warn('[ai-summary] company not found', { companyId });
           return data({ error: 'Company not found' }, { status: 404 });
         }
 
@@ -144,17 +125,8 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       }
 
       if (!contextData || !crmData) {
-        console.warn('[ai-summary] missing contextData or crmData', { entityType });
         return data({ error: 'CRM data not found' }, { status: 500 });
       }
-
-      console.warn('[ai-summary] calling generateObject', {
-        entityType,
-        modelId: 'openrouter/free',
-        tasks: crmData.tasks.length,
-        deals: crmData.deals.length,
-        activities: crmData.activities.length,
-      });
 
       const model = openrouter.chat('openrouter/free');
       const result = await generateObject({
@@ -175,11 +147,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
             .describe('Couple sentence actionable recommendation for revenue-focused next step (qualify, expand, upsell, close) when data allows'),
         }),
         temperature: 0.1,
-      });
-
-      console.warn('[ai-summary] generateObject ok', {
-        hasDescription: !!result.object.description,
-        insightsCount: result.object.insights?.length,
       });
 
       const insertResult = await db.transaction(async (tx) => {
@@ -212,7 +179,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
       });
 
       if (!insertResult.inserted) {
-        console.warn('[ai-summary] daily limit path', { used: insertResult.used, dailyLimit });
         const headers = await putToast({
           title: 'Daily Limit Reached',
           message: `You've reached the daily limit of ${dailyLimit} AI summaries. Please try again tomorrow.`,
@@ -227,8 +193,6 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         variant: 'default',
       });
 
-      console.warn('[ai-summary] success', { usage: insertResult.used, limit: dailyLimit });
-
       return data(
         {
           success: true,
@@ -241,8 +205,7 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
         },
         { headers },
       );
-    } catch (err) {
-      console.warn('[ai-summary] generateObject / db error', err);
+    } catch {
       const headers = await putToast({
         title: 'Sorry!',
         message: "We couldn't generate a summary for this entity. Please try again later.",
@@ -252,6 +215,5 @@ export const action = async ({ request, params }: Route.ActionArgs) => {
     }
   }
 
-  console.warn('[ai-summary] invalid intent', { intent });
   return data({ error: 'Invalid intent' }, { status: 400 });
 };
