@@ -1,9 +1,5 @@
 import type { Config } from '@react-router/dev/config';
 
-const extraAllowedActionOrigins =
-  process.env.ALLOWED_ACTION_ORIGINS?.split(',')
-    .map((s) => s.trim())
-    .filter(Boolean) ?? [];
 
 export default {
   // Config options...
@@ -19,6 +15,5 @@ export default {
     '**.whop.com',
     '*.vercel.app',
     '*.vercel.dev',
-    ...extraAllowedActionOrigins
   ]
 } satisfies Config;
