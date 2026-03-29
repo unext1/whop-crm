@@ -19,21 +19,34 @@ export const getAiSummaryLimit = async (organizationId: string): Promise<number>
   const org = await db.query.organizationTable.findFirst({
     where: eq(organizationTable.id, organizationId),
   });
-  if (!org) return 0;
+  if (!org) {
+    console.warn('[ai-summary] getAiSummaryLimit: org not found', { organizationId });
+    return 0;
+  }
 
   if (org.trialEnd && !org.membershipId) {
     const trialEndDate = new Date(org.trialEnd);
     const now = new Date();
     if (now <= trialEndDate) {
+      console.warn('[ai-summary] getAiSummaryLimit: trial', { organizationId, limit: 10 });
       return 10;
     }
   }
 
+  console.warn('[ai-summary] getAiSummaryLimit: default', { organizationId, limit: 50 });
   return 50;
 };
 
 
 export const buildAiSummaryPrompt = ({ entityType, contextData, crmData }: BuildAiSummaryPromptArgs) => {
+  console.warn('[ai-summary] buildAiSummaryPrompt', {
+    entityType,
+    contextDataLength: contextData.length,
+    tasks: crmData.tasks.length,
+    deals: crmData.deals.length,
+    activities: crmData.activities.length,
+  });
+
   const openTasks = crmData.tasks.filter((task) => task.status === 'open').length;
   const highPriorityTasks = crmData.tasks.filter((task) => task.priority === 'high').length;
   const activeDeals = crmData.deals.filter((deal) => deal.status !== 'lost' && deal.status !== 'won').length;
@@ -46,7 +59,7 @@ export const buildAiSummaryPrompt = ({ entityType, contextData, crmData }: Build
           .join('\n')
       : 'No recent activity recorded';
 
-  return `
+  const prompt = `
 You are an AI CRM assistant. Your goal is to provide a structured intelligence summary for a sales or success manager.
 Your output must be fully deterministic, concise, and based ONLY on the provided data.
 
@@ -138,4 +151,11 @@ ${recentActivity}
 - Output must match the schema.
 - RECOMMENDATION must read like a sales or CS next step toward revenue (qualification, expansion, upsell, or close) when the record allows—not a generic check-in unless the data only supports that.
 `;
+
+  console.warn('[ai-summary] buildAiSummaryPrompt done', {
+    entityType,
+    promptLength: prompt.length,
+  });
+
+  return prompt;
 };
